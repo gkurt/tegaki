@@ -60,6 +60,46 @@ const CASES: PreviewCase[] = [
     name: 'mid-animation',
     params: { t: 'Hello', tm: 'controlled', ct: 0.5, fs: 96, w: 600, h: 200 },
   },
+  {
+    // Within-word `calt` must still fire — Caveat substitutes the second `s`
+    // of "ss" with a contextual variant. Canary against an over-aggressive
+    // word-split that would suppress all contextual lookups.
+    name: 'calt-within-word',
+    params: { t: 'ss', tm: 'controlled', ct: 1000, fs: 128, w: 300, h: 220 },
+  },
+  {
+    // Regression: harfbuzz used to see "s s" as one buffer, so Caveat's calt
+    // fired across the space and the canvas drew a variant glyph for the
+    // second `s` that the DOM-rendered overlay never produced. The shaper
+    // now tokenises at whitespace, mirroring how the browser shapes each
+    // word independently — both `s`s should be the nominal glyph.
+    name: 'calt-not-across-space',
+    params: { t: 's s', tm: 'controlled', ct: 1000, fs: 128, w: 400, h: 220 },
+  },
+  {
+    // Three consecutive `s`s exercise multiple within-word calt
+    // substitutions in a single segment. Pairs with `calt-not-across-space`
+    // to lock in "split at whitespace, but only at whitespace".
+    name: 'calt-triple-s',
+    params: { t: 'sss', tm: 'controlled', ct: 1000, fs: 128, w: 400, h: 220 },
+  },
+  {
+    // Overlay-only frame (ct=0, ol=1): the DOM-rendered text must show the
+    // same calt-driven glyph shapes the canvas would draw, otherwise the
+    // overlay diverges from the animated text below it. Chrome silently
+    // skips OpenType layout for text with alpha < 1 — the renderer sets
+    // `text-rendering: geometricPrecision` on the overlay to opt back in.
+    name: 'overlay-shaping-with-calt',
+    params: { t: 'Handwriting is awesome', tm: 'controlled', ct: 0, fs: 72, w: 900, h: 200, ol: 1 },
+  },
+  {
+    // The user-reported scenario: paused mid-animation with the overlay
+    // visible. Canvas-drawn portion (left) and overlay portion (right) must
+    // share the same glyph forms across the seam, otherwise the typography
+    // shifts mid-letter as the animation advances.
+    name: 'overlay-canvas-seam',
+    params: { t: 'Handwriting is awesome', tm: 'controlled', ct: 8.6411, fs: 72, w: 900, h: 200, ol: 1 },
+  },
 ];
 
 test('Standalone text preview — snapshots across URL params', async ({ page }) => {
