@@ -232,6 +232,33 @@ The `generate` command writes a bundle directory containing three files:
 
 The verbose in-memory shape (`FontOutput`/`GlyphData` with `boundingBox`, `path`, full `skeleton`, per-point `t`, etc.) is defined in `packages/renderer/src/types.ts` and is produced internally by the pipeline — only the compact projection above is persisted.
 
+## Testing
+
+Two layers:
+
+- **Unit tests** (Bun's built-in runner): `*.test.ts` files alongside source. Import from `'bun:test'`, use `describe` / `test` / `expect`. Run with `bun run test` from the repo root.
+- **Visual / e2e tests** (Playwright + committed screenshot snapshots): live in [packages/website/tests/e2e/*.e2e.ts](packages/website/tests/e2e). The `.e2e.ts` extension is intentional — `bun test` matches `*.spec.ts` / `*.test.ts`, so the e2e files stay out of the unit suite.
+
+### Writing unit tests
+
+Prefer the smallest layer that exercises the behaviour. If logic is buried inside a closure or hook, lift it out into a pure helper, export it, and test that — the way `splitForShaping` and `isShapingWhitespace` are exported from [packages/renderer/src/shaper-harfbuzz/index.ts](packages/renderer/src/shaper-harfbuzz/index.ts) so [the tests](packages/renderer/src/shaper-harfbuzz/index.test.ts) can drive them without spinning up wasm. Each `test` should pin one behaviour, with a name that reads as the rule it locks in (e.g. `'"s s" splits into word, space, word — preventing calt across the gap'`).
+
+### Visual snapshot tests
+
+The Playwright suite drives [/tegaki/preview/](packages/website/src/components/preview/StandaloneTextPreview.tsx) (the chrome-free standalone renderer) with URL params and snapshots the `[data-tegaki-container]` element. Snapshots live in `tests/e2e/text-preview.e2e.ts-snapshots/` and are committed per platform — `*-chromium-darwin.png` and `*-chromium-linux.png`. CI runs the linux files in the Playwright Ubuntu image, so any new case needs **both**.
+
+`playwright.config.ts` sets `maxDiffPixelRatio: 0.02` to tolerate sub-pixel antialiasing drift, and `animations: 'disabled'` while snapshotting. The runner waits on `body[data-tegaki-ready="true"]` and `document.fonts.ready` before capturing, so frames are deterministic as long as `tm=controlled` + a fixed `ct` are passed.
+
+To add a case:
+
+1. Append a `PreviewCase` to the `CASES` array in [text-preview.e2e.ts](packages/website/tests/e2e/text-preview.e2e.ts) with deterministic params: `tm=controlled` + a fixed `ct` for a stable frame, `w` / `h` to fix the container size in pixels. Use `ol=1` and a mid-timeline `ct` when the case needs to lock in the canvas/overlay seam (both layers visible in one frame).
+2. Generate the local darwin baseline: `cd packages/website && bun test:e2e:update`.
+3. Generate the linux baseline (required for CI): `cd packages/website && bun test:e2e:docker:update`. Runs the same Playwright Ubuntu image CI uses — needs Docker. Without this CI will fail with "missing snapshot".
+4. Eyeball the produced PNGs to confirm they capture the intended behaviour (don't just trust a passing test — a buggy fix can still snapshot cleanly). Commit both `-darwin` and `-linux` files alongside the test code change.
+5. Verify with `bun test:e2e` (darwin) and `bun test:e2e:docker` (linux).
+
+When in doubt, give the case a name that reads as the regression it guards against — `calt-not-across-space` over `ss-test`.
+
 ## Conventions
 
 - Biome auto-formats on commit via husky + lint-staged
