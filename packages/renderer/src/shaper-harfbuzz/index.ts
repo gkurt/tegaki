@@ -5,6 +5,29 @@ import type { TegakiBundle } from '../types.ts';
 
 const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig']);
 
+/**
+ * Whitespace boundaries split shaping runs (see `BundleShaper.shape`).
+ * Covers ASCII whitespace plus the Unicode space block — anything browsers
+ * also treat as a word separator for line-breaking and text shaping.
+ */
+function isWhitespaceCode(code: number): boolean {
+  return (
+    code === 0x20 || // space
+    code === 0x09 || // tab
+    code === 0x0a || // LF
+    code === 0x0d || // CR
+    code === 0x0c || // FF
+    code === 0x0b || // VT
+    code === 0xa0 || // NBSP
+    (code >= 0x2000 && code <= 0x200a) || // en/em quad/space, hair space, etc.
+    code === 0x2028 || // line separator
+    code === 0x2029 || // paragraph separator
+    code === 0x202f || // narrow NBSP
+    code === 0x205f || // medium mathematical space
+    code === 0x3000 // ideographic space
+  );
+}
+
 /** Build a harfbuzz feature string from bundle features, filtering shaper-managed enables. */
 export function toHbFeatureString(enabled: readonly string[]): string {
   const parts: string[] = [];
@@ -94,37 +117,56 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
     return -1;
   };
 
+  // Shape a contiguous run that is already known not to cross a whitespace
+  // or subset boundary. Returns glyphs with `cl` already offset to the
+  // original text.
+  const shapeSegment = (segText: string, segOffset: number): ShapedGlyph[] => {
+    if (subsets.length === 1) return shapeRun(0, segText, segOffset);
+    const out: ShapedGlyph[] = [];
+    let runStart = 0;
+    let runSubset = -2;
+    const flush = (endUtf16: number) => {
+      if (endUtf16 === runStart) return;
+      const effective = runSubset < 0 ? 0 : runSubset;
+      out.push(...shapeRun(effective, segText.slice(runStart, endUtf16), segOffset + runStart));
+    };
+    for (let i = 0; i < segText.length; ) {
+      const cp = segText.codePointAt(i) ?? segText.charCodeAt(i);
+      const step = cp > 0xffff ? 2 : 1;
+      const subset = pickSubset(cp);
+      if (subset !== runSubset) {
+        flush(i);
+        runStart = i;
+        runSubset = subset;
+      }
+      i += step;
+    }
+    flush(segText.length);
+    return out;
+  };
+
   return {
     shape(text: string): ShapedGlyph[] {
       if (!text) return [];
-      // Fast path: single-subset bundles keep the old behaviour with no per-
-      // char routing overhead.
-      if (subsets.length === 1) return shapeRun(0, text, 0);
-
-      // Split text into runs where every char resolves to the same subset.
-      // Shaping must not cross a run boundary — different subsets may have
-      // different script-default features, and a lookup table in one subset
-      // should never see glyphs from another.
+      // Browsers tokenise at whitespace before shaping (each word is its
+      // own HB run), so contextual features like `calt`, `liga`, and
+      // `clig` never see characters across a space. Mirror that here:
+      // shape each whitespace-delimited segment in isolation so canvas
+      // output matches what the DOM overlay renders. Without this, fonts
+      // like Caveat would calt the second `s` of "s s" via the first one
+      // — the canvas would diverge from CSS-shaped text.
       const out: ShapedGlyph[] = [];
-      let runStart = 0;
-      let runSubset = -2;
-      const flush = (endUtf16: number) => {
-        if (endUtf16 === runStart) return;
-        const effective = runSubset < 0 ? 0 : runSubset;
-        out.push(...shapeRun(effective, text.slice(runStart, endUtf16), runStart));
-      };
-      for (let i = 0; i < text.length; ) {
-        const cp = text.codePointAt(i) ?? text.charCodeAt(i);
-        const step = cp > 0xffff ? 2 : 1;
-        const subset = pickSubset(cp);
-        if (subset !== runSubset) {
-          flush(i);
-          runStart = i;
-          runSubset = subset;
+      let segStart = 0;
+      let segIsWs = isWhitespaceCode(text.charCodeAt(0));
+      for (let i = 1; i <= text.length; i++) {
+        const atEnd = i === text.length;
+        const isWs = !atEnd && isWhitespaceCode(text.charCodeAt(i));
+        if (atEnd || isWs !== segIsWs) {
+          out.push(...shapeSegment(text.slice(segStart, i), segStart));
+          segStart = i;
+          segIsWs = isWs;
         }
-        i += step;
       }
-      flush(text.length);
       return out;
     },
   };
