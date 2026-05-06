@@ -105,6 +105,7 @@ export function buildChildren<T>(options: TegakiEngineOptions, h: CreateElementF
           whiteSpace: 'pre-wrap',
           overflowWrap: 'break-word',
           paddingInlineEnd: 1,
+          textRendering: 'geometricPrecision',
           WebkitTextFillColor: showOverlay ? undefined : 'transparent',
           color: showOverlay ? 'rgba(255, 0, 0, 0.4)' : undefined,
         },
