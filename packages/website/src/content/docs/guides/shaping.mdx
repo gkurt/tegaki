@@ -1,0 +1,76 @@
+---
+title: Text Shaping
+description: Enable ligatures, contextual alternates, and complex scripts (Arabic, Indic) with the harfbuzz shaper.
+---
+
+By default Tegaki renders text by walking graphemes one-by-one and looking each character up in the bundle's char-keyed glyph map. This is fast and SSR-safe, but it doesn't know how to form ligatures (`fi`, `ff`), apply contextual alternates (`calt`), or shape complex scripts (Arabic positional forms, Indic conjuncts).
+
+The optional **harfbuzz shaper** plugs in a wasm-based text shaper so the renderer can resolve those glyphs.
+
+## When you need it
+
+Enable the shaper when:
+
+- The font has ligatures or contextual alternates you want to see (most cursive fonts).
+- You're rendering Arabic, Hebrew, or Indic scripts — these need positional forms (`init`/`medi`/`fina`/`isol`) and reordering that a 1:1 char-to-glyph mapping cannot produce.
+- You generated the bundle with extra subset fonts via `extraFontUrls` — cross-script text needs the shaper to route each cluster to the subset that contains its glyphs.
+
+You can skip it for plain Latin text without ligatures.
+
+## Bundle requirements
+
+The shaper resolves glyph ids that the bundle was generated with. To get variant glyphs (ligatures, contextual forms) into the bundle, regenerate it with the relevant OpenType features enabled — the [generator](/tegaki/generator/) lets you toggle features per font. The bundle's `features` array records which tags it ships, and the shaper enables those during shaping.
+
+If the bundle has no `glyphDataById` map, the shaper factory declines and the renderer falls back to the char-keyed path automatically.
+
+## Setup
+
+Install `harfbuzzjs` alongside `tegaki`:
+
+import InstallTabs from '../../../components/InstallTabs.astro';
+
+<InstallTabs pkg="tegaki harfbuzzjs" />
+
+Register the shaper once at app startup:
+
+```ts
+import { TegakiEngine } from 'tegaki/core';
+import harfbuzzShaper from 'tegaki/shaper-harfbuzz';
+
+TegakiEngine.registerShaper(harfbuzzShaper);
+```
+
+That's it — every renderer instance after registration picks up the shaper for bundles that support it. The shaper factory is called once per bundle and the result is cached.
+
+### Per-instance opt-out
+
+Set `shaper={false}` to render a single instance without shaping (useful for side-by-side comparisons or lightweight previews):
+
+```tsx
+<TegakiRenderer font={bundle} shaper={false}>
+  Without shaping
+</TegakiRenderer>
+```
+
+The global registration stays intact for every other instance.
+
+### Unregistering
+
+Pass `null` to remove the registered factory and clear the shaper cache:
+
+```ts
+TegakiEngine.registerShaper(null);
+```
+
+## SSR
+
+The shaper factory declines when `fetch` is undefined (Node SSR), so server renders fall back to the char-keyed path with no errors. Hydrate on the client and the shaper kicks in once wasm finishes loading.
+
+## How it works
+
+1. The renderer measures text layout against the DOM (still the source of truth for line breaks).
+2. With a shaper registered, it then re-shapes each line through harfbuzz to get the correct glyph ids and accumulated advances.
+3. Each shaped glyph id is looked up in `bundle.glyphDataById`. Misses fall back to `bundle.glyphData[char]`.
+4. Stroke positions are placed using shaper advances so they align with the glyphs the shaper actually chose.
+
+The wasm binary and each font face are loaded once per process and reused across every engine instance.

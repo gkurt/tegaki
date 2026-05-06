@@ -64,11 +64,36 @@ Effects configuration:
 
 Style object or string applied to the container. Use `fontSize` to control the text size.
 
+### `shaper`
+
+**Type:** `boolean` — default `true`
+
+Whether this instance uses the globally-registered harfbuzz shaper. Set to `false` to opt one renderer out of shaping (e.g. side-by-side comparisons) without unregistering the shaper for the whole process. Has no effect when no shaper is registered. See [Text Shaping](/tegaki/guides/shaping/).
+
 ### `onComplete`
 
 **Type:** `() => void`
 
 Callback fired when the animation reaches the end (uncontrolled mode only).
+
+## Static methods
+
+### `TegakiEngine.registerShaper(factory)`
+
+Register a shaper factory globally so every engine instance can shape text. Pass the `harfbuzzShaper` export from `tegaki/shaper-harfbuzz`, or pass `null` to unregister and clear the shaper cache.
+
+```ts
+import { TegakiEngine } from 'tegaki/core';
+import harfbuzzShaper from 'tegaki/shaper-harfbuzz';
+
+TegakiEngine.registerShaper(harfbuzzShaper);
+```
+
+See [Text Shaping](/tegaki/guides/shaping/) for the full setup, bundle requirements, and SSR behavior.
+
+### `TegakiEngine.registerBundle(bundle)`
+
+Register a font bundle so it can be referenced by family name (used by the Web Component adapter and any code that wants to pass a bundle name as a string instead of the bundle object).
 
 ## Helper functions
 

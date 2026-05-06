@@ -50,6 +50,7 @@ export default defineConfig({
             { label: 'Generating Font Data', slug: 'guides/generating' },
             { label: 'Rendering Animations', slug: 'guides/rendering' },
             { label: 'Streaming Text', slug: 'guides/streaming' },
+            { label: 'Text Shaping', slug: 'guides/shaping' },
           ],
         },
         {
