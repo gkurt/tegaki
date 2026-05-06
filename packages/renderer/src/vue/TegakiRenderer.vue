@@ -94,5 +94,5 @@ defineExpose({ engine, element: container });
 </script>
 
 <template>
-  <div ref="container" data-tegaki="root" :style="rootProps.style" v-bind="$attrs" v-html="innerHtml" />
+  <div ref="container" data-tegaki="root" dir="auto" :style="rootProps.style" v-bind="$attrs" v-html="innerHtml" />
 </template>

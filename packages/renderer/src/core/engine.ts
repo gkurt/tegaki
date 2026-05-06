@@ -174,6 +174,7 @@ export class TegakiEngine {
         }
       }
       container.dataset.tegaki = 'root';
+      container.dir = options?.direction ?? 'auto';
     }
 
     this._sentinelEl = container.querySelector('[data-tegaki="sentinel"]') as HTMLSpanElement;

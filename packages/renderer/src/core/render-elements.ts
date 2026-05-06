@@ -29,6 +29,7 @@ export function buildRootProps(options: TegakiEngineOptions): Record<string, any
 
   return {
     'data-tegaki': 'root',
+    dir: options?.direction ?? 'auto',
     style: {
       position: 'relative',
       maxWidth: '100%',

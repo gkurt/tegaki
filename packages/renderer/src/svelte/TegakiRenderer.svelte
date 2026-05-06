@@ -101,6 +101,6 @@ $effect(() => {
 });
 </script>
 
-<div bind:this={container} data-tegaki="root" style={rootStyleStr} class={className} {...attrs}>
+<div bind:this={container} data-tegaki="root" dir="auto" style={rootStyleStr} class={className} {...attrs}>
   {@html innerHtml}
 </div>

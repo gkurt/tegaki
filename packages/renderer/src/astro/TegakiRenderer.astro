@@ -94,7 +94,7 @@ const clientOptions = {
 )}
 
 {shouldRender && (
-  <div class={className} {...attrs} data-tegaki="root" style={rootStyle} data-tegaki-options={JSON.stringify(clientOptions)} set:html={innerHtml} />
+  <div class={className} {...attrs} data-tegaki="root" dir="auto" style={rootStyle} data-tegaki-options={JSON.stringify(clientOptions)} set:html={innerHtml} />
 )}
 
 <script>
