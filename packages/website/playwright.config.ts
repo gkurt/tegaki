@@ -30,7 +30,7 @@ export default defineConfig({
   ],
   webServer: {
     command: `bun dev --port ${PORT} --host 127.0.0.1`,
-    url: `${BASE_URL}/tegaki/text-preview/`,
+    url: `${BASE_URL}/tegaki/preview/`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     stdout: 'ignore',

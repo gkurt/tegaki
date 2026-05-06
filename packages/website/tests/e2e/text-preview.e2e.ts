@@ -1,9 +1,9 @@
 import { expect, type Page, test } from '@playwright/test';
 
-const PAGE = '/tegaki/text-preview/';
+const PAGE = '/tegaki/preview/';
 
 /**
- * Build a URL with the standalone text-preview params. Values are URL-encoded via
+ * Build a URL with the standalone preview params. Values are URL-encoded via
  * URLSearchParams so callers don't have to escape them.
  */
 function previewUrl(params: Record<string, string | number>): string {

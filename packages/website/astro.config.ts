@@ -75,9 +75,6 @@ export default defineConfig({
   devToolbar: {
     enabled: false,
   },
-  redirects: {
-    '/preview': '/tegaki/generator',
-  },
   vite: {
     plugins: [tailwindcss()],
     resolve: {
