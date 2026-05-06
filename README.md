@@ -83,6 +83,11 @@ Visit **[gkurt.com/tegaki](https://gkurt.com/tegaki)** for full documentation:
 - [Generating Fonts](https://gkurt.com/tegaki/guides/generating/)
 - [API Reference](https://gkurt.com/tegaki/api/renderer/)
 
+## Integrations
+
+- [Sli.dev](https://sli.dev/) - Create presentations using markdown. [See Tegaki integration example](https://andreas-taranetz.github.io/slidev-addon-animated-text/)
+- [Remotion](https://www.remotion.dev/) - Create videos programmatically with React. [See Tegaki integration example](https://github.com/KurtGokhan/tegaki/blob/gokhan/support-font-features/examples/remotion/src/Root.tsx)
+
 ## License
 
 [MIT](LICENSE)
