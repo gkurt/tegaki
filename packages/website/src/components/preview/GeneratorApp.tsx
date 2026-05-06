@@ -23,7 +23,7 @@ import { TextPreview } from './TextPreview.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
-export function PreviewApp() {
+export function GeneratorApp() {
   const [initialUrlState] = useState(parseUrlState);
   const [fontFamily, setFontFamily] = useState(initialUrlState.fontFamily);
   const [fontInput, setFontInput] = useState('');

@@ -118,16 +118,16 @@ packages/generator/src/
 
 ### Website (`packages/website`)
 
-Astro 6 site built on Starlight (theme: Nova) serving the public docs at the root and the interactive generator at `/tegaki/generator/`. Starlight handles the sidebar/content docs under `src/content/docs/`; the generator page is a standalone Astro page mounting the React `PreviewApp`.
+Astro 6 site built on Starlight (theme: Nova) serving the public docs at the root and the interactive generator at `/tegaki/generator/`. Starlight handles the sidebar/content docs under `src/content/docs/`; the generator page is a standalone Astro page mounting the React `GeneratorApp`.
 
 ```
 packages/website/
   astro.config.ts             # Astro config — `base: '/tegaki'`, integrations (React, Svelte, Vue, Solid, Starlight), vite aliases (`tegaki@dev`)
   public/                     # Static assets served as-is (favicon, OG card, robots.txt)
   src/
-    pages/generator.astro     # Mounts <PreviewApp client:only="react" />
+    pages/generator.astro     # Mounts <GeneratorApp client:only="react" />
     components/
-      PreviewApp.tsx          # The generator UI: glyph inspector + text preview, all state persisted to URL
+      GeneratorApp.tsx        # The generator UI: glyph inspector + text preview, all state persisted to URL
       url-state.ts            # URL <-> state serialization (short keys, only non-defaults written)
       LiveDemo.tsx            # Embeddable React demo used in docs
       HomePageExamples.tsx
@@ -141,11 +141,16 @@ packages/website/
     styles/global.css         # Tailwind v4 styles (imported via `@tailwindcss/vite`)
 ```
 
-Dev server: `bun dev` → Astro at `http://localhost:4321/tegaki/` (generator at `/tegaki/generator/`; `/tegaki/preview` redirects to `/tegaki/generator`).
+Dev server: `bun dev` → Astro at `http://localhost:4321/tegaki/`. Two preview routes share the same URL-state schema:
+
+- `/tegaki/generator/` — the interactive UI (`GeneratorApp`): sidebar, controls, glyph inspector, text preview tab.
+- `/tegaki/preview/` — a chrome-free standalone text renderer (`StandaloneTextPreview`) that reads the same URL state and renders only the text. Use this for screenshots / snapshots — no UI to crop out, and `window.__tegakiPreviewReady` / `body[data-tegaki-ready]` are set once the bundle is built so tooling can wait deterministically.
+
+The Text Preview tab in the generator has an "open in new tab" icon button next to the textarea that opens the current state in `/preview` (just swaps `/generator` → `/preview` in the URL).
 
 #### Testing the preview app via URL state
 
-`PreviewApp` persists nearly all of its state to the URL through short keys (see [packages/website/src/components/url-state.ts](packages/website/src/components/url-state.ts)). This is the primary way for an agent to drive the UI reproducibly — navigate to a URL, inspect the rendered output, change a param, repeat. Only values that differ from defaults are serialized, so unset params are equivalent to defaults.
+Both pages persist / read the same state via the short keys defined in [packages/website/src/components/url-state.ts](packages/website/src/components/url-state.ts) (only `GeneratorApp` writes; `/preview` is read-only). This is the primary way for an agent to drive rendering reproducibly — navigate to a URL, inspect the rendered output, change a param, repeat. Only values that differ from defaults are serialized, so unset params are equivalent to defaults.
 
 Common keys (non-exhaustive — `url-state.ts` is the source of truth):
 
@@ -172,11 +177,14 @@ Pipeline options are also URL-addressable (`res`, `sk`, `bt`, `rt`, ... — see 
 **Typical workflow for an agent inspecting a frame:**
 
 1. Start the dev server (`bun dev`) if it isn't already running.
-2. Navigate to a URL encoding the desired state, e.g.
-   `http://localhost:4321/tegaki/generator/?m=text&t=Hello&tm=controlled&ct=1.25&fs=96`
-3. Take a screenshot / snapshot via whatever browser tooling is available (e.g. the `chrome-devtools` MCP — `new_page`, `navigate_page`, `take_screenshot`). The timeline will be **paused at `ct`**, so screenshots are deterministic.
+2. Navigate to a `/tegaki/preview/` URL encoding the desired state, e.g.
+   `http://localhost:4321/tegaki/preview/?t=Hello&tm=controlled&ct=1.25&fs=96`
+   Use `/preview` (not `/generator`) for visual testing — it has no chrome, so the rendered text fills the viewport and screenshots are easy to crop. Pass `w=…&h=…` to fix the container size in pixels (defaults to `100%`).
+3. Take a screenshot / snapshot via whatever browser tooling is available (e.g. the `chrome-devtools` MCP — `new_page`, `navigate_page`, `take_screenshot`). The timeline will be **paused at `ct`**, so screenshots are deterministic. Wait for `body[data-tegaki-ready="true"]` (or `window.__tegakiPreviewReady`) before snapshotting so the font and bundle are guaranteed to be loaded.
 4. To sweep frames, vary `ct` and re-navigate; the page does not hot-swap URL state, so a reload / re-navigation is required.
 5. To capture the final frame, pass a `ct` value greater than the timeline duration — it clamps to the end and stays paused.
+
+If you need to drive the interactive UI instead of taking a screenshot (e.g. flipping pipeline options through controls rather than URL params), use `/tegaki/generator/` with the same state keys.
 
 Caveats:
 - `ct` only applies in `tm=controlled`. In `uncontrolled` (engine-driven rAF) or `css` (scroll-timeline) modes the animation is not seekable by time; the param is ignored.
