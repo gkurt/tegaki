@@ -61,6 +61,7 @@ export function TegakiRenderer(props: TegakiRendererProps) {
     'timing',
     'showOverlay',
     'direction',
+    'shaper',
     'ref',
   ]);
 
@@ -76,6 +77,7 @@ export function TegakiRenderer(props: TegakiRendererProps) {
     timing: local.timing,
     showOverlay: local.showOverlay,
     direction: local.direction,
+    shaper: local.shaper,
     onComplete: local.onComplete,
   }));
 

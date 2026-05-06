@@ -15,6 +15,7 @@ const props = defineProps<{
   showOverlay?: boolean;
   onComplete?: () => void;
   direction?: 'ltr' | 'rtl';
+  shaper?: boolean;
 }>();
 
 defineOptions({ inheritAttrs: false });
@@ -31,6 +32,7 @@ const engineOptions = computed<TegakiEngineOptions>(() => ({
   timing: props.timing,
   showOverlay: props.showOverlay,
   direction: props.direction,
+  shaper: props.shaper,
   onComplete: props.onComplete,
 }));
 

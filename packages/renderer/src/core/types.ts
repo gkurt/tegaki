@@ -145,6 +145,14 @@ export interface TegakiEngineOptions {
   onComplete?: () => void;
   /** Text direction. When set, applies the CSS `direction` property to the container. */
   direction?: 'ltr' | 'rtl';
+  /**
+   * Whether this engine instance uses the globally-registered shaper. When
+   * `false`, the engine ignores the shaper factory and renders via the
+   * char-keyed grapheme path — useful for opting one renderer out of shaping
+   * (e.g. side-by-side comparisons, lightweight previews) without unregistering
+   * the shaper for the whole process. Default: `true`.
+   */
+  shaper?: boolean;
 }
 
 // ---------------------------------------------------------------------------

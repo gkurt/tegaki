@@ -75,6 +75,13 @@ export interface TegakiTextPreviewProps {
    * snapshot-ready signal for E2E tests.
    */
   onReady?: (info: TegakiTextPreviewReadyInfo) => void;
+  /**
+   * Run text through the harfbuzz shaper for ligatures, contextual forms, and
+   * RTL. When `false`, skip variant-glyph computation and omit `glyphDataById`
+   * from the bundle so the engine falls back to the char-keyed path. Defaults
+   * to `true`.
+   */
+  useShaper?: boolean;
 }
 
 export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPreviewProps>(function TegakiTextPreview(
@@ -95,6 +102,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     style,
     resultsCache,
     onReady,
+    useShaper = true,
   },
   ref,
 ) {
@@ -141,14 +149,23 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
 
   useEffect(() => {
     setFontReady(false);
-    // Mirror the renderer's `ensureFont`. Shaper-managed Arabic features
-    // (init/medi/fina/isol/rlig) are intentionally omitted — explicit
-    // enables override the browser's contextual positional assignment and
-    // collapse every glyph to one variant. Fonts with no declared features
-    // keep the legacy "disable liga/calt" fallback.
-    const explicit = enabledFeatures.filter((f) => !SHAPER_MANAGED_FEATURES.has(f));
-    const featureSettings =
-      enabledFeatures.length === 0 ? "'calt' 0, 'liga' 0" : explicit.length === 0 ? 'normal' : explicit.map((f) => `'${f}' 1`).join(', ');
+    // Mirror the renderer's `ensureFont`. With the shaper on, shaper-managed
+    // Arabic features (init/medi/fina/isol/rlig) are omitted — explicit
+    // enables would override the browser's contextual positional assignment
+    // and collapse every glyph to one variant. Fonts with no declared
+    // features keep the legacy "disable liga/calt" fallback.
+    //
+    // With the shaper off, the renderer draws nominal char-keyed glyphs, so
+    // every variant-producing GSUB feature must be disabled so the FontFace
+    // doesn't emit ligatures or contextual forms the renderer can't draw.
+    const featureSettings = useShaper
+      ? (() => {
+          const explicit = enabledFeatures.filter((f) => !SHAPER_MANAGED_FEATURES.has(f));
+          if (enabledFeatures.length === 0) return "'calt' 0, 'liga' 0";
+          if (explicit.length === 0) return 'normal';
+          return explicit.map((f) => `'${f}' 1`).join(', ');
+        })()
+      : "'liga' 0, 'calt' 0, 'clig' 0, 'rlig' 0, 'dlig' 0, 'init' 0, 'medi' 0, 'fina' 0, 'isol' 0";
     const faces = [fontUrl, ...extraFontUrls].map((url) => new FontFace(fontInfo.family, `url(${url})`, { featureSettings }));
     let cancelled = false;
     Promise.all(faces.map((f) => f.load())).then((loaded) => {
@@ -160,7 +177,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       cancelled = true;
       for (const f of faces) document.fonts.delete(f);
     };
-  }, [fontInfo, fontUrl, extraFontUrls, enabledFeatures]);
+  }, [fontInfo, fontUrl, extraFontUrls, enabledFeatures, useShaper]);
 
   const internalCacheRef = useRef<Map<string, PipelineResult>>(new Map());
   const activeCache = resultsCache?.current ?? internalCacheRef.current;
@@ -173,6 +190,10 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   const [variantData, setVariantData] = useState<Record<string, TegakiGlyphData>>({});
 
   useEffect(() => {
+    if (!useShaper) {
+      setVariantData((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
     let cancelled = false;
     (async () => {
       const buffers = [fontBuffer, ...(extraFontBuffers ?? [])];
@@ -228,7 +249,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     return () => {
       cancelled = true;
     };
-  }, [fontBuffer, extraFontBuffers, fontInfo, text, options, enabledFeatures, activeCache]);
+  }, [fontBuffer, extraFontBuffers, fontInfo, text, options, enabledFeatures, activeCache, useShaper]);
 
   const fontBundle = useMemo<TegakiBundle>(() => {
     const glyphData: TegakiBundle['glyphData'] = {};
@@ -292,6 +313,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       effects={effects}
       quality={quality}
       timing={timing}
+      shaper={useShaper}
     />
   );
 });

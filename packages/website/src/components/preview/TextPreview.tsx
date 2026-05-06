@@ -43,6 +43,8 @@ export function TextPreview({
   onGlyphEasingChange,
   deferDots,
   onDeferDotsChange,
+  useShaper,
+  onUseShaperChange,
 }: {
   fontInfo: ParsedFontInfo | null;
   fontBuffer: ArrayBuffer | null;
@@ -79,6 +81,8 @@ export function TextPreview({
   onGlyphEasingChange: (v: string) => void;
   deferDots: boolean;
   onDeferDotsChange: (v: boolean) => void;
+  useShaper: boolean;
+  onUseShaperChange: (v: boolean) => void;
 }) {
   // Initial time/paused state come from the URL (controlled mode only): a non-zero
   // `ct` param loads the timeline paused at that position so agents can inspect a
@@ -281,6 +285,7 @@ export function TextPreview({
                 lineHeightRatio={lineHeightRatio}
                 resultsCache={resultsCache}
                 onReady={handleReady}
+                useShaper={useShaper}
               />
             )}
           </div>
@@ -876,6 +881,14 @@ export function TextPreview({
           >
             <input type="checkbox" checked={deferDots} onChange={(e) => onDeferDotsChange(e.target.checked)} />
             Defer dots
+          </label>
+
+          <label
+            className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer"
+            title="Run text through the harfbuzz shaper for ligatures, contextual forms, and RTL. Off uses the simpler char-keyed glyph path."
+          >
+            <input type="checkbox" checked={useShaper} onChange={(e) => onUseShaperChange(e.target.checked)} />
+            Shaper
           </label>
 
           <span className="border-l border-gray-200 h-6" />

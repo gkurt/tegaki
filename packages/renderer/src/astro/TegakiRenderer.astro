@@ -11,7 +11,7 @@ interface Props extends Omit<TegakiEngineOptions, 'onComplete'> {
   [key: string]: any;
 }
 
-const { text, font, bundle: registerBundle, loadFont, time, effects, timing, quality, showOverlay, class: className, style: userStyle, ...attrs } = Astro.props;
+const { text, font, bundle: registerBundle, loadFont, time, effects, timing, quality, showOverlay, shaper, class: className, style: userStyle, ...attrs } = Astro.props;
 
 // Resolve the font bundle for SSR
 let resolvedFont: TegakiBundle | undefined;
@@ -32,6 +32,7 @@ const engineOptions: Omit<TegakiEngineOptions, 'onComplete'> = {
   timing,
   quality,
   showOverlay,
+  shaper,
 };
 
 function styleToString(style: Record<string, any>): string {

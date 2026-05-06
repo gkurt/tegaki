@@ -102,6 +102,7 @@ export function PreviewApp() {
   const [strokeEasing, setStrokeEasing] = useState(initialUrlState.strokeEasing);
   const [glyphEasing, setGlyphEasing] = useState(initialUrlState.glyphEasing);
   const [deferDots, setDeferDots] = useState(initialUrlState.deferDots);
+  const [useShaper, setUseShaper] = useState(initialUrlState.useShaper);
 
   // Animation state (lifted up so controls live outside the canvas area)
   const [animPlaying, setAnimPlaying] = useState(true);
@@ -268,6 +269,7 @@ export function PreviewApp() {
         strokeEasing,
         glyphEasing,
         deferDots,
+        useShaper,
       });
     }, 300);
     return () => clearTimeout(syncTimerRef.current);
@@ -293,6 +295,7 @@ export function PreviewApp() {
     strokeEasing,
     glyphEasing,
     deferDots,
+    useShaper,
   ]);
 
   // Auto-load font on mount (from URL state or default)
@@ -837,6 +840,8 @@ export function PreviewApp() {
             onGlyphEasingChange={setGlyphEasing}
             deferDots={deferDots}
             onDeferDotsChange={setDeferDots}
+            useShaper={useShaper}
+            onUseShaperChange={setUseShaper}
           />
         )}
       </main>

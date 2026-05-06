@@ -97,6 +97,7 @@ export class TegakiEngine {
   private _fontReady = false;
   private _shaper: BundleShaper | null = null;
   private _shaperReady = true;
+  private _shaperEnabled = true;
 
   // Stroke subdivision cache. Shared across every instance of the same glyph
   // at the current (font, fontSize, segmentSize, effects-need-subdivision)
@@ -291,6 +292,19 @@ export class TegakiEngine {
       }
     }
 
+    if ('shaper' in options) {
+      const next = options.shaper !== false;
+      if (next !== this._shaperEnabled) {
+        this._shaperEnabled = next;
+        this._loadShaper();
+        this._updateOverlayStyle();
+        dirtyTimeline = true;
+        dirtyLayout = true;
+        dirtyPlayback = true;
+        dirtyRender = true;
+      }
+    }
+
     if ('font' in options) {
       const resolved = resolveBundle(options.font) ?? null;
       if (resolved !== this._font) {
@@ -454,6 +468,15 @@ export class TegakiEngine {
       this._overlayEl.style.webkitTextFillColor = 'transparent';
       this._overlayEl.style.color = '';
     }
+    // When the shaper is off, the renderer iterates raw graphemes and looks
+    // each char up in the bundle's char-keyed `glyphData` — i.e. nominal
+    // glyphs only. The overlay (which provides layout measurement and the
+    // visible text outline) must match: disable every variant-producing
+    // GSUB feature so the browser doesn't form ligatures, contextual
+    // alternates, or Arabic positional forms the renderer can't draw.
+    this._overlayEl.style.fontFeatureSettings = this._shaperEnabled
+      ? ''
+      : "'liga' 0, 'calt' 0, 'clig' 0, 'rlig' 0, 'dlig' 0, 'init' 0, 'medi' 0, 'fina' 0, 'isol' 0";
   }
 
   private _updateSentinelTransition(): void {
@@ -557,10 +580,11 @@ export class TegakiEngine {
   private _loadFont(font: TegakiBundle | null): void {
     this._font = font;
     this._fontReady = false;
-    this._shaper = null;
-    this._shaperReady = true;
 
-    if (!font) return;
+    if (!font) {
+      this._loadShaper();
+      return;
+    }
 
     const pending = ensureFont(font.family, font.fontUrl, font.features, font.extraFontUrls);
     if (pending === null) {
@@ -579,21 +603,35 @@ export class TegakiEngine {
       });
     }
 
-    const shaperPromise = getShaperForBundle(font);
-    if (shaperPromise) {
-      this._shaperReady = false;
-      const currentFont = font;
-      shaperPromise.then((shaper) => {
-        if (this._font === currentFont && !this._destroyed) {
-          this._shaper = shaper;
-          this._shaperReady = true;
-          this._recomputeTimeline();
-          this._recomputeLayout();
-          this._evaluatePlayback();
-          this._render();
-        }
-      });
-    }
+    this._loadShaper();
+  }
+
+  /**
+   * Resolve the shaper for the current font. Called when the font changes or
+   * when the `shaper` option is toggled. Drops any in-flight shaper for the
+   * previous font; the `_font === currentFont` guard inside the promise
+   * handler discards stale resolutions.
+   */
+  private _loadShaper(): void {
+    this._shaper = null;
+    this._shaperReady = true;
+    if (!this._shaperEnabled || !this._font) return;
+
+    const shaperPromise = getShaperForBundle(this._font);
+    if (!shaperPromise) return;
+
+    this._shaperReady = false;
+    const currentFont = this._font;
+    shaperPromise.then((shaper) => {
+      if (this._font === currentFont && this._shaperEnabled && !this._destroyed) {
+        this._shaper = shaper;
+        this._shaperReady = true;
+        this._recomputeTimeline();
+        this._recomputeLayout();
+        this._evaluatePlayback();
+        this._render();
+      }
+    });
   }
 
   // =========================================================================

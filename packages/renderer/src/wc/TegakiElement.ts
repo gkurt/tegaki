@@ -18,6 +18,7 @@ import type { TegakiBundle } from '../types.ts';
  * - `smoothing`: smooth strokes with a centripetal Catmull-Rom spline (quality knob)
  * - `show-overlay`: show debug overlay
  * - `direction`: text direction (`"ltr"` or `"rtl"`)
+ * - `no-shaper`: disable text shaping for this instance (use the char-keyed grapheme path)
  *
  * The `easing` option is not exposed as an attribute (it takes a function);
  * set it via the `time` JS property for full uncontrolled-mode configuration.
@@ -37,6 +38,7 @@ const OBSERVED_ATTRS = [
   'smoothing',
   'show-overlay',
   'direction',
+  'no-shaper',
 ] as const;
 
 export class TegakiElement extends HTMLElement {
@@ -193,6 +195,7 @@ export class TegakiElement extends HTMLElement {
       quality: this._resolveQuality(),
       showOverlay: this.hasAttribute('show-overlay'),
       direction: directionAttr === 'rtl' || directionAttr === 'ltr' ? directionAttr : undefined,
+      shaper: this.hasAttribute('no-shaper') ? false : undefined,
       onComplete: this._onComplete,
     };
   }

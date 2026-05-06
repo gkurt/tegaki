@@ -74,6 +74,8 @@ export interface UrlState {
   glyphEasing: string;
   /** Defer disconnected marks (i-dots, nuqṭa, diacritics) to after every body stroke in a word. */
   deferDots: boolean;
+  /** Run text through the harfbuzz shaper for ligatures / contextual forms / RTL. Off falls back to the char-keyed glyph path. */
+  useShaper: boolean;
 }
 
 export const URL_DEFAULTS: UrlState = {
@@ -98,6 +100,7 @@ export const URL_DEFAULTS: UrlState = {
   strokeEasing: 'default',
   glyphEasing: 'default',
   deferDots: true,
+  useShaper: true,
 };
 
 // Short keys for compact URLs — only non-default values are written
@@ -168,6 +171,7 @@ export function parseUrlState(): UrlState {
   if (p.has('se')) state.strokeEasing = p.get('se')!;
   if (p.has('ge')) state.glyphEasing = p.get('ge')!;
   if (p.has('dd')) state.deferDots = p.get('dd') !== '0';
+  if (p.has('hb')) state.useShaper = p.get('hb') !== '0';
 
   // Pipeline options — read short keys
   for (const [short, long] of Object.entries(REVERSE_OPTION_KEYS)) {
@@ -219,6 +223,7 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
   if (state.strokeEasing !== URL_DEFAULTS.strokeEasing) p.set('se', state.strokeEasing);
   if (state.glyphEasing !== URL_DEFAULTS.glyphEasing) p.set('ge', state.glyphEasing);
   if (state.deferDots !== URL_DEFAULTS.deferDots) p.set('dd', '0');
+  if (state.useShaper !== URL_DEFAULTS.useShaper) p.set('hb', '0');
 
   // Pipeline options — only non-defaults. Array-valued options are serialized
   // as comma-separated and compared structurally.
