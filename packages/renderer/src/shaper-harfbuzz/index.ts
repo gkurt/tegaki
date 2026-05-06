@@ -10,7 +10,7 @@ const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig']
  * Covers ASCII whitespace plus the Unicode space block — anything browsers
  * also treat as a word separator for line-breaking and text shaping.
  */
-function isWhitespaceCode(code: number): boolean {
+export function isShapingWhitespace(code: number): boolean {
   return (
     code === 0x20 || // space
     code === 0x09 || // tab
@@ -26,6 +26,37 @@ function isWhitespaceCode(code: number): boolean {
     code === 0x205f || // medium mathematical space
     code === 0x3000 // ideographic space
   );
+}
+
+/** A run of consecutive characters with the same `isWhitespace` classification. */
+export interface ShapingSegment {
+  text: string;
+  /** UTF-16 offset of `text` in the original input. */
+  offset: number;
+  isWhitespace: boolean;
+}
+
+/**
+ * Tokenise `text` into alternating whitespace / non-whitespace segments.
+ * Browsers shape each non-whitespace word in isolation, so contextual
+ * features (calt/liga/clig) never bridge a space; we want the same here so
+ * canvas output matches the DOM overlay's glyphs.
+ */
+export function splitForShaping(text: string): ShapingSegment[] {
+  const out: ShapingSegment[] = [];
+  if (!text) return out;
+  let segStart = 0;
+  let segIsWs = isShapingWhitespace(text.charCodeAt(0));
+  for (let i = 1; i <= text.length; i++) {
+    const atEnd = i === text.length;
+    const isWs = !atEnd && isShapingWhitespace(text.charCodeAt(i));
+    if (atEnd || isWs !== segIsWs) {
+      out.push({ text: text.slice(segStart, i), offset: segStart, isWhitespace: segIsWs });
+      segStart = i;
+      segIsWs = isWs;
+    }
+  }
+  return out;
 }
 
 /** Build a harfbuzz feature string from bundle features, filtering shaper-managed enables. */
@@ -156,16 +187,8 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
       // like Caveat would calt the second `s` of "s s" via the first one
       // — the canvas would diverge from CSS-shaped text.
       const out: ShapedGlyph[] = [];
-      let segStart = 0;
-      let segIsWs = isWhitespaceCode(text.charCodeAt(0));
-      for (let i = 1; i <= text.length; i++) {
-        const atEnd = i === text.length;
-        const isWs = !atEnd && isWhitespaceCode(text.charCodeAt(i));
-        if (atEnd || isWs !== segIsWs) {
-          out.push(...shapeSegment(text.slice(segStart, i), segStart));
-          segStart = i;
-          segIsWs = isWs;
-        }
+      for (const seg of splitForShaping(text)) {
+        out.push(...shapeSegment(seg.text, seg.offset));
       }
       return out;
     },
