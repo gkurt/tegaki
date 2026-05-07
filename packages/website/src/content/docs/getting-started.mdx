@@ -24,7 +24,7 @@ Tegaki generates stroke data from any font and renders beautiful handwriting ani
    import bundle from 'tegaki/fonts/caveat';
    ```
 
-   Built-in fonts: `caveat`, `italianno`, `tangerine`, `parisienne` (Latin), `suez-one` (Hebrew), `amiri` (Arabic), `klee-one` (Japanese).
+   Built-in fonts: `caveat`, `italianno`, `tangerine`, `parisienne` (Latin), `suez-one` (Hebrew), `amiri` (Arabic), `tillana` (Devanagari), `klee-one` (Japanese).
 
    :::caution[Bundle size]
    Each bundle ships the full source TTF as a fallback for characters outside the generated subset. The Latin bundles are small (~250–400 KB), but Hebrew/Arabic/Japanese reflect their source fonts' size — `klee-one` is around 7 MB because Klee One's font contains thousands of kanji. Bundles are only loaded when you `import` them, but if you need a tighter footprint use the [interactive generator](/tegaki/generator/) to produce a custom bundle with just the characters you need.

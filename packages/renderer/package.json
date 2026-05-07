@@ -139,6 +139,13 @@
       "types": "./dist/fonts/amiri/bundle.d.mts",
       "node": "./fonts/amiri/bundle.ts",
       "default": "./dist/fonts/amiri/bundle.mjs"
+    },
+    "./fonts/tillana": {
+      "tegaki@dev": "./fonts/tillana/bundle.ts",
+      "source": "./fonts/tillana/bundle.ts",
+      "types": "./dist/fonts/tillana/bundle.d.mts",
+      "node": "./fonts/tillana/bundle.ts",
+      "default": "./dist/fonts/tillana/bundle.mjs"
     }
   },
   "files": [

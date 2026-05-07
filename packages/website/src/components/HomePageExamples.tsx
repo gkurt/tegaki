@@ -19,6 +19,7 @@ const FONT_IMPORTS = {
   Parisienne: () => import('tegaki/fonts/parisienne'),
   'Suez One': () => import('tegaki/fonts/suez-one'),
   Amiri: () => import('tegaki/fonts/amiri'),
+  Tillana: () => import('tegaki/fonts/tillana'),
   'Klee One': () => import('tegaki/fonts/klee-one'),
 } as const;
 
@@ -30,6 +31,7 @@ const DEFAULT_SHOWCASE_TEXT = 'The quick brown fox';
 const SHOWCASE_TEXTS: Partial<Record<keyof typeof FONT_IMPORTS, string>> = {
   'Suez One': 'כתב היד מדהים',
   Amiri: 'الكتابة اليدوية رائعة',
+  Tillana: 'हस्तलेखन अद्भुत है',
   // Klee One ships only Kyōiku grade 1–2 kanji, so the standard "手書きは
   // 素晴らしい" doesn't work — `素` is grade 5. `楽` ("fun") is grade 2 and
   // gives a phrase that's just as natural to a Japanese reader.

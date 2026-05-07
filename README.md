@@ -73,6 +73,7 @@ Several handwriting fonts are bundled and ready to use:
 - **Parisienne** — `tegaki/fonts/parisienne` _(Latin)_
 - **Suez One** — `tegaki/fonts/suez-one` _(Hebrew + Latin)_
 - **Amiri** — `tegaki/fonts/amiri` _(Arabic + Latin)_
+- **Tillana** — `tegaki/fonts/tillana` _(Devanagari + Latin)_
 - **Klee One** — `tegaki/fonts/klee-one` _(Japanese: kana + Kyōiku grade 1–2 kanji + Latin)_
 
 For other fonts, use the [interactive generator](https://gkurt.com/tegaki/generator/) to create a custom bundle.

@@ -1,4 +1,4 @@
-export { ARABIC_CHARS, CHARSET_PRESETS, HEBREW_CHARS, JAPANESE_CHARS } from './charsets.ts';
+export { ARABIC_CHARS, CHARSET_PRESETS, DEVANAGARI_CHARS, HEBREW_CHARS, JAPANESE_CHARS } from './charsets.ts';
 export {
   type BundleFile,
   DEFAULT_OPTIONS,

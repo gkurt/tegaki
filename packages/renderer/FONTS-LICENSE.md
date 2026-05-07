@@ -45,6 +45,12 @@ All fonts are licensed under the [SIL Open Font License, Version 1.1](https://op
 - **Copyright**: Copyright 2010-2022 The Amiri Project Authors (https://github.com/aliftype/amiri)
 - **License**: SIL Open Font License, Version 1.1
 
+## Tillana
+
+- **Designer**: Indian Type Foundry, Shiva Nallaperumal
+- **Copyright**: Copyright (c) 2014, Indian Type Foundry (info@indiantypefoundry.com)
+- **License**: SIL Open Font License, Version 1.1
+
 ---
 
 ## SIL Open Font License, Version 1.1

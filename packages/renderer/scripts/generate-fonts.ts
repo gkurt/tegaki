@@ -4,7 +4,7 @@
 // included). Run via `bun --filter tegaki generate-fonts`.
 
 import { spawn } from 'node:child_process';
-import { ARABIC_CHARS, HEBREW_CHARS, JAPANESE_CHARS } from 'tegaki-generator';
+import { ARABIC_CHARS, DEVANAGARI_CHARS, HEBREW_CHARS, JAPANESE_CHARS } from 'tegaki-generator';
 
 interface FontSpec {
   family: string;
@@ -22,6 +22,7 @@ const FONTS: FontSpec[] = [
   { family: 'Suez One', dir: 'suez-one', chars: HEBREW_CHARS },
   { family: 'Klee One', dir: 'klee-one', chars: JAPANESE_CHARS },
   { family: 'Amiri', dir: 'amiri', chars: ARABIC_CHARS },
+  { family: 'Tillana', dir: 'tillana', chars: DEVANAGARI_CHARS },
 ];
 
 async function runOne(spec: FontSpec): Promise<void> {

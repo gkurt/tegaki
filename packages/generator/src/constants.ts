@@ -31,6 +31,7 @@ export const EXAMPLE_FONTS = [
   'Amiri', // Arabic Cursive
   'Cardo', // Hebrew
   'Suez One', // Hebrew display
+  'Tillana', // Devanagari (Hindi)
   'EB Garamond', // Greek
 ];
 

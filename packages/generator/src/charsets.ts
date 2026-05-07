@@ -4,8 +4,8 @@
 // bundles without having to type out every codepoint by hand.
 //
 // Each non-Latin set ends with the Latin baseline so mixed-script text (numbers,
-// brand names, English fragments inside Hebrew/Arabic/Japanese prose) renders
-// without falling back to the full font.
+// brand names, English fragments inside Hebrew/Arabic/Devanagari/Japanese
+// prose) renders without falling back to the full font.
 
 import { DEFAULT_CHARS } from './constants.ts';
 
@@ -59,6 +59,27 @@ const KANJI = KANJI_GRADE_1 + KANJI_GRADE_2;
 
 export const JAPANESE_CHARS = HIRAGANA + KATAKANA + JP_PUNCT + KANJI + DEFAULT_CHARS;
 
+// ── Devanagari ────────────────────────────────────────────────────────────
+// Independent vowels (16) + 33 base consonants + 7 nukta-form consonants
+// commonly used in Hindi/Urdu loanwords (क़ ख़ ग़ ज़ ड़ ढ़ फ़) + matras (dependent
+// vowel signs) + anusvara/visarga/candrabindu/nukta + virama (halant) +
+// Devanagari digits. Conjuncts (consonant + virama + consonant) are formed
+// at shape time via the harfbuzz shaper from these base codepoints.
+const DEVANAGARI_VOWELS = 'अआइईउऊऋऌऍऎएऐऑऒओऔ';
+const DEVANAGARI_CONSONANTS = 'कखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह';
+const DEVANAGARI_NUKTA_CONSONANTS = 'क़ख़ग़ज़ड़ढ़फ़';
+const DEVANAGARI_MATRAS = 'ािीुूृॄॅॆेैॉॊोौ';
+const DEVANAGARI_MARKS = 'ंःँ़्';
+const DEVANAGARI_DIGITS = '०१२३४५६७८९';
+export const DEVANAGARI_CHARS =
+  DEVANAGARI_VOWELS +
+  DEVANAGARI_CONSONANTS +
+  DEVANAGARI_NUKTA_CONSONANTS +
+  DEVANAGARI_MATRAS +
+  DEVANAGARI_MARKS +
+  DEVANAGARI_DIGITS +
+  DEFAULT_CHARS;
+
 /**
  * Named presets for the generator UI. Each preset is the default `--chars`
  * for its writing system; clicking one in the UI replaces the user's char
@@ -68,5 +89,6 @@ export const CHARSET_PRESETS: { name: string; chars: string }[] = [
   { name: 'Latin', chars: DEFAULT_CHARS },
   { name: 'Hebrew', chars: HEBREW_CHARS },
   { name: 'Arabic', chars: ARABIC_CHARS },
+  { name: 'Devanagari', chars: DEVANAGARI_CHARS },
   { name: 'Japanese', chars: JAPANESE_CHARS },
 ];
