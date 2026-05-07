@@ -235,6 +235,21 @@ export class TegakiEngine {
     return this._timeline;
   }
 
+  /**
+   * Compute a timeline for arbitrary text against this engine's currently-
+   * loaded font, timing config, and resolved shaper. Useful for measuring
+   * the duration of hypothetical text without changing what's rendered
+   * (e.g. layout planning, fade-in scheduling).
+   *
+   * Returns an empty timeline when no font is loaded. The result reflects
+   * shaper state at call time — call after `onChangeTimeline` has fired
+   * once to be sure the shaper has resolved.
+   */
+  computeTimeline(text: string): Timeline {
+    if (!this._font) return { entries: [], totalDuration: 0 };
+    return computeTimeline(text, this._font, this._timing, this._shaper);
+  }
+
   get isPlaying(): boolean {
     return this._playing;
   }
