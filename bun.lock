@@ -25,7 +25,7 @@
     },
     "examples/nuxt": {
       "name": "@tegaki/example-nuxt",
-      "version": "0.0.1",
+      "version": "0.15.0",
       "dependencies": {
         "nuxt": "^3.15.0",
         "tegaki": "workspace:*",
@@ -34,7 +34,7 @@
     },
     "examples/remotion": {
       "name": "@tegaki/example-remotion",
-      "version": "0.0.3",
+      "version": "0.15.0",
       "dependencies": {
         "@remotion/cli": "4.0.448",
         "@remotion/fonts": "4.0.448",
@@ -51,7 +51,7 @@
     },
     "packages/generator": {
       "name": "tegaki-generator",
-      "version": "0.11.1",
+      "version": "0.15.0",
       "bin": {
         "tegaki": "./dist/cli/index.js",
       },
@@ -102,7 +102,7 @@
     },
     "packages/website": {
       "name": "@tegaki/website",
-      "version": "0.11.1",
+      "version": "0.15.0",
       "dependencies": {
         "@anthropic-ai/bedrock-sdk": "^0.28.1",
         "@astrojs/check": "^0.9.8",

@@ -1,6 +1,6 @@
 {
   "name": "tegaki-generator",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "description": "Generate handwriting animation data from any font — extracts skeletons, computes stroke order, outputs animated SVGs",
