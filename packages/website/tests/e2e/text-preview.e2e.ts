@@ -120,6 +120,21 @@ const CASES: PreviewCase[] = [
     name: 'arabic-cursive-attachment-mid',
     params: { f: 'Aref Ruqaa', ch: '', t: 'السلام عليكم', tm: 'controlled', ct: 4.5, fs: 96, w: 700, h: 220, ol: 1, lc: 'round' },
   },
+  {
+    // Devanagari clusters like हि / न्दी / स्ते shape into multiple HarfBuzz
+    // glyphs per cluster: a reordered matra/conjunct (lives in glyphDataById)
+    // plus the bare consonant (nominal — *not* in glyphDataById). The
+    // nominal's lookup falls back through `glyphData[entry.char]`, but
+    // entry.char is the whole grapheme ("हि"), and glyphData only has
+    // single-codepoint keys. Pre-fix, that miss collapsed the consonant onto
+    // the 0.2s unknownDuration slot (popped in via DOM fillText) so the
+    // overlay-canvas seam diverged and the timeline ended ~1.3s short of
+    // "fully drawn". The fix peels off the leading codepoint so the bare
+    // consonant resolves to its real strokes — both halves of the cluster
+    // animate, and the canvas matches the overlay at the final frame.
+    name: 'devanagari-cluster-fallback',
+    params: { f: 'Tillana', t: 'नमस्ते हिन्दी', tm: 'controlled', ct: 1000, fs: 96, w: 800, h: 200, ol: 1 },
+  },
 ];
 
 test('Standalone text preview — snapshots across URL params', async ({ page }) => {

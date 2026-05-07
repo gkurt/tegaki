@@ -24,7 +24,7 @@ import type { TextLayout } from '../lib/textLayout.ts';
 import { applyShaperPositions, computeLayoutBbox, computeTextLayout } from '../lib/textLayout.ts';
 import type { Timeline, TimelineConfig, TimelineEntry } from '../lib/timeline.ts';
 import { computeTimeline } from '../lib/timeline.ts';
-import { cssFontFamily, graphemes } from '../lib/utils.ts';
+import { cssFontFamily, graphemes, lookupGlyphData } from '../lib/utils.ts';
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
 import { buildChildren, buildRootProps, domCreateElement } from './render-elements.ts';
@@ -285,7 +285,14 @@ export class TegakiEngine {
     let dirtyPlayback = false;
 
     if ('text' in options) {
-      const nextText = (options.text ?? '').replace(/\r\n?/g, '\n');
+      // NFC normalize so input form (NFC vs NFD) doesn't change which bundle
+      // key resolves: bundles are built with NFC keys, and HarfBuzz / the
+      // browser overlay normalize internally, so without this the canvas
+      // shapes correctly but `glyphData[char]` lookups (timeline, advance
+      // widths, DOM-fillText fallback) miss for NFD input — e.g. `"é"` typed
+      // as `e` + U+0301 would resolve to bare `e` via the leading-codepoint
+      // fallback even though the bundle has the right precomposed glyph.
+      const nextText = (options.text ?? '').replace(/\r\n?/g, '\n').normalize('NFC');
       if (nextText !== this._text) {
         this._text = nextText;
         dirtyTimeline = true;
@@ -950,7 +957,7 @@ export class TegakiEngine {
         entry.xOffsetEm !== undefined && lineLeftEm !== undefined
           ? (lineLeftEm + entry.xOffsetEm) * fontSize
           : (layout.charOffsets[charIdx] ?? 0) * fontSize;
-      const glyph = (entry.glyphId !== undefined ? font.glyphDataById?.[entry.glyphId] : undefined) ?? font.glyphData[entry.char];
+      const glyph = (entry.glyphId !== undefined ? font.glyphDataById?.[entry.glyphId] : undefined) ?? lookupGlyphData(font, entry.char);
 
       if (glyph && entry.hasGlyph) {
         let localTime = Math.max(0, Math.min(currentTime - entry.offset, entry.duration));

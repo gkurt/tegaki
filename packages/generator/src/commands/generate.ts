@@ -369,7 +369,13 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
     glyphs: {},
   };
 
-  const chars = [...charsStr];
+  // NFC normalize before splitting into code points so bundle keys are in a
+  // canonical form. Without this, a charset typed as `"é"` (NFD: e + U+0301)
+  // would split into two separate base+combining entries instead of one
+  // precomposed glyph, and the renderer's char-keyed lookups (which also NFC
+  // normalize incoming text) would miss the bundle even when the right glyph
+  // is reachable.
+  const chars = [...charsStr.normalize('NFC')];
   let processed = 0;
   let skipped = 0;
   const glyphResults: Record<string, PipelineResult> = {};

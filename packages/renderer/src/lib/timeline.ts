@@ -1,6 +1,6 @@
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import type { BundleShaper } from './shaper.ts';
-import { graphemes } from './utils.ts';
+import { graphemes, lookupGlyphData } from './utils.ts';
 
 export interface TimelineConfig {
   /** Pause between glyphs (seconds). Default: `0.1` */
@@ -295,7 +295,7 @@ function computeGraphemeTimeline(text: string, font: TegakiBundle, config?: Time
       continue;
     }
 
-    const glyph = font.glyphData[char];
+    const glyph = lookupGlyphData(font, char);
     if (glyph) {
       const part = partitionGlyph(glyph, unknownDuration, deferDots);
       sched.add({
@@ -379,7 +379,7 @@ function computeShapedTimeline(text: string, font: TegakiBundle, config: Timelin
         const clusterText = text.slice(clusterStart, clusterEnd);
         const firstChar = chars[graphemeIdx]!;
         const isWhitespace = /^\s+$/.test(clusterText);
-        const data = font.glyphDataById?.[glyph.g] ?? font.glyphData[firstChar];
+        const data = font.glyphDataById?.[glyph.g] ?? lookupGlyphData(font, firstChar);
         const hasGlyph = !!data;
 
         if (isWhitespace) {

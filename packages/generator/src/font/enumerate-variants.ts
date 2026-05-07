@@ -8,14 +8,23 @@ export interface VariantGlyph {
 }
 
 /**
- * Discover every non-default glyph id reachable by shaping n-grams of the
- * input character set. A glyph id counts as non-default when it differs from
- * the nominal glyph id the font uses for the first character of its cluster.
+ * Discover every glyph id reachable by shaping n-grams of the input character
+ * set, including nominal forms. We collect *every* glyph the shaper emits
+ * (skipping only `.notdef` = id 0) so the resulting bundle's `glyphDataById`
+ * is self-contained for any cluster that fits inside the n-gram window:
+ * the renderer never has to fall back through `glyphData[char]` to find the
+ * stroke data for a shaped glyph. That fallback is brittle for complex-script
+ * clusters where `entry.char` is a multi-codepoint grapheme (Devanagari
+ * `"हि"`, `"स्ते"`) and `glyphData` is keyed per single codepoint — the
+ * cluster's first codepoint may not be the codepoint a nominal glyph
+ * represents (e.g. HB reorders the i-matra in `हि` so both the i-matra and
+ * the bare `ह` land at cluster offset 0).
  *
- * For now we shape every bigram and trigram. That's enough to surface the
- * standard Latin ligatures (`ff`, `fi`, `fl`, `ffi`, `ffl`, `st`, …) plus
- * pairwise contextual alternates; longer sequences are rare in handwriting
- * fonts and can be added with an opt-in knob later.
+ * For singletons we shape each char in isolation so a font's "default" form
+ * for that codepoint always lands in the bundle even when the char never
+ * appears in any bigram/trigram cluster (which can happen for scripts where
+ * the nominal glyph is only reachable via shaping, e.g. HB picks a different
+ * glyph than `cmap.charToGlyph` returns).
  *
  * The first cluster char observed producing each variant is returned so
  * downstream code can infer script direction (RTL for Arabic/Hebrew clusters)
@@ -27,13 +36,16 @@ export function enumerateVariantGlyphIds(shaper: HbShaper, chars: readonly strin
   const collectFrom = (seq: string) => {
     const shaped = shaper.shape(seq);
     for (const g of shaped) {
+      if (g.g === 0) continue;
       const clusterChar = seq[g.cl];
       if (clusterChar == null) continue;
-      const nominal = shaper.charToGlyphId(clusterChar);
-      if (g.g === nominal || g.g === 0) continue;
       if (!variants.has(g.g)) variants.set(g.g, { gid: g.g, clusterChar });
     }
   };
+
+  // Singletons — guarantees the bundle has stroke data for the default form
+  // of every input char, even when no bigram/trigram cluster surfaces it.
+  for (const a of chars) collectFrom(a);
 
   // Bigrams
   for (const a of chars) for (const b of chars) collectFrom(a + b);
