@@ -38,7 +38,9 @@ export const STAGES: { key: Stage; label: string }[] = [
 export const EXAMPLE_FONT_TEXTS: Record<string, string> = {
   'Noto Sans JP': '手書きは素晴らしい',
   'Shippori Mincho B1': '手書きは素晴らしい',
-  'Klee One': '手書きは素晴らしい',
+  // Klee One's bundled charset is Kyōiku grade 1–2 only; `素` (grade 5) would
+  // miss the subset, so use a phrase that stays inside the bundled kanji.
+  'Klee One': '手書きは楽しい',
   'Noto Sans SC': '手写真棒',
   'Ma Shan Zheng': '手写真棒',
   'Noto Sans KR': '손글씨는 멋져요',
@@ -51,6 +53,20 @@ export const EXAMPLE_FONT_TEXTS: Record<string, string> = {
 };
 
 export const DEFAULT_EXAMPLE_FONT_TEXT = 'Handwriting is awesome';
+
+/**
+ * Per-writing-system sample text for the Text Preview tab. Independent of the
+ * font preset list — clicking a preset replaces the textarea so the user can
+ * exercise a specific script regardless of which font is currently loaded.
+ * Japanese uses only Kyōiku grade 1–2 kanji so it stays inside the bundled
+ * Klee One subset; the other scripts are short, well-formed phrases.
+ */
+export const TEXT_PRESETS: { name: string; text: string }[] = [
+  { name: 'English', text: 'Handwriting is awesome' },
+  { name: 'Hebrew', text: 'כתב היד מדהים' },
+  { name: 'Arabic', text: 'الكتابة اليدوية رائعة' },
+  { name: 'Japanese', text: '手書きは楽しい' },
+];
 
 export const SKELETON_METHODS: { value: SkeletonMethod; label: string }[] = [
   { value: 'zhang-suen', label: 'Zhang-Suen' },

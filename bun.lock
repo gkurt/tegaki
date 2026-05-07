@@ -73,12 +73,13 @@
     },
     "packages/renderer": {
       "name": "tegaki",
-      "version": "0.14.0",
+      "version": "0.15.0",
       "devDependencies": {
         "@nuxt/kit": "^3.15.0",
         "@nuxt/schema": "^3.15.0",
         "@types/react": "^19.2.14",
         "harfbuzzjs": "^0.10.3",
+        "tegaki-generator": "workspace:*",
         "tsdown": "^0.21.9",
         "typescript": "^6.0.3",
       },

@@ -1,20 +1,20 @@
-// Character sets used to subset each bundled font. Kept here (not in the
-// generator package) because they're a *bundle* policy decision — what we ship
-// pre-generated — rather than a property of the pipeline itself.
+// Pre-defined character sets for common writing systems. Used as the default
+// `--chars` set for the corresponding bundled font, and exposed as presets in
+// the website's generator UI so users can pick a baseline subset for their own
+// bundles without having to type out every codepoint by hand.
 //
-// Each non-Latin set also includes the full Latin baseline so mixed-script text
-// (numbers, brand names, English fragments inside Hebrew/Arabic/Japanese prose)
-// renders without having to fall through to the full font.
+// Each non-Latin set ends with the Latin baseline so mixed-script text (numbers,
+// brand names, English fragments inside Hebrew/Arabic/Japanese prose) renders
+// without falling back to the full font.
 
-/** Mirrors `DEFAULT_CHARS` in tegaki-generator. */
-export const LATIN_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:!?\'"-()/\\@#$%&*+=<>~`^_|';
+import { DEFAULT_CHARS } from './constants.ts';
 
 // ── Hebrew ────────────────────────────────────────────────────────────────
 // 22 base letters + 5 final forms (ך ם ן ף ץ). Niqqud (vowel marks) are
-// omitted — Suez One barely styles them and they're optional in modern text.
+// omitted — most modern Hebrew typesetting treats them as optional.
 const HEBREW_BASE = 'אבגדהוזחטיכלמנסעפצקרשת';
 const HEBREW_FINAL = 'ךםןףץ';
-export const HEBREW_CHARS = HEBREW_BASE + HEBREW_FINAL + LATIN_CHARS;
+export const HEBREW_CHARS = HEBREW_BASE + HEBREW_FINAL + DEFAULT_CHARS;
 
 // ── Arabic ────────────────────────────────────────────────────────────────
 // 28 base letters + alef variants (آ أ إ) + ya/hamza variants (ى ئ) +
@@ -25,7 +25,7 @@ const ARABIC_BASE = 'ابتثجحخدذرزسشصضطظعغفقكلمنهوي';
 const ARABIC_VARIANTS = 'آأإىئةء';
 const ARABIC_HARAKAT = 'ًٌٍَُِّْ';
 const ARABIC_DIGITS = '٠١٢٣٤٥٦٧٨٩';
-export const ARABIC_CHARS = ARABIC_BASE + ARABIC_VARIANTS + ARABIC_HARAKAT + ARABIC_DIGITS + LATIN_CHARS;
+export const ARABIC_CHARS = ARABIC_BASE + ARABIC_VARIANTS + ARABIC_HARAKAT + ARABIC_DIGITS + DEFAULT_CHARS;
 
 // ── Japanese ──────────────────────────────────────────────────────────────
 // Hiragana: 46 gojūon + 25 dakuten/handakuten + 10 small/yōon = 81.
@@ -34,15 +34,14 @@ const HIRAGANA =
   'がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ' +
   'ぁぃぅぇぉっゃゅょゎ';
 
-// Katakana: same structure as hiragana, plus the long-vowel mark (ー) and
-// middle dot (・) that are conventionally counted with katakana.
+// Katakana: same structure as hiragana.
 const KATAKANA =
   'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン' +
   'ガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポ' +
   'ァィゥェォッャュョヮ';
 
-// Common Japanese punctuation. ー and ・ are listed here rather than in
-// KATAKANA so they're grouped with other punctuation marks.
+// Common Japanese punctuation. ー (long-vowel mark) and ・ (middle dot) are
+// listed here rather than in KATAKANA so they're grouped with other marks.
 const JP_PUNCT = '、。「」『』（）〜ー・…々';
 
 // Kyōiku kanji, grades 1–2 of the Japanese Ministry of Education list (240
@@ -58,4 +57,16 @@ const KANJI_GRADE_2 =
 
 const KANJI = KANJI_GRADE_1 + KANJI_GRADE_2;
 
-export const JAPANESE_CHARS = HIRAGANA + KATAKANA + JP_PUNCT + KANJI + LATIN_CHARS;
+export const JAPANESE_CHARS = HIRAGANA + KATAKANA + JP_PUNCT + KANJI + DEFAULT_CHARS;
+
+/**
+ * Named presets for the generator UI. Each preset is the default `--chars`
+ * for its writing system; clicking one in the UI replaces the user's char
+ * set with the preset.
+ */
+export const CHARSET_PRESETS: { name: string; chars: string }[] = [
+  { name: 'Latin', chars: DEFAULT_CHARS },
+  { name: 'Hebrew', chars: HEBREW_CHARS },
+  { name: 'Arabic', chars: ARABIC_CHARS },
+  { name: 'Japanese', chars: JAPANESE_CHARS },
+];

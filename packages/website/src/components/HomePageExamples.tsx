@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
 import { type TegakiBundle, TegakiRenderer } from 'tegaki';
+import { TegakiEngine } from 'tegaki/core';
+import harfbuzzShaper from 'tegaki/shaper-harfbuzz';
 import { StaticChatDemo } from './StaticChatDemo.tsx';
+
+// Register the harfbuzz shaper once at module load — required for fonts that
+// rely on contextual/positional shaping (Amiri's Arabic init/medi/fina/isol,
+// Caveat's `calt` chains, etc.). Without it, those bundles render the nominal
+// glyphs and never reach the variant glyph data shipped with the bundle.
+TegakiEngine.registerShaper(harfbuzzShaper);
 
 type BundleEntry = { name: string; bundle: TegakiBundle | null };
 
@@ -22,7 +30,10 @@ const DEFAULT_SHOWCASE_TEXT = 'The quick brown fox';
 const SHOWCASE_TEXTS: Partial<Record<keyof typeof FONT_IMPORTS, string>> = {
   'Suez One': 'כתב היד מדהים',
   Amiri: 'الكتابة اليدوية رائعة',
-  'Klee One': '手書きは素晴らしい',
+  // Klee One ships only Kyōiku grade 1–2 kanji, so the standard "手書きは
+  // 素晴らしい" doesn't work — `素` is grade 5. `楽` ("fun") is grade 2 and
+  // gives a phrase that's just as natural to a Japanese reader.
+  'Klee One': '手書きは楽しい',
 };
 
 function FontCard({ name, bundle, text }: { name: string; bundle: TegakiBundle | null; text: string }) {

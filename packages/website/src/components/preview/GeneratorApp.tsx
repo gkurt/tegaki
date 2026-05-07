@@ -2,6 +2,7 @@ import { zipSync } from 'fflate';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LineCap } from 'tegaki';
 import {
+  CHARSET_PRESETS,
   DEFAULT_OPTIONS,
   EXAMPLE_FONTS,
   enumerateFontChars,
@@ -489,6 +490,20 @@ export function GeneratorApp() {
                   Select all available
                 </button>
               )}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {CHARSET_PRESETS.map((p) => (
+                <button
+                  type="button"
+                  key={p.name}
+                  className={`px-2 py-0.5 text-xs rounded cursor-pointer transition-colors ${
+                    chars === p.chars ? 'bg-gray-800 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                  onClick={() => setChars(p.chars)}
+                >
+                  {p.name}
+                </button>
+              ))}
             </div>
             <textarea
               className="px-2 py-1 border border-gray-300 rounded text-sm font-mono h-16 resize-y"
