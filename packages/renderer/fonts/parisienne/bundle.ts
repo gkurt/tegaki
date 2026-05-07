@@ -2,6 +2,7 @@
 import fontUrl from './parisienne-3dc76002.ttf' with { type: 'url' };
 import fullFontUrl from './parisienne.ttf' with { type: 'url' };
 import glyphData from './glyphData.json' with { type: 'json' };
+import glyphDataById from './glyphDataById.json' with { type: 'json' };
 
 const bundle = {
   version: 0,
@@ -15,6 +16,8 @@ const bundle = {
   ascender: 1875,
   descender: -915,
   glyphData,
+  glyphDataById,
+  features: ["frac","liga"],
 } as const;
 
 export default bundle;

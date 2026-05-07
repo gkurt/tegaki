@@ -2,6 +2,7 @@
 import fontUrl from './italianno-3dc76002.ttf' with { type: 'url' };
 import fullFontUrl from './italianno.ttf' with { type: 'url' };
 import glyphData from './glyphData.json' with { type: 'json' };
+import glyphDataById from './glyphDataById.json' with { type: 'json' };
 
 const bundle = {
   version: 0,
@@ -15,6 +16,8 @@ const bundle = {
   ascender: 800,
   descender: -450,
   glyphData,
+  glyphDataById,
+  features: ["fina","frac","init","liga","locl","pnum","tnum"],
 } as const;
 
 export default bundle;
