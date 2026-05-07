@@ -39,6 +39,7 @@ jobs:
       - uses: changesets/action@v1
         id: changesets
         with:
+          version: bun run changeset:version
           publish: bunx changeset publish
           commit: "chore: release ${{ steps.version.outputs.next }}"
           title: "chore: release ${{ steps.version.outputs.next }}"

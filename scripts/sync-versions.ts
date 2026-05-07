@@ -1,14 +1,17 @@
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { globSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 const root = join(import.meta.dirname, '..');
-const rendererPkg = JSON.parse(readFileSync(join(root, 'packages/renderer/package.json'), 'utf-8'));
+const rendererPath = resolve(root, 'packages/renderer/package.json');
+const rendererPkg = JSON.parse(readFileSync(rendererPath, 'utf-8'));
 const version: string = rendererPkg.version;
 
-const packagesToSync = ['package.json', 'packages/generator/package.json', 'packages/website/package.json'];
+const allPackages = globSync('**/package.json', { cwd: root, exclude: ['**/node_modules/**'] });
 
-for (const pkgPath of packagesToSync) {
-  const fullPath = join(root, pkgPath);
+for (const pkgPath of allPackages) {
+  const fullPath = resolve(root, pkgPath);
+  if (fullPath === rendererPath) continue;
+
   const raw = readFileSync(fullPath, 'utf-8');
   const pkg = JSON.parse(raw);
   if (pkg.version !== version) {

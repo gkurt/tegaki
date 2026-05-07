@@ -5,6 +5,6 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["@tegaki/root", "tegaki-generator", "@tegaki/website", "@tegaki/example-remotion", "@tegaki/example-nuxt"],
+  "ignore": ["tegaki-generator", "@tegaki/website", "@tegaki/example-remotion", "@tegaki/example-nuxt"],
   "privatePackages": { "version": true, "tag": false }
 }
