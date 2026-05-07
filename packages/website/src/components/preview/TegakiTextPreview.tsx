@@ -1,7 +1,7 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import type { Font } from 'opentype.js';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BUNDLE_VERSION,
-  computeTimeline,
   type TegakiBundle,
   type TegakiEffects,
   TegakiEngine,
@@ -10,6 +10,7 @@ import {
   TegakiRenderer,
   type TegakiRendererHandle,
   type TimeControlProp,
+  type Timeline,
   type TimelineConfig,
 } from 'tegaki';
 import harfbuzzShaper from 'tegaki/shaper-harfbuzz';
@@ -306,11 +307,23 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     } satisfies TegakiBundle;
   }, [fontInfo, fontUrl, extraFontUrls, normalizedText, options, activeCache, enabledFeatures, variantData]);
 
-  useEffect(() => {
-    if (!onReady || !fontReady) return;
-    const totalDuration = computeTimeline(normalizedText, fontBundle).totalDuration;
-    onReady({ bundle: fontBundle, totalDuration });
-  }, [onReady, fontReady, fontBundle, normalizedText]);
+  // Latest bundle, captured by ref so the stable `handleTimelineChange`
+  // callback can read it without re-subscribing the engine. Without this,
+  // every change to `fontBundle` would force the engine option to re-bind.
+  const bundleRef = useRef(fontBundle);
+  bundleRef.current = fontBundle;
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+
+  // Drive `onReady` from the engine's first-class onChangeTimeline callback
+  // rather than re-running computeTimeline here. The duplicate computation
+  // got the unshapped totalDuration: clusters that the harfbuzz shaper
+  // collapses to a single half-form glyph (e.g. Devanagari "द्") fell
+  // through to the bare consonant's duration, so the host clock stopped
+  // before the engine's last stroke had drawn.
+  const handleTimelineChange = useCallback((timeline: Timeline) => {
+    onReadyRef.current?.({ bundle: bundleRef.current, totalDuration: timeline.totalDuration });
+  }, []);
 
   if (!fontReady) return null;
 
@@ -327,6 +340,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       quality={quality}
       timing={timing}
       shaper={useShaper}
+      onChangeTimeline={handleTimelineChange}
     />
   );
 });
@@ -344,7 +358,7 @@ interface SubsetRun {
  * Primary-first coverage check (so shared glyphs like digits stick with the
  * Latin primary) matches the renderer's `BundleShaper` routing.
  */
-function splitByCoverage(line: string, fonts: import('opentype.js').Font[]): SubsetRun[] {
+function splitByCoverage(line: string, fonts: Font[]): SubsetRun[] {
   const runs: SubsetRun[] = [];
   let runStart = 0;
   let runSubset = -1;

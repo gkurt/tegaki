@@ -62,6 +62,7 @@ export function TegakiRenderer<const C extends ElementType = 'div', const E exte
     children,
     time: timeProp,
     onComplete,
+    onChangeTimeline,
     effects,
     quality,
     timing,
@@ -99,6 +100,7 @@ export function TegakiRenderer<const C extends ElementType = 'div', const E exte
     direction,
     shaper,
     onComplete,
+    onChangeTimeline,
   };
   const { rootProps, content } = TegakiEngine.renderElements(engineOptions, reactCreateElement);
   const { style: rootStyle, ...rootAttrs } = rootProps;

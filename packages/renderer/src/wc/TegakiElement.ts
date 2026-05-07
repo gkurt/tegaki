@@ -51,6 +51,7 @@ export class TegakiElement extends HTMLElement {
   private _timing: TegakiEngineOptions['timing'];
   private _quality: TegakiEngineOptions['quality'];
   private _onComplete: (() => void) | undefined;
+  private _onChangeTimeline: TegakiEngineOptions['onChangeTimeline'];
 
   constructor() {
     super();
@@ -141,6 +142,16 @@ export class TegakiElement extends HTMLElement {
     this._engine?.update(this._buildOptions());
   }
 
+  /** Callback fired after the engine recomputes its timeline. */
+  get onChangeTimeline(): TegakiEngineOptions['onChangeTimeline'] {
+    return this._onChangeTimeline;
+  }
+
+  set onChangeTimeline(value: TegakiEngineOptions['onChangeTimeline']) {
+    this._onChangeTimeline = value;
+    this._engine?.update(this._buildOptions());
+  }
+
   // Playback controls (delegate to engine)
 
   play(): void {
@@ -197,6 +208,7 @@ export class TegakiElement extends HTMLElement {
       direction: directionAttr === 'rtl' || directionAttr === 'ltr' ? directionAttr : undefined,
       shaper: this.hasAttribute('no-shaper') ? false : undefined,
       onComplete: this._onComplete,
+      onChangeTimeline: this._onChangeTimeline,
     };
   }
 

@@ -56,6 +56,7 @@ export function TegakiRenderer(props: TegakiRendererProps) {
     'font',
     'time',
     'onComplete',
+    'onChangeTimeline',
     'effects',
     'quality',
     'timing',
@@ -79,6 +80,7 @@ export function TegakiRenderer(props: TegakiRendererProps) {
     direction: local.direction,
     shaper: local.shaper,
     onComplete: local.onComplete,
+    onChangeTimeline: local.onChangeTimeline,
   }));
 
   // Compute initial HTML once — after the engine adopts, all updates go through engine.update().

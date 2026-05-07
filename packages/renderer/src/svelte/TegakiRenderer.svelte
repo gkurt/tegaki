@@ -12,7 +12,7 @@ interface Props extends Omit<TegakiEngineOptions, 'effects'> {
 }
 
 // biome-ignore lint/correctness/noUnusedVariables: attrs is used in Svelte template
-let { text, font, time: timeProp, onComplete, effects, quality, timing, showOverlay, direction, shaper, class: className, style: userStyle, ...attrs }: Props = $props();
+let { text, font, time: timeProp, onComplete, onChangeTimeline, effects, quality, timing, showOverlay, direction, shaper, class: className, style: userStyle, ...attrs }: Props = $props();
 
 let container = $state<HTMLDivElement | undefined>();
 let engine = $state<TegakiEngine | null>(null);
@@ -28,6 +28,7 @@ const engineOptions: TegakiEngineOptions = $derived({
   direction,
   shaper,
   onComplete,
+  onChangeTimeline,
 });
 
 function svelteCreateElement(tag: string, props: Record<string, any>, ...children: string[]): string {
@@ -65,7 +66,7 @@ function escapeHtml(s: string): string {
 
 // Compute initial HTML once — after the engine adopts, all updates go through engine.update().
 const { rootProps, content: innerHtml } = TegakiEngine.renderElements(
-  { text, font, time: timeProp, effects: effects as Record<string, any>, quality, timing, showOverlay, direction, shaper, onComplete },
+  { text, font, time: timeProp, effects: effects as Record<string, any>, quality, timing, showOverlay, direction, shaper, onComplete, onChangeTimeline },
   svelteCreateElement,
 );
 

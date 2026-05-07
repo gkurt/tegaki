@@ -1,4 +1,4 @@
-import type { TimelineConfig } from '../lib/timeline.ts';
+import type { Timeline, TimelineConfig } from '../lib/timeline.ts';
 import type { TegakiBundle, TegakiEffects } from '../types.ts';
 
 // ---------------------------------------------------------------------------
@@ -143,6 +143,15 @@ export interface TegakiEngineOptions {
   quality?: TegakiQuality;
   showOverlay?: boolean;
   onComplete?: () => void;
+  /**
+   * Fires after the engine recomputes its timeline — on initial load, font
+   * swaps, text changes, and again once async shaper resolution finishes.
+   * The argument is the same `Timeline` exposed via `engine.timeline`. Use
+   * this instead of calling `computeTimeline` from the host: a manual call
+   * without the engine's resolved shaper returns the pre-shaping
+   * totalDuration.
+   */
+  onChangeTimeline?: (timeline: Timeline) => void;
   /** Text direction. When set, applies the CSS `direction` property to the container. */
   direction?: 'ltr' | 'rtl';
   /**

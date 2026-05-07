@@ -2,7 +2,7 @@
 import { TegakiEngine, type TegakiEngineOptions } from '../core/index.ts';
 import type { TegakiBundle } from '../types.ts';
 
-interface Props extends Omit<TegakiEngineOptions, 'onComplete'> {
+interface Props extends Omit<TegakiEngineOptions, 'onComplete' | 'onChangeTimeline'> {
   /** When true, registers the font bundle for client-side lookup by name. If no text is provided, renders nothing else. */
   bundle?: boolean;
   /** When true, injects an @font-face rule so the browser starts loading the font immediately. */
@@ -24,7 +24,7 @@ if (typeof font === 'string') {
 
 const shouldRender = !!text || !(registerBundle || loadFont);
 
-const engineOptions: Omit<TegakiEngineOptions, 'onComplete'> = {
+const engineOptions: Omit<TegakiEngineOptions, 'onComplete' | 'onChangeTimeline'> = {
   text,
   font: resolvedFont,
   time,

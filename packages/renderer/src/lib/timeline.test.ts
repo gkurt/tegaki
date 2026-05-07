@@ -101,3 +101,103 @@ describe('computeTimeline (shaper path)', () => {
     expect(tl.entries[0]?.hasGlyph).toBe(false);
   });
 });
+
+describe('computeTimeline for Devanagari "द्" (consonant + virama)', () => {
+  // The Tillana bundle ships:
+  //   glyphData["द"]  → 2 strokes,  t = 0.778 (bare consonant DA)
+  //   glyphData["्"] → 1 stroke,   t = 0.109 (bare virama)
+  //   glyphDataById[<halfDA>] → 3 strokes, t = 1.015 (DA half-form)
+  // HarfBuzz collapses "द्" into the single half-form glyph.
+  const bareDa = (): TegakiGlyphData => ({
+    w: 469,
+    t: 0.778,
+    s: [stroke(0, 0.088), stroke(0.238, 0.54)],
+  });
+  const bareVirama = (): TegakiGlyphData => ({ w: 0, t: 0.109, s: [stroke(0, 0.109)] });
+  const halfDa = (): TegakiGlyphData => ({
+    w: 469,
+    t: 1.015,
+    s: [stroke(0, 0.088), stroke(0.238, 0.545), stroke(0.933, 0.082)],
+  });
+
+  test('shaper path: half-form glyph drives totalDuration', () => {
+    // When the harfbuzz shaper is registered, "द्" shapes to a single half-
+    // form glyph whose data lives in glyphDataById. The timeline picks that
+    // up and reports the half-form's full 1.015s duration — what the
+    // renderer actually needs to draw all three strokes.
+    const bundle = makeBundle({
+      glyphData: { द: bareDa(), '्': bareVirama() },
+      glyphDataById: { halfDA: halfDa() },
+    });
+    const shaper = scriptedShaper({ द्: [{ g: 'halfDA', cl: 0, ax: 469 }] });
+
+    const tl = computeTimeline('द्', bundle, undefined, shaper);
+    expect(tl.entries.length).toBe(1);
+    expect(tl.entries[0]?.glyphId).toBe('halfDA');
+    expect(tl.entries[0]?.duration).toBeCloseTo(1.015);
+    expect(tl.totalDuration).toBeCloseTo(1.015);
+  });
+
+  test('grapheme path: falls through to bare consonant and truncates the timeline', () => {
+    // The buggy case. `computeTimeline(text, bundle)` — no shaper — can't
+    // see that "द्" really renders as a half-form. It looks up the cluster
+    // string "द्" directly (miss), peels the leading codepoint to "द"
+    // (hit), and pins the entry to the bare consonant's 0.778s.
+    //
+    // The renderer engine, which DOES have the shaper, animates the half-
+    // form for ~1.015s. Any caller that uses this no-shaper totalDuration as
+    // the "animation finished" signal (e.g. TegakiTextPreview reporting it
+    // via onReady) stops the clock 0.237s early — which is exactly when the
+    // half-form's third stroke starts (d = 0.933). Visible symptom: the
+    // final stroke never appears.
+    const bundle = makeBundle({
+      glyphData: { द: bareDa(), '्': bareVirama() },
+      glyphDataById: { halfDA: halfDa() },
+    });
+
+    const tl = computeTimeline('द्', bundle);
+    expect(tl.entries.length).toBe(1);
+    expect(tl.entries[0]?.char).toBe('द्');
+    // Bare-consonant duration leaks through — the half-form is invisible
+    // to the grapheme path even though its data is sitting in the bundle.
+    expect(tl.entries[0]?.duration).toBeCloseTo(0.778);
+    expect(tl.totalDuration).toBeCloseTo(0.778);
+  });
+
+  test('shaper and grapheme totalDurations diverge for the same bundle', () => {
+    // Same bundle, same text, two different totalDurations depending on
+    // whether a shaper was passed. Locks in the divergence so any future
+    // fix (e.g. teaching computeTimeline to consult glyphDataById via
+    // cluster decomposition, or routing all callers through the engine's
+    // shaper-aware timeline) has a clear regression target.
+    const bundle = makeBundle({
+      glyphData: { द: bareDa(), '्': bareVirama() },
+      glyphDataById: { halfDA: halfDa() },
+    });
+    const shaper = scriptedShaper({ द्: [{ g: 'halfDA', cl: 0, ax: 469 }] });
+
+    const withShaper = computeTimeline('द्', bundle, undefined, shaper).totalDuration;
+    const withoutShaper = computeTimeline('द्', bundle).totalDuration;
+
+    expect(withShaper).toBeCloseTo(1.015);
+    expect(withoutShaper).toBeCloseTo(0.778);
+    expect(withShaper - withoutShaper).toBeCloseTo(0.237);
+  });
+
+  test("grapheme-path duration cuts off before the half-form's last stroke begins", () => {
+    // The half-form's third stroke has d = 0.933. The grapheme-path total
+    // (0.778) is less than that delay — so when the engine clamps localTime
+    // to entry.duration in this regime, stroke 2 never gets a chance to
+    // start animating. This is the precise mechanism behind "some parts of
+    // the text still aren't rendered when the animation ends."
+    const bundle = makeBundle({
+      glyphData: { द: bareDa(), '्': bareVirama() },
+      glyphDataById: { halfDA: halfDa() },
+    });
+
+    const tl = computeTimeline('द्', bundle);
+    const lastStrokeDelay = halfDa().s[2]!.d;
+    expect(lastStrokeDelay).toBeCloseTo(0.933);
+    expect(tl.totalDuration).toBeLessThan(lastStrokeDelay);
+  });
+});

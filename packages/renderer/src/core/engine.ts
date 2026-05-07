@@ -86,6 +86,7 @@ export class TegakiEngine {
   private _quality: TegakiQuality | undefined;
   private _showOverlay = false;
   private _onComplete: (() => void) | undefined;
+  private _onChangeTimeline: ((timeline: Timeline) => void) | undefined;
   private _direction: 'ltr' | 'rtl' | undefined;
 
   // --- Derived / cached ---
@@ -222,6 +223,16 @@ export class TegakiEngine {
 
   get duration(): number {
     return this._timeline.totalDuration;
+  }
+
+  /**
+   * The engine's current timeline — the same object that drives rendering.
+   * Reflects the resolved shaper once the (async) shaper promise has
+   * settled; use the `onChangeTimeline` option to be notified of recomputations.
+   * Treat the returned object as read-only.
+   */
+  get timeline(): Timeline {
+    return this._timeline;
   }
 
   get isPlaying(): boolean {
@@ -394,6 +405,10 @@ export class TegakiEngine {
 
     if ('onComplete' in options) {
       this._onComplete = options.onComplete;
+    }
+
+    if ('onChangeTimeline' in options) {
+      this._onChangeTimeline = options.onChangeTimeline;
     }
 
     // --- Recompute ---
@@ -652,6 +667,7 @@ export class TegakiEngine {
     } else {
       this._timeline = { entries: [] as TimelineEntry[], totalDuration: 0 };
     }
+    this._onChangeTimeline?.(this._timeline);
   }
 
   private _recomputeLayout(): void {
