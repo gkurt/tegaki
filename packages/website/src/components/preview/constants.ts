@@ -38,6 +38,7 @@ export const STAGES: { key: Stage; label: string }[] = [
 export const EXAMPLE_FONT_TEXTS: Record<string, string> = {
   'Noto Sans JP': '手書きは素晴らしい',
   'Shippori Mincho B1': '手書きは素晴らしい',
+  'Klee One': '手書きは素晴らしい',
   'Noto Sans SC': '手写真棒',
   'Ma Shan Zheng': '手写真棒',
   'Noto Sans KR': '손글씨는 멋져요',
@@ -45,6 +46,7 @@ export const EXAMPLE_FONT_TEXTS: Record<string, string> = {
   Rubik: 'الكتابة اليدوية رائعة',
   Amiri: 'الكتابة اليدوية رائعة',
   Cardo: 'כתב היד מדהים',
+  'Suez One': 'כתב היד מדהים',
   'EB Garamond': 'Η χειρογραφία είναι υπέροχη',
 };
 

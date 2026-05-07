@@ -65,12 +65,15 @@ import { registerTegakiElement } from 'tegaki/wc'; // Web Components
 
 ## Built-in Fonts
 
-Four handwriting fonts are bundled and ready to use:
+Several handwriting fonts are bundled and ready to use:
 
-- **Caveat** — `tegaki/fonts/caveat`
-- **Italianno** — `tegaki/fonts/italianno`
-- **Tangerine** — `tegaki/fonts/tangerine`
-- **Parisienne** — `tegaki/fonts/parisienne`
+- **Caveat** — `tegaki/fonts/caveat` _(Latin)_
+- **Italianno** — `tegaki/fonts/italianno` _(Latin)_
+- **Tangerine** — `tegaki/fonts/tangerine` _(Latin)_
+- **Parisienne** — `tegaki/fonts/parisienne` _(Latin)_
+- **Suez One** — `tegaki/fonts/suez-one` _(Hebrew + Latin)_
+- **Amiri** — `tegaki/fonts/amiri` _(Arabic + Latin)_
+- **Klee One** — `tegaki/fonts/klee-one` _(Japanese: kana + Kyōiku grade 1–2 kanji + Latin)_
 
 For other fonts, use the [interactive generator](https://gkurt.com/tegaki/generator/) to create a custom bundle.
 

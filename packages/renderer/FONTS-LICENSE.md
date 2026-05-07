@@ -27,6 +27,24 @@ All fonts are licensed under the [SIL Open Font License, Version 1.1](https://op
 - **Copyright**: Copyright (c) 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI)
 - **License**: SIL Open Font License, Version 1.1
 
+## Suez One
+
+- **Designer**: Michal Sahar
+- **Copyright**: Copyright 2016 Michal Sahar. All rights reserved.
+- **License**: SIL Open Font License, Version 1.1
+
+## Klee One
+
+- **Designer**: Fontworks Inc.
+- **Copyright**: Copyright 2020 The Klee Project Authors (https://github.com/fontworks-fonts/Klee)
+- **License**: SIL Open Font License, Version 1.1
+
+## Amiri
+
+- **Designer**: Khaled Hosny
+- **Copyright**: Copyright 2010-2022 The Amiri Project Authors (https://github.com/aliftype/amiri)
+- **License**: SIL Open Font License, Version 1.1
+
 ---
 
 ## SIL Open Font License, Version 1.1
