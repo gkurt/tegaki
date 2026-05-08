@@ -1,6 +1,6 @@
 {
   "name": "tegaki",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "type": "module",
   "description": "Framework-agnostic animated handwriting renderer with React, Svelte, Vue, Nuxt, SolidJS, Astro, and Web Components adapters",
   "keywords": [

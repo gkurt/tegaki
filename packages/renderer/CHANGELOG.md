@@ -1,5 +1,15 @@
 # tegaki
 
+## 0.17.0
+
+### Minor Changes
+
+- 2b4b435: Support Devanagari writing system and add Tillana as built-in font. Also fixed a bug with generating n-grams, which affected Arabic fonts.
+
+### Patch Changes
+
+- ee2db76: Fix GPOS and advance width features for some Arabic fonts like "Aref Ruqaa"
+
 ## 0.16.0
 
 ### Minor Changes
