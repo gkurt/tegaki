@@ -69,6 +69,7 @@ declare module 'harfbuzzjs/hb.js' {
 
 declare module 'harfbuzzjs/hbjs.js' {
   import type { Hb } from 'harfbuzzjs';
+
   const hbjs: (instance: unknown) => Hb;
   export default hbjs;
 }
