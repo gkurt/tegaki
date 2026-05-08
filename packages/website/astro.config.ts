@@ -62,7 +62,10 @@ export default defineConfig({
         },
         {
           label: 'Demos',
-          items: [{ label: 'Generator', link: '/generator/' }],
+          items: [
+            { label: 'Generator', link: '/generator/' },
+            { label: 'Videos', slug: 'demos/videos' },
+          ],
         },
       ],
       customCss: ['./src/styles/global.css'],
