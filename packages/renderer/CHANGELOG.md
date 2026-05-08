@@ -1,5 +1,11 @@
 # tegaki
 
+## 0.17.1
+
+### Patch Changes
+
+- affe5a5: Add shorthand for setting time property to a percentage for controlled progress mode.
+
 ## 0.17.0
 
 ### Minor Changes
