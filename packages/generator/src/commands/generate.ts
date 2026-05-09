@@ -1,4 +1,4 @@
-import opentype from 'opentype.js';
+import * as opentype from 'opentype.js';
 import { type BBox, BUNDLE_VERSION, type FontOutput, type LineCap, type Point, type Stroke } from 'tegaki';
 import * as z from 'zod/v4';
 import {

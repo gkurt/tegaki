@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import opentype from 'opentype.js';
+import * as opentype from 'opentype.js';
 import { createPadrone, padroneProgress } from 'padrone';
 import { extractTegakiBundle, generateArgsSchema, type PipelineOptions } from '../commands/generate.ts';
 import { DEFAULT_CHARS } from '../constants.ts';
