@@ -159,7 +159,7 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsdown",
+    "build": "bun --bun tsdown",
     "prepack": "bun run build && bun ../../scripts/prepareForRelease.ts",
     "generate-fonts": "bun scripts/generate-fonts.ts"
   },
