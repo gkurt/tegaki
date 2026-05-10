@@ -191,5 +191,5 @@ export interface TegakiBundle {
    * The renderer enables these during shaping. Absent when no variant glyphs
    * were generated.
    */
-  features?: string[];
+  features?: readonly string[];
 }

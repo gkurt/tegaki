@@ -19,6 +19,9 @@ function checkBundleVersion(bundle: TegakiBundle): void {
 export function registerBundle(bundle: TegakiBundle): void {
   checkBundleVersion(bundle);
   bundles.set(bundle.family, bundle);
+  if (bundle.fullFamily && bundle.fullFamily !== bundle.family) {
+    bundles.set(bundle.fullFamily, bundle);
+  }
 }
 
 /** Look up a registered bundle by family name. */

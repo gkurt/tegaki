@@ -16,7 +16,7 @@ Tegaki provides a native Astro component that renders full HTML at build time an
 
 ```astro
 ---
-import { TegakiRenderer } from 'tegaki/astro';
+import TegakiRenderer from 'tegaki/astro';
 import bundle from 'tegaki/fonts/caveat';
 ---
 
@@ -36,11 +36,11 @@ When using the same font across multiple components on a page, you can register 
 
 ### Register the bundle
 
-Use the `bundle` prop on a dedicated instance — it serializes the font data into a `<script type="application/json">` tag and registers it on the client:
+Use the `bundle` prop on a dedicated instance — it serializes the font data into a `<script type="application/json">` tag and registers it on the client. Once registered, reference the font by its family name (the `fullFamily` field of the bundle, e.g. `"Caveat"`):
 
 ```astro
 ---
-import { TegakiRenderer } from 'tegaki/astro';
+import TegakiRenderer from 'tegaki/astro';
 import bundle from 'tegaki/fonts/caveat';
 ---
 
@@ -64,7 +64,7 @@ Add `loadFont` to inject an `@font-face` rule so the browser starts downloading 
 
 ```astro
 ---
-import { TegakiRenderer } from 'tegaki/astro';
+import TegakiRenderer from 'tegaki/astro';
 import bundle from 'tegaki/fonts/caveat';
 ---
 
@@ -89,8 +89,9 @@ import bundle from 'tegaki/fonts/caveat';
 ## How it works
 
 1. **Build time** — The Astro component calls `TegakiEngine.renderElements()` to produce the full HTML (canvas fallback text, overlay, sentinel). Text is visible in the initial HTML even without JavaScript.
-2. **Client hydration** — A module script finds all `[data-tegaki-options]` elements, creates a `TegakiEngine` with `adopt: true` (reusing existing DOM), and starts the animation.
-3. **Dynamic elements** — A `MutationObserver` watches for elements added after initial load (e.g., from View Transitions or client-side routing) and hydrates them automatically.
+2. **Bundle serialization** — Because font glyph data lives in server memory during SSR, it must be embedded into the HTML to reach the browser. When `font={bundle}` is passed as an object, the component automatically serializes the bundle into a `<script type="application/json">` tag. If the same font is used across multiple renderers on the same page, use the `bundle` prop once to serialize it and reference by name afterward — this avoids duplicating the bundle data in the HTML output.
+3. **Client hydration** — A module script reads any serialized bundle tags and registers them, then finds all `[data-tegaki-options]` elements, creates a `TegakiEngine` with `adopt: true` (reusing existing DOM), and starts the animation.
+4. **Dynamic elements** — A `MutationObserver` watches for elements added after initial load (e.g., from View Transitions or client-side routing) and hydrates them automatically.
 
 ## Props
 

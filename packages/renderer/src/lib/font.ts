@@ -12,7 +12,7 @@ export async function ensureFontFace(bundle: TegakiBundle): Promise<void> {
   await ensureFont(bundle.family, bundle.fontUrl, bundle.features, bundle.extraFontUrls);
 }
 
-export function ensureFont(family: string, url: string, features?: string[], extraFontUrls?: string[]): Promise<void> | null {
+export function ensureFont(family: string, url: string, features?: readonly string[], extraFontUrls?: string[]): Promise<void> | null {
   if (typeof document === 'undefined') return Promise.resolve();
   // Register every subset URL under the same family name. Browsers union
   // glyph coverage across same-family faces via cmap, so Arabic text falls

@@ -17,7 +17,7 @@ const { text = 'Hello World', fontSize = 48, time = { mode: 'uncontrolled', spee
   <TegakiRenderer font={bundle} bundle loadFont />
   <div class="live-demo-card">
     <TegakiRenderer
-      font="Caveat"
+      font={bundle.fullFamily ?? bundle.family}
       {text}
       {time}
       {effects}

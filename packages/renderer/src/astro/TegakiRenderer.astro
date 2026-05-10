@@ -83,13 +83,18 @@ const clientOptions = {
   ...engineOptions,
   font: resolvedFont?.family,
 };
+
+// When font is passed as an object directly (not a string lookup), auto-serialize
+// the bundle so the client can hydrate without requiring an explicit `bundle` prop.
+// The `bundle` prop is still useful for the register-only pattern (no text rendered).
+const shouldInlineBundle = !registerBundle && typeof font !== 'string' && !!resolvedFont;
 ---
 
 {loadFont && resolvedFont?.fontFaceCSS && (
   <style is:inline set:html={resolvedFont.fontFaceCSS} />
 )}
 
-{registerBundle && resolvedFont && (
+{(registerBundle || shouldInlineBundle) && resolvedFont && (
   <script is:inline type="application/json" data-tegaki-bundle set:html={JSON.stringify(resolvedFont)} />
 )}
 
@@ -100,6 +105,8 @@ const clientOptions = {
 <script>
   import { TegakiEngine } from 'tegaki/core';
 
+  const engines = new WeakMap<HTMLElement, TegakiEngine>();
+
   function hydrateBundle(el: Element) {
     TegakiEngine.registerBundle(JSON.parse(el.textContent || '{}'));
   }
@@ -109,14 +116,33 @@ const clientOptions = {
     container.dataset.tegakiHydrated = '';
     const options = JSON.parse(container.dataset.tegakiOptions || '{}');
     const engine = new TegakiEngine(container, { adopt: true, ...options });
+    engines.set(container, engine);
     container.dispatchEvent(new CustomEvent('tegaki:ready', { detail: { engine }, bubbles: true }));
   }
 
-  // Hydrate existing elements
-  document.querySelectorAll<HTMLScriptElement>('[data-tegaki-bundle]').forEach(hydrateBundle);
-  document.querySelectorAll<HTMLElement>('[data-tegaki-options]').forEach(hydrateContainer);
+  function hydrateAll() {
+    document.querySelectorAll<HTMLScriptElement>('[data-tegaki-bundle]').forEach(hydrateBundle);
+    document.querySelectorAll<HTMLElement>('[data-tegaki-options]').forEach(hydrateContainer);
+  }
 
-  // Watch for dynamically added elements (View Transitions, client-side routing, etc.)
+  // Destroy engines before View Transitions swaps the DOM, and clear the
+  // hydration flag so elements on the incoming page can be re-hydrated.
+  document.addEventListener('astro:before-swap', () => {
+    document.querySelectorAll<HTMLElement>('[data-tegaki-options]').forEach((container) => {
+      engines.get(container)?.destroy();
+      engines.delete(container);
+      delete container.dataset.tegakiHydrated;
+    });
+  });
+
+  // Re-hydrate after View Transitions (bundles before containers to ensure
+  // the registry is populated before engines are created).
+  document.addEventListener('astro:page-load', hydrateAll);
+
+  // Initial load
+  hydrateAll();
+
+  // Watch for dynamically added elements (non-View-Transitions cases).
   new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
