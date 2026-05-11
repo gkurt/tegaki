@@ -48,10 +48,11 @@ export interface TimelineStaggerConfig {
   /**
    * Delay between the start of consecutive glyphs.
    * - Number: seconds (e.g. `0.3`).
-   * - String ending in `%`: percentage of the previous glyph's bundled
-   *   `glyph.t` duration (e.g. `"20%"` starts the next glyph after 20% of the
-   *   previous one's bundled duration — heavy overlap; `"120%"` leaves a small
-   *   trailing gap).
+   * - String ending in `%`: percentage of the previous glyph's **effective**
+   *   duration — i.e. the `duration` field below when set, otherwise the
+   *   bundled `glyph.t`. So `"100%"` always means "start once the previous
+   *   glyph finishes", and `"50%"` always means "start halfway through",
+   *   regardless of whether `duration` is overridden.
    */
   advance: number | `${number}%`;
   /**
@@ -163,8 +164,13 @@ function resolveAdvance(advance: number | `${number}%`, prevBundled: number): nu
 class StaggerScheduler {
   readonly entries: TimelineEntry[] = [];
   private offset = 0;
-  /** Bundled `glyph.t` (or `unknownDuration`) of the most recent glyph; basis for percent advances. */
-  private prevBundled = 0;
+  /**
+   * Effective duration of the most recent glyph (= `staticDuration` when set,
+   * else its bundled `glyph.t`). Basis for percent advances — so
+   * `advance: '100%'` always means "start once the previous glyph finishes",
+   * independent of whether the duration was overridden.
+   */
+  private prevEffective = 0;
   private hasPrev = false;
   /** Accumulated word/line gap pending until the next glyph (or finalize). */
   private pendingGap = 0;
@@ -178,7 +184,7 @@ class StaggerScheduler {
 
   addGlyph(fields: EntryFields, bundledDuration: number): void {
     if (this.hasPrev) {
-      this.offset += resolveAdvance(this.advance, this.prevBundled) + this.pendingGap;
+      this.offset += resolveAdvance(this.advance, this.prevEffective) + this.pendingGap;
       this.pendingGap = 0;
     }
     const duration = this.staticDuration ?? bundledDuration;
@@ -191,7 +197,7 @@ class StaggerScheduler {
       duration,
       ...(strokeTimeScale !== 1 ? { strokeTimeScale } : {}),
     });
-    this.prevBundled = bundledDuration;
+    this.prevEffective = duration;
     this.hasPrev = true;
   }
 
@@ -205,8 +211,15 @@ class StaggerScheduler {
   }
 
   finalize(): Timeline {
-    const last = this.entries[this.entries.length - 1];
-    const total = last ? last.offset + last.duration : 0;
+    // Total duration is the latest finish across *all* entries, not just the
+    // last one — with auto duration and varying bundled lengths, an earlier
+    // long glyph can outlast subsequent short ones (especially with heavy
+    // overlap). Using the max guarantees every glyph has fully rendered.
+    let total = 0;
+    for (const e of this.entries) {
+      const end = e.offset + e.duration;
+      if (end > total) total = end;
+    }
     return { entries: this.entries, totalDuration: total };
   }
 }

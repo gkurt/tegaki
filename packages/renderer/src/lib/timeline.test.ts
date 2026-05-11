@@ -123,14 +123,11 @@ describe('computeTimeline (stagger mode)', () => {
     expect(tl.entries[0]?.duration).toBeCloseTo(1.0);
     expect(tl.entries[1]?.duration).toBeCloseTo(0.5);
     expect(tl.entries[2]?.duration).toBeCloseTo(2.0);
-    // Total = last.offset + last.duration = 0.6 + 2.0.
-    expect(tl.totalDuration).toBeCloseTo(2.6);
   });
 
-  test('percentage advance: measured against PREVIOUS bundled duration', () => {
-    // 50% advance: A→B starts 50% of A.t (=0.5s) after A; B→C starts 50% of
-    // B.t (=0.25s) after B. C never advances anyone else, so C's bundled
-    // duration doesn't enter the offsets.
+  test('percentage advance with auto duration: % is of previous bundled duration', () => {
+    // With auto duration, effective == bundled. 50% advance: A→B starts at
+    // 50% of A.t (=0.5s) after A; B→C starts at 50% of B.t (=0.25s) after B.
     const tl = computeTimeline('ABC', bundle, { stagger: { advance: '50%' } });
     expect(tl.entries[0]?.offset).toBeCloseTo(0);
     expect(tl.entries[1]?.offset).toBeCloseTo(0.5);
@@ -172,6 +169,109 @@ describe('computeTimeline (stagger mode)', () => {
     expect(tl.entries[0]?.offset).toBeCloseTo(0); // A
     expect(tl.entries[1]?.offset).toBeCloseTo(0.5); // ? after 50% of A.t
     expect(tl.entries[2]?.offset).toBeCloseTo(0.6); // B after 50% of unknownDuration
+  });
+
+  // -----------------------------------------------------------------------
+  // Regressions from the first stagger pass: % was measured against the
+  // bundled duration even when `duration` was overridden, so e.g.
+  // `advance: '100%', duration: 1` started letter N+1 at `bundled[N]`
+  // seconds — well before letter N (which had been stretched to 1s) had
+  // finished. Total duration also returned `last.offset + last.duration`,
+  // which truncated when an earlier long auto-duration glyph outlasted a
+  // later short one.
+  // -----------------------------------------------------------------------
+
+  test('advance:100% + static duration: no overlap — each glyph plays in turn', () => {
+    // With static duration=1s and advance=100% (of effective), every glyph
+    // starts exactly where the previous one ended. Bundled durations
+    // (1.0/0.5/2.0) don't leak into offsets.
+    const tl = computeTimeline('ABC', bundle, { stagger: { advance: '100%', duration: 1.0 } });
+    expect(tl.entries[0]?.offset).toBeCloseTo(0);
+    expect(tl.entries[1]?.offset).toBeCloseTo(1.0);
+    expect(tl.entries[2]?.offset).toBeCloseTo(2.0);
+    expect(tl.totalDuration).toBeCloseTo(3.0);
+  });
+
+  test('advance:100% + auto duration: no overlap — offsets accumulate bundled durations', () => {
+    // Auto duration → effective == bundled, so 100% of effective is the
+    // bundled duration. Each glyph picks up exactly where the previous one
+    // ended; total is the sum of bundled durations.
+    const tl = computeTimeline('ABC', bundle, { stagger: { advance: '100%' } });
+    expect(tl.entries[0]?.offset).toBeCloseTo(0);
+    expect(tl.entries[1]?.offset).toBeCloseTo(1.0); // after A (bundled 1.0)
+    expect(tl.entries[2]?.offset).toBeCloseTo(1.5); // after B (bundled 0.5)
+    expect(tl.totalDuration).toBeCloseTo(3.5); // + C bundled 2.0
+  });
+
+  test('advance:50% + static duration: overlap is 50% of the static duration, not bundled', () => {
+    // Each glyph plays for 1s, the next starts halfway through. So offsets
+    // step by 0.5s regardless of the bundled durations.
+    const tl = computeTimeline('ABC', bundle, { stagger: { advance: '50%', duration: 1.0 } });
+    expect(tl.entries[0]?.offset).toBeCloseTo(0);
+    expect(tl.entries[1]?.offset).toBeCloseTo(0.5);
+    expect(tl.entries[2]?.offset).toBeCloseTo(1.0);
+    // Last glyph finishes at 1.0 + 1.0 = 2.0 — that's also the max.
+    expect(tl.totalDuration).toBeCloseTo(2.0);
+  });
+
+  test('advance:200% + static duration: trailing gap between glyphs (no overlap)', () => {
+    // 200% of effective: next glyph starts at 2× duration after the previous.
+    // The previous finishes at 1× duration, so there's a 1× duration gap.
+    const tl = computeTimeline('AB', bundle, { stagger: { advance: '200%', duration: 0.5 } });
+    expect(tl.entries[0]?.offset).toBeCloseTo(0);
+    expect(tl.entries[1]?.offset).toBeCloseTo(1.0);
+    expect(tl.totalDuration).toBeCloseTo(1.5);
+  });
+
+  test('totalDuration is max(offset + duration) — an earlier long glyph can outlast later ones', () => {
+    // Auto duration with heavy overlap: a single long glyph at the start can
+    // still be drawing when subsequent short glyphs have already finished.
+    // The naive `last.offset + last.duration` would return 0.3 + 0.5 = 0.8,
+    // truncating C's body. The max-based calculation returns A's full 2.0.
+    const longFirst = makeBundle({
+      glyphData: {
+        A: glyph(500, 2.0), // long
+        B: glyph(500, 0.5), // short
+        C: glyph(500, 0.5), // short
+      },
+    });
+    const tl = computeTimeline('ABC', longFirst, { stagger: { advance: 0.3 } });
+    expect(tl.entries[0]?.offset).toBeCloseTo(0);
+    expect(tl.entries[1]?.offset).toBeCloseTo(0.3);
+    expect(tl.entries[2]?.offset).toBeCloseTo(0.6);
+    // A finishes at 2.0, B at 0.3 + 0.5 = 0.8, C at 0.6 + 0.5 = 1.1.
+    expect(tl.totalDuration).toBeCloseTo(2.0);
+  });
+
+  test('advance:0 collapses every glyph onto t=0', () => {
+    const tl = computeTimeline('ABC', bundle, { stagger: { advance: 0 } });
+    expect(tl.entries[0]?.offset).toBeCloseTo(0);
+    expect(tl.entries[1]?.offset).toBeCloseTo(0);
+    expect(tl.entries[2]?.offset).toBeCloseTo(0);
+    // Total is still max(0 + bundled) = 2.0 (C).
+    expect(tl.totalDuration).toBeCloseTo(2.0);
+  });
+
+  test('single glyph: offset 0, total = duration', () => {
+    const tl = computeTimeline('A', bundle, { stagger: { advance: '100%', duration: 1.0 } });
+    expect(tl.entries[0]?.offset).toBeCloseTo(0);
+    expect(tl.entries[0]?.duration).toBeCloseTo(1.0);
+    expect(tl.totalDuration).toBeCloseTo(1.0);
+  });
+
+  test('empty text: empty entries, totalDuration 0', () => {
+    const tl = computeTimeline('', bundle, { stagger: { advance: '100%', duration: 1.0 } });
+    expect(tl.entries.length).toBe(0);
+    expect(tl.totalDuration).toBe(0);
+  });
+
+  test('static duration: strokeTimeScale is set even for the leading glyph when bundled ≠ static', () => {
+    // Regression: don't accidentally skip strokeTimeScale on entry 0.
+    const tl = computeTimeline('AB', bundle, { stagger: { advance: 0.3, duration: 0.25 } });
+    // A bundled 1.0s, static 0.25s → scale 0.25.
+    expect(tl.entries[0]?.strokeTimeScale).toBeCloseTo(0.25);
+    // B bundled 0.5s, static 0.25s → scale 0.5.
+    expect(tl.entries[1]?.strokeTimeScale).toBeCloseTo(0.5);
   });
 });
 
