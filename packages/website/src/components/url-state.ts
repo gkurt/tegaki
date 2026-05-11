@@ -76,6 +76,12 @@ export interface UrlState {
   deferDots: boolean;
   /** Run text through the harfbuzz shaper for ligatures / contextual forms / RTL. Off falls back to the char-keyed glyph path. */
   useShaper: boolean;
+  /** Enable stagger timing — each letter starts a fixed advance after the previous one. */
+  staggerEnabled: boolean;
+  /** Stagger advance. Numeric string = seconds; trailing `%` = percentage of previous glyph's bundled duration. */
+  staggerAdvance: string;
+  /** Stagger per-glyph duration. `'auto'` keeps bundled timing; numeric string scales strokes to that many seconds. */
+  staggerDuration: string;
 }
 
 export const URL_DEFAULTS: UrlState = {
@@ -101,6 +107,9 @@ export const URL_DEFAULTS: UrlState = {
   glyphEasing: 'default',
   deferDots: true,
   useShaper: true,
+  staggerEnabled: false,
+  staggerAdvance: '0.2',
+  staggerDuration: 'auto',
 };
 
 // Short keys for compact URLs — only non-default values are written
@@ -172,6 +181,9 @@ export function parseUrlState(): UrlState {
   if (p.has('ge')) state.glyphEasing = p.get('ge')!;
   if (p.has('dd')) state.deferDots = p.get('dd') !== '0';
   if (p.has('hb')) state.useShaper = p.get('hb') !== '0';
+  if (p.has('st')) state.staggerEnabled = p.get('st') === '1';
+  if (p.has('sa')) state.staggerAdvance = p.get('sa')!;
+  if (p.has('sd')) state.staggerDuration = p.get('sd')!;
 
   // Pipeline options — read short keys
   for (const [short, long] of Object.entries(REVERSE_OPTION_KEYS)) {
@@ -224,6 +236,9 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
   if (state.glyphEasing !== URL_DEFAULTS.glyphEasing) p.set('ge', state.glyphEasing);
   if (state.deferDots !== URL_DEFAULTS.deferDots) p.set('dd', '0');
   if (state.useShaper !== URL_DEFAULTS.useShaper) p.set('hb', '0');
+  if (state.staggerEnabled !== URL_DEFAULTS.staggerEnabled) p.set('st', '1');
+  if (state.staggerAdvance !== URL_DEFAULTS.staggerAdvance) p.set('sa', state.staggerAdvance);
+  if (state.staggerDuration !== URL_DEFAULTS.staggerDuration) p.set('sd', state.staggerDuration);
 
   // Pipeline options — only non-defaults. Array-valued options are serialized
   // as comma-separated and compared structurally.

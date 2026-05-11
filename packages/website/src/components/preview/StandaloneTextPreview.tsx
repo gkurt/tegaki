@@ -5,7 +5,7 @@ import { parseUrlState } from '../url-state.ts';
 import { getEasingFn } from './constants.ts';
 import { fetchFontFromCDN } from './font-cdn.ts';
 import { TegakiTextPreview } from './TegakiTextPreview.tsx';
-import { buildEffects } from './utils.ts';
+import { buildEffects, parseStaggerInputs } from './utils.ts';
 
 /**
  * Read `w`/`h` URL params (in px). Falls back to `null` so the container stretches
@@ -69,13 +69,15 @@ export function StandaloneTextPreview() {
   const timingConfig = useMemo<TimelineConfig | undefined>(() => {
     const strokeFn = getEasingFn(state.strokeEasing);
     const glyphFn = getEasingFn(state.glyphEasing);
-    if (strokeFn === undefined && glyphFn === undefined && state.deferDots) return undefined;
+    const staggerConfig = state.staggerEnabled ? parseStaggerInputs(state.staggerAdvance, state.staggerDuration) : undefined;
+    if (strokeFn === undefined && glyphFn === undefined && state.deferDots && !staggerConfig) return undefined;
     return {
       ...(strokeFn !== undefined ? { strokeEasing: strokeFn } : {}),
       ...(glyphFn !== undefined ? { glyphEasing: glyphFn } : {}),
       ...(state.deferDots ? {} : { deferDots: false }),
+      ...(staggerConfig ? { stagger: staggerConfig } : {}),
     };
-  }, [state.strokeEasing, state.glyphEasing, state.deferDots]);
+  }, [state.strokeEasing, state.glyphEasing, state.deferDots, state.staggerEnabled, state.staggerAdvance, state.staggerDuration]);
 
   const timeProp: TimeControlProp =
     state.timeMode === 'controlled'

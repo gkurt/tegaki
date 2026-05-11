@@ -1,5 +1,25 @@
-import type { TegakiEffects } from 'tegaki';
+import type { TegakiEffects, TimelineStaggerConfig } from 'tegaki';
 import type { CustomEffect, EffectsState } from '../url-state.ts';
+
+/**
+ * Convert the string-form previewer inputs into a `TimelineStaggerConfig`.
+ * `advance` accepts seconds (`"0.3"`) or percentages (`"20%"`); `duration`
+ * accepts `"auto"` or seconds (`"0.5"`). Invalid advance falls back to 0s.
+ */
+export function parseStaggerInputs(advance: string, duration: string): TimelineStaggerConfig {
+  const trimmed = advance.trim();
+  let advanceVal: TimelineStaggerConfig['advance'];
+  if (trimmed.endsWith('%')) {
+    advanceVal = trimmed as `${number}%`;
+  } else {
+    const n = Number(trimmed);
+    advanceVal = Number.isFinite(n) ? n : 0;
+  }
+  const durationTrimmed = duration.trim();
+  const durationVal: TimelineStaggerConfig['duration'] =
+    durationTrimmed === 'auto' || durationTrimmed === '' ? 'auto' : Number(durationTrimmed);
+  return { advance: advanceVal, duration: durationVal };
+}
 
 /** Scale (w, h) to fit within maxSize while preserving aspect ratio */
 export function fitSize(w: number, h: number, maxSize: number): { width: number; height: number } {

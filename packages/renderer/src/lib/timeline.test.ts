@@ -102,6 +102,79 @@ describe('computeTimeline (shaper path)', () => {
   });
 });
 
+describe('computeTimeline (stagger mode)', () => {
+  // A bundle where each letter has a distinct bundled duration, so we can
+  // tell whether an advance is being computed off the *previous* letter's
+  // bundled `t` rather than the current one.
+  const bundle = makeBundle({
+    glyphData: {
+      A: glyph(500, 1.0),
+      B: glyph(500, 0.5),
+      C: glyph(500, 2.0),
+    },
+  });
+
+  test('static advance: each glyph starts at prev.offset + advance, regardless of bundled duration', () => {
+    const tl = computeTimeline('ABC', bundle, { stagger: { advance: 0.3 } });
+    expect(tl.entries[0]?.offset).toBeCloseTo(0);
+    expect(tl.entries[1]?.offset).toBeCloseTo(0.3);
+    expect(tl.entries[2]?.offset).toBeCloseTo(0.6);
+    // Auto duration → each entry keeps its bundled `t`.
+    expect(tl.entries[0]?.duration).toBeCloseTo(1.0);
+    expect(tl.entries[1]?.duration).toBeCloseTo(0.5);
+    expect(tl.entries[2]?.duration).toBeCloseTo(2.0);
+    // Total = last.offset + last.duration = 0.6 + 2.0.
+    expect(tl.totalDuration).toBeCloseTo(2.6);
+  });
+
+  test('percentage advance: measured against PREVIOUS bundled duration', () => {
+    // 50% advance: A→B starts 50% of A.t (=0.5s) after A; B→C starts 50% of
+    // B.t (=0.25s) after B. C never advances anyone else, so C's bundled
+    // duration doesn't enter the offsets.
+    const tl = computeTimeline('ABC', bundle, { stagger: { advance: '50%' } });
+    expect(tl.entries[0]?.offset).toBeCloseTo(0);
+    expect(tl.entries[1]?.offset).toBeCloseTo(0.5);
+    expect(tl.entries[2]?.offset).toBeCloseTo(0.75);
+  });
+
+  test('static duration scales strokes to fit; auto leaves bundled timing alone', () => {
+    const tlAuto = computeTimeline('ABC', bundle, { stagger: { advance: 0.3 } });
+    // No strokeTimeScale field when scale is 1.
+    expect(tlAuto.entries[0]?.strokeTimeScale).toBeUndefined();
+
+    const tlStatic = computeTimeline('ABC', bundle, { stagger: { advance: 0.3, duration: 1.0 } });
+    // A bundled 1.0s → 1.0/1.0 = 1.0 (omitted), B bundled 0.5s → 2.0, C bundled 2.0s → 0.5.
+    expect(tlStatic.entries[0]?.duration).toBeCloseTo(1.0);
+    expect(tlStatic.entries[0]?.strokeTimeScale).toBeUndefined();
+    expect(tlStatic.entries[1]?.duration).toBeCloseTo(1.0);
+    expect(tlStatic.entries[1]?.strokeTimeScale).toBeCloseTo(2.0);
+    expect(tlStatic.entries[2]?.duration).toBeCloseTo(1.0);
+    expect(tlStatic.entries[2]?.strokeTimeScale).toBeCloseTo(0.5);
+  });
+
+  test('word and line gaps still apply between glyphs in stagger mode', () => {
+    // Default wordGap = 0.15, lineGap = 0.3. Advance = 0.2s, A.t = 1.0.
+    // A at 0; whitespace adds wordGap; B at 0 + advance(=0.2) + 0.15.
+    const tl = computeTimeline('A B\nC', bundle, { stagger: { advance: 0.2 } });
+    const a = tl.entries.find((e) => e.char === 'A')!;
+    const b = tl.entries.find((e) => e.char === 'B')!;
+    const c = tl.entries.find((e) => e.char === 'C')!;
+    expect(a.offset).toBeCloseTo(0);
+    expect(b.offset).toBeCloseTo(0.2 + 0.15);
+    // From B: advance(=0.2) + lineGap(=0.3) = 0.5 → C at 0.35 + 0.5 = 0.85.
+    expect(c.offset).toBeCloseTo(0.35 + 0.2 + 0.3);
+  });
+
+  test('unknown glyphs use unknownDuration as the basis for percentage advances', () => {
+    // "?" has no bundled glyph. With unknownDuration = 0.2 and advance "50%",
+    // the next letter starts 0.1s after "?". A→? still uses A.t (1.0).
+    const tl = computeTimeline('A?B', bundle, { stagger: { advance: '50%' } });
+    expect(tl.entries[0]?.offset).toBeCloseTo(0); // A
+    expect(tl.entries[1]?.offset).toBeCloseTo(0.5); // ? after 50% of A.t
+    expect(tl.entries[2]?.offset).toBeCloseTo(0.6); // B after 50% of unknownDuration
+  });
+});
+
 describe('computeTimeline for Devanagari "द्" (consonant + virama)', () => {
   // The Tillana bundle ships:
   //   glyphData["द"]  → 2 strokes,  t = 0.778 (bare consonant DA)
