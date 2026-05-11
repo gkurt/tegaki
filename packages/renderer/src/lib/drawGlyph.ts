@@ -96,6 +96,11 @@ function defaultStrokeEasing(t: number): number {
  * delay relative to `localTime = 0`. Used by the timeline scheduler to defer
  * priority-tagged strokes (disconnected marks / i-dots / Arabic nuqṭa) to
  * after every body stroke in the word has drawn.
+ *
+ * `strokeTimeScale` multiplies both bundled `d` and `a` so a glyph's strokes
+ * fit a stretched/compressed time slot (used by stagger mode with a static
+ * `duration`). Defaults to `1` (no scaling). `strokeDelays` are already
+ * scheduler-relative seconds and are not affected by this scale.
  */
 export function drawGlyph(
   ctx: CanvasRenderingContext2D,
@@ -111,6 +116,7 @@ export function drawGlyph(
   strokeScale = 1,
   strokeStyleOverride?: string | CanvasGradient | CanvasPattern,
   strokeDelays?: (number | undefined)[],
+  strokeTimeScale = 1,
 ) {
   // Default stroke paint. When a layout-spanning effect (e.g. `globalGradient`)
   // provides a CanvasGradient/Pattern via `strokeStyleOverride`, use it as the
@@ -194,10 +200,14 @@ export function drawGlyph(
 
   for (let si = 0; si < glyph.s.length; si++) {
     const stroke = glyph.s[si]!;
-    const delay = strokeDelays?.[si] ?? stroke.d;
+    // Stagger-mode static duration scales bundled `d` and `a`; scheduler-set
+    // `strokeDelays` (dot deferral) are already in entry-relative seconds and
+    // bypass the scale.
+    const delay = strokeDelays?.[si] ?? stroke.d * strokeTimeScale;
     if (localTime < delay) continue;
     const elapsed = localTime - delay;
-    const linearProgress = Math.min(elapsed / stroke.a, 1);
+    const animDuration = stroke.a * strokeTimeScale;
+    const linearProgress = animDuration > 0 ? Math.min(elapsed / animDuration, 1) : 1;
     const progress = strokeEasing ? strokeEasing(linearProgress) : linearProgress;
 
     const rawPts = stroke.p;

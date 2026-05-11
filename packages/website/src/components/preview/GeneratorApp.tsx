@@ -104,6 +104,9 @@ export function GeneratorApp() {
   const [glyphEasing, setGlyphEasing] = useState(initialUrlState.glyphEasing);
   const [deferDots, setDeferDots] = useState(initialUrlState.deferDots);
   const [useShaper, setUseShaper] = useState(initialUrlState.useShaper);
+  const [staggerEnabled, setStaggerEnabled] = useState(initialUrlState.staggerEnabled);
+  const [staggerAdvance, setStaggerAdvance] = useState(initialUrlState.staggerAdvance);
+  const [staggerDuration, setStaggerDuration] = useState(initialUrlState.staggerDuration);
 
   // Animation state (lifted up so controls live outside the canvas area)
   const [animPlaying, setAnimPlaying] = useState(true);
@@ -271,6 +274,9 @@ export function GeneratorApp() {
         glyphEasing,
         deferDots,
         useShaper,
+        staggerEnabled,
+        staggerAdvance,
+        staggerDuration,
       });
     }, 300);
     return () => clearTimeout(syncTimerRef.current);
@@ -297,6 +303,9 @@ export function GeneratorApp() {
     glyphEasing,
     deferDots,
     useShaper,
+    staggerEnabled,
+    staggerAdvance,
+    staggerDuration,
   ]);
 
   // Auto-load font on mount (from URL state or default)
@@ -857,6 +866,12 @@ export function GeneratorApp() {
             onDeferDotsChange={setDeferDots}
             useShaper={useShaper}
             onUseShaperChange={setUseShaper}
+            staggerEnabled={staggerEnabled}
+            onStaggerEnabledChange={setStaggerEnabled}
+            staggerAdvance={staggerAdvance}
+            onStaggerAdvanceChange={setStaggerAdvance}
+            staggerDuration={staggerDuration}
+            onStaggerDurationChange={setStaggerDuration}
           />
         )}
       </main>

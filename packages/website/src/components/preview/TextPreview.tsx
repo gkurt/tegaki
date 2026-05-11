@@ -5,7 +5,7 @@ import { type CustomEffect, DEFAULT_EFFECTS_STATE, EFFECT_DEFAULTS, type Effects
 import { EASING_PRESETS, getEasingFn, TEXT_PRESETS } from './constants.ts';
 import { CustomEffectControls, EffectColor, EffectSlider, GradientColorStops } from './effect-controls.tsx';
 import { TegakiTextPreview } from './TegakiTextPreview.tsx';
-import { buildEffects } from './utils.ts';
+import { buildEffects, parseStaggerInputs } from './utils.ts';
 
 export function TextPreview({
   fontInfo,
@@ -45,6 +45,12 @@ export function TextPreview({
   onDeferDotsChange,
   useShaper,
   onUseShaperChange,
+  staggerEnabled,
+  onStaggerEnabledChange,
+  staggerAdvance,
+  onStaggerAdvanceChange,
+  staggerDuration,
+  onStaggerDurationChange,
 }: {
   fontInfo: ParsedFontInfo | null;
   fontBuffer: ArrayBuffer | null;
@@ -83,6 +89,12 @@ export function TextPreview({
   onDeferDotsChange: (v: boolean) => void;
   useShaper: boolean;
   onUseShaperChange: (v: boolean) => void;
+  staggerEnabled: boolean;
+  onStaggerEnabledChange: (v: boolean) => void;
+  staggerAdvance: string;
+  onStaggerAdvanceChange: (v: string) => void;
+  staggerDuration: string;
+  onStaggerDurationChange: (v: string) => void;
 }) {
   // Initial time/paused state come from the URL (controlled mode only): a non-zero
   // `ct` param loads the timeline paused at that position so agents can inspect a
@@ -219,13 +231,15 @@ export function TextPreview({
   const timingConfig = useMemo(() => {
     const strokeFn = getEasingFn(strokeEasing);
     const glyphFn = getEasingFn(glyphEasing);
-    if (strokeFn === undefined && glyphFn === undefined && deferDots) return undefined;
+    const staggerConfig = staggerEnabled ? parseStaggerInputs(staggerAdvance, staggerDuration) : undefined;
+    if (strokeFn === undefined && glyphFn === undefined && deferDots && !staggerConfig) return undefined;
     return {
       ...(strokeFn !== undefined ? { strokeEasing: strokeFn } : {}),
       ...(glyphFn !== undefined ? { glyphEasing: glyphFn } : {}),
       ...(deferDots ? {} : { deferDots: false }),
+      ...(staggerConfig ? { stagger: staggerConfig } : {}),
     };
-  }, [strokeEasing, glyphEasing, deferDots]);
+  }, [strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration]);
 
   const activeEffectCount = effects ? Object.keys(effects).length : 0;
 
@@ -957,6 +971,46 @@ export function TextPreview({
               ))}
             </select>
           </label>
+
+          <span className="border-l border-gray-200 h-6" />
+
+          <label
+            className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer"
+            title="Each glyph starts a fixed advance after the previous one — overlap or compress the cadence"
+          >
+            <input type="checkbox" checked={staggerEnabled} onChange={(e) => onStaggerEnabledChange(e.target.checked)} />
+            Stagger
+          </label>
+          {staggerEnabled && (
+            <>
+              <label
+                className="flex items-center gap-1 text-xs text-gray-600"
+                title="Advance: seconds (e.g. 0.3) or percentage of previous bundled duration (e.g. 20%)"
+              >
+                Advance
+                <input
+                  type="text"
+                  className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                  value={staggerAdvance}
+                  onChange={(e) => onStaggerAdvanceChange(e.target.value)}
+                  placeholder="0.3 or 20%"
+                />
+              </label>
+              <label
+                className="flex items-center gap-1 text-xs text-gray-600"
+                title="Per-glyph duration in seconds, or 'auto' to keep bundled timing"
+              >
+                Duration
+                <input
+                  type="text"
+                  className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs"
+                  value={staggerDuration}
+                  onChange={(e) => onStaggerDurationChange(e.target.value)}
+                  placeholder="auto"
+                />
+              </label>
+            </>
+          )}
 
           <label className="flex items-center gap-1.5 text-xs text-gray-600">
             Glyph easing
