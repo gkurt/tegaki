@@ -5,7 +5,7 @@ import { type CustomEffect, DEFAULT_EFFECTS_STATE, EFFECT_DEFAULTS, type Effects
 import { EASING_PRESETS, getEasingFn, TEXT_PRESETS } from './constants.ts';
 import { CustomEffectControls, EffectColor, EffectSlider, GradientColorStops } from './effect-controls.tsx';
 import { TegakiTextPreview } from './TegakiTextPreview.tsx';
-import { buildEffects } from './utils.ts';
+import { buildEffects, parseStaggerInputs } from './utils.ts';
 
 export function TextPreview({
   fontInfo,
