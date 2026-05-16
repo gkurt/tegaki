@@ -69,6 +69,7 @@ export function TegakiRenderer<const C extends ElementType = 'div', const E exte
     showOverlay,
     direction,
     shaper,
+    sound,
     editable,
     onTextChange,
     ...elementProps
@@ -99,6 +100,7 @@ export function TegakiRenderer<const C extends ElementType = 'div', const E exte
     showOverlay,
     direction,
     shaper,
+    sound,
     onComplete,
     onChangeTimeline,
   };

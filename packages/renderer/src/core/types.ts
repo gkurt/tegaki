@@ -1,5 +1,6 @@
 import type { Timeline, TimelineConfig } from '../lib/timeline.ts';
 import type { TegakiBundle, TegakiEffects } from '../types.ts';
+import type { TegakiSoundProp } from './audio-registry.ts';
 
 // ---------------------------------------------------------------------------
 // Time control types (shared with adapters)
@@ -164,6 +165,17 @@ export interface TegakiEngineOptions {
    * the shaper for the whole process. Default: `true`.
    */
   shaper?: boolean;
+  /**
+   * Audio driver played while strokes are animating. Pass a registered driver
+   * name (e.g. `"pencil"`), an object `{ name, volume, ...config }`, or a
+   * `TegakiAudioDriver` directly. Built-in drivers live in `tegaki/audio` and
+   * must be registered via `TegakiEngine.registerAudio` before use.
+   *
+   * Audio is suppressed when the user has `prefers-reduced-motion: reduce`
+   * set, when the engine is paused, and during scrubbing (controlled-mode
+   * backward seeks).
+   */
+  sound?: TegakiSoundProp;
 }
 
 // ---------------------------------------------------------------------------

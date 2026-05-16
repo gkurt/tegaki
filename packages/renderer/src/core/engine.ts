@@ -26,6 +26,8 @@ import type { Timeline, TimelineConfig, TimelineEntry } from '../lib/timeline.ts
 import { computeTimeline } from '../lib/timeline.ts';
 import { cssFontFamily, graphemes, lookupGlyphData } from '../lib/utils.ts';
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
+import { getAudio, registerAudio, type TegakiSoundProp, unregisterAudio } from './audio-registry.ts';
+import { AudioRuntime } from './audio-runtime.ts';
 import { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
 import { buildChildren, buildRootProps, domCreateElement } from './render-elements.ts';
 import { getShaperForBundle, registerShaper } from './shaper-registry.ts';
@@ -86,6 +88,25 @@ export class TegakiEngine {
    */
   static registerShaper = registerShaper;
 
+  // --- Audio registry (delegates to audio-registry module) ---
+
+  /**
+   * Register an audio driver so it can be referenced by name via the `sound`
+   * engine option. Built-in drivers (`pencilAudio`, `chalkAudio`, `brushAudio`)
+   * live in `tegaki/audio` and must be registered before use.
+   *
+   * Multiple drivers can be registered side-by-side; each engine instance
+   * picks one by name. Re-registering a name replaces the previous driver.
+   * Pass `null` to clear every registered driver (useful for tests).
+   */
+  static registerAudio = registerAudio;
+
+  /** Unregister a single audio driver by name. Returns whether it was present. */
+  static unregisterAudio = unregisterAudio;
+
+  /** Look up a registered audio driver by name. */
+  static getAudio = getAudio;
+
   // --- DOM elements ---
   private _rootEl: HTMLElement;
   private _contentEl: HTMLElement | null = null; // non-null only in non-adopt mode
@@ -117,6 +138,8 @@ export class TegakiEngine {
   private _shaper: BundleShaper | null = null;
   private _shaperReady = true;
   private _shaperEnabled = true;
+  private _sound: TegakiSoundProp = undefined;
+  private _audio: AudioRuntime | null = null;
 
   // Stroke subdivision cache. Shared across every instance of the same glyph
   // at the current (font, fontSize, segmentSize, effects-need-subdivision)
@@ -289,12 +312,14 @@ export class TegakiEngine {
   play(): void {
     if (this._timeControl.mode !== 'uncontrolled') return;
     this._playing = true;
+    this._audio?.resume();
     this._evaluatePlayback();
   }
 
   pause(): void {
     if (this._timeControl.mode !== 'uncontrolled') return;
     this._playing = false;
+    this._audio?.pause();
     this._evaluatePlayback();
   }
 
@@ -316,10 +341,12 @@ export class TegakiEngine {
     this._internalTime = Math.max(0, Math.min(resolved, this._timeline.totalDuration));
     this._delayRemaining = 0;
     this._loopGapRemaining = 0;
+    this._audio?.silence();
     this._checkCompletion();
     this._notifyTimeChange();
     this._render();
     this._updateCssProperties();
+    this._audio?.advance(this.currentTime);
   }
 
   restart(): void {
@@ -329,6 +356,8 @@ export class TegakiEngine {
     this._prevCompleted = false;
     this._delayRemaining = this._timeControl.delay ?? 0;
     this._loopGapRemaining = 0;
+    this._audio?.silence();
+    this._audio?.resume();
     this._notifyTimeChange();
     this._evaluatePlayback();
   }
@@ -457,12 +486,44 @@ export class TegakiEngine {
       this._onChangeTimeline = options.onChangeTimeline;
     }
 
+    let dirtyAudioDriver = false;
+    if ('sound' in options && options.sound !== this._sound) {
+      this._sound = options.sound;
+      dirtyAudioDriver = true;
+    }
+
     // --- Recompute ---
     if (dirtyTimeline) this._recomputeTimeline();
     if (dirtyRender || dirtyTimeline || dirtyLayout) this._updateDom();
     if (dirtyLayout) this._recomputeLayout();
+    if (dirtyAudioDriver) this._applySound();
+    if (dirtyTimeline || dirtyAudioDriver) this._rebuildAudioStrokes();
     if (dirtyPlayback) this._evaluatePlayback();
     if (dirtyRender || dirtyTimeline || dirtyLayout) this._render();
+    // Controlled mode never ticks the rAF loop; advance audio off the new
+    // `currentTime` so seeks driven by external `time=` updates still fire
+    // stroke events. Uncontrolled is covered by `_tick`.
+    if (this._timeControl.mode !== 'uncontrolled') this._audio?.advance(this.currentTime);
+  }
+
+  /** Resolve the current `sound` option against the registry and (re)create the runtime instance. */
+  private _applySound(): void {
+    if (this._prefersReducedMotion || !this._sound) {
+      // Reduced motion or no driver requested — tear down without discarding
+      // the `_sound` option, so toggling reduced motion off restores audio.
+      if (this._audio) {
+        this._audio.destroy();
+        this._audio = null;
+      }
+      return;
+    }
+    if (!this._audio) this._audio = new AudioRuntime();
+    this._audio.setSound(this._sound);
+  }
+
+  private _rebuildAudioStrokes(): void {
+    if (!this._audio) return;
+    this._audio.rebuildStrokes(this._timeline, this._font, this._fontSize);
   }
 
   destroy(): void {
@@ -481,6 +542,10 @@ export class TegakiEngine {
     this._strokeCache = new WeakMap();
     this._strokeCacheKey = '';
     this._maskCanvas = null;
+    if (this._audio) {
+      this._audio.destroy();
+      this._audio = null;
+    }
   }
 
   // =========================================================================
@@ -592,7 +657,12 @@ export class TegakiEngine {
       changed = true;
     }
 
-    if (layoutChanged) this._recomputeLayout();
+    if (layoutChanged) {
+      this._recomputeLayout();
+      // Stroke widths in the audio runtime are baked in CSS px at the current
+      // fontSize, so a font-size resize needs a rebuild to stay accurate.
+      this._rebuildAudioStrokes();
+    }
     if (changed) this._render();
   };
 
@@ -608,6 +678,7 @@ export class TegakiEngine {
         this._fontSize = newFontSize;
         this._lineHeight = newLineHeight;
         this._recomputeLayout();
+        this._rebuildAudioStrokes();
         changed = true;
       }
     }
@@ -626,7 +697,12 @@ export class TegakiEngine {
       changed = true;
     }
 
-    if (changed) this._render();
+    if (changed) {
+      this._render();
+      // CSS mode never ticks the rAF loop; advance audio off the new sentinel
+      // value so scroll-driven progress still drives stroke events.
+      if (e.propertyName === CSS_PROGRESS) this._audio?.advance(this.currentTime);
+    }
   };
 
   // =========================================================================
@@ -638,6 +714,10 @@ export class TegakiEngine {
     if (this._prefersReducedMotion && this._timeControl.mode === 'uncontrolled' && this._timeline.totalDuration > 0) {
       this._internalTime = this._timeline.totalDuration;
     }
+    // Reduced motion silences audio (the timeline jumps to the end, no strokes
+    // would fire anyway). Re-apply when toggled off to restore the chosen driver.
+    this._applySound();
+    this._rebuildAudioStrokes();
     this._evaluatePlayback();
     this._render();
   };
@@ -759,6 +839,11 @@ export class TegakiEngine {
     if (this._rafId) return;
     this._lastTs = null;
     this._smoothedBoost = 0;
+    // Resume the AudioContext whenever the rAF loop starts. The first call
+    // (typically on mount, before any user gesture) will usually no-op because
+    // browser autoplay policy keeps the context suspended; we re-attempt on
+    // every play() / restart() / start so the first user gesture unlocks it.
+    this._audio?.resume();
     this._rafId = requestAnimationFrame(this._tick);
   }
 
@@ -767,6 +852,9 @@ export class TegakiEngine {
       cancelAnimationFrame(this._rafId);
       this._rafId = 0;
     }
+    // When the loop stops (pause, completion-and-no-loop), suspend the audio
+    // context so it doesn't keep DSP running for a silent timeline.
+    this._audio?.pause();
   }
 
   private _tick = (ts: number): void => {
@@ -860,6 +948,7 @@ export class TegakiEngine {
     this._checkCompletion();
     this._render();
     this._updateCssProperties();
+    this._audio?.advance(this.currentTime);
 
     this._rafId = requestAnimationFrame(this._tick);
   };

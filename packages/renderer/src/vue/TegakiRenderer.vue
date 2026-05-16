@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import type { TegakiSoundProp } from '../core/audio-registry.ts';
 import { TegakiEngine } from '../core/engine.ts';
 import type { TegakiEngineOptions, TegakiQuality, TimeControlProp } from '../core/types.ts';
 import type { TegakiBundle, TegakiEffects } from '../types.ts';
@@ -17,6 +18,7 @@ const props = defineProps<{
   onChangeTimeline?: (timeline: Timeline) => void;
   direction?: 'ltr' | 'rtl';
   shaper?: boolean;
+  sound?: TegakiSoundProp;
 }>();
 
 defineOptions({ inheritAttrs: false });
@@ -34,6 +36,7 @@ const engineOptions = computed<TegakiEngineOptions>(() => ({
   showOverlay: props.showOverlay,
   direction: props.direction,
   shaper: props.shaper,
+  sound: props.sound,
   onComplete: props.onComplete,
   onChangeTimeline: props.onChangeTimeline,
 }));

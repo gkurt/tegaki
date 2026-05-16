@@ -1,3 +1,4 @@
+import type { TegakiSoundProp } from '../core/audio-registry.ts';
 import { TegakiEngine } from '../core/engine.ts';
 import type { TegakiEngineOptions, TimeControlProp } from '../core/types.ts';
 import type { TegakiBundle } from '../types.ts';
@@ -19,9 +20,11 @@ import type { TegakiBundle } from '../types.ts';
  * - `show-overlay`: show debug overlay
  * - `direction`: text direction (`"ltr"` or `"rtl"`)
  * - `no-shaper`: disable text shaping for this instance (use the char-keyed grapheme path)
+ * - `sound`: name of a registered audio driver (`"pencil"`, `"chalk"`, `"brush"`)
  *
  * The `easing` option is not exposed as an attribute (it takes a function);
  * set it via the `time` JS property for full uncontrolled-mode configuration.
+ * Likewise, audio driver config (volume, etc.) requires the `sound` JS property.
  */
 const OBSERVED_ATTRS = [
   'text',
@@ -39,6 +42,7 @@ const OBSERVED_ATTRS = [
   'show-overlay',
   'direction',
   'no-shaper',
+  'sound',
 ] as const;
 
 export class TegakiElement extends HTMLElement {
@@ -50,6 +54,7 @@ export class TegakiElement extends HTMLElement {
   private _effects: TegakiEngineOptions['effects'];
   private _timing: TegakiEngineOptions['timing'];
   private _quality: TegakiEngineOptions['quality'];
+  private _sound: TegakiSoundProp;
   private _onComplete: (() => void) | undefined;
   private _onChangeTimeline: TegakiEngineOptions['onChangeTimeline'];
 
@@ -132,6 +137,20 @@ export class TegakiElement extends HTMLElement {
     this._engine?.update(this._buildOptions());
   }
 
+  /**
+   * Audio driver to use during animation. Pass a string for a registered
+   * driver name, or `{ name, volume, ...config }` for tuning. Setting to
+   * `undefined` / `false` disables audio.
+   */
+  get sound(): TegakiSoundProp {
+    return this._sound;
+  }
+
+  set sound(value: TegakiSoundProp) {
+    this._sound = value;
+    this._engine?.update(this._buildOptions());
+  }
+
   /** Callback when animation completes. */
   get onComplete(): (() => void) | undefined {
     return this._onComplete;
@@ -207,6 +226,7 @@ export class TegakiElement extends HTMLElement {
       showOverlay: this.hasAttribute('show-overlay'),
       direction: directionAttr === 'rtl' || directionAttr === 'ltr' ? directionAttr : undefined,
       shaper: this.hasAttribute('no-shaper') ? false : undefined,
+      sound: this._sound ?? this.getAttribute('sound') ?? undefined,
       onComplete: this._onComplete,
       onChangeTimeline: this._onChangeTimeline,
     };

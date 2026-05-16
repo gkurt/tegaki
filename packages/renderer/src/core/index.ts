@@ -22,6 +22,17 @@ export {
 export type * from '../types.ts';
 export type { TegakiEffectConfigs, TegakiEffects } from '../types.ts';
 export { BUNDLE_VERSION, COMPATIBLE_BUNDLE_VERSIONS } from '../types.ts';
+export {
+  getAudio,
+  listAudio,
+  registerAudio,
+  type StrokeAudioInfo,
+  type TegakiAudioContext,
+  type TegakiAudioDriver,
+  type TegakiAudioInstance,
+  type TegakiSoundProp,
+  unregisterAudio,
+} from './audio-registry.ts';
 export { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
 export { createBundle } from './createBundle.ts';
 export { TegakiEngine } from './engine.ts';

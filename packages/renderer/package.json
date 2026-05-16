@@ -90,6 +90,12 @@
       "types": "./dist/shaper-harfbuzz/index.d.mts",
       "import": "./dist/shaper-harfbuzz/index.mjs"
     },
+    "./audio": {
+      "tegaki@dev": "./src/audio/index.ts",
+      "source": "./src/audio/index.ts",
+      "types": "./dist/audio/index.d.mts",
+      "import": "./dist/audio/index.mjs"
+    },
     "./astro": "./src/astro/TegakiRenderer.astro",
     "./fonts/caveat": {
       "tegaki@dev": "./fonts/caveat/bundle.ts",
