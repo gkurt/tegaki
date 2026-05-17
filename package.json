@@ -13,7 +13,7 @@
     "test": "bun --conditions=tegaki@dev test",
     "build:website": "bun --filter @tegaki/website build",
     "compile": "bun --filter tegaki-generator compile --external ink",
-    "typecheck": "tsgo && bun --filter '@tegaki/*' typecheck",
+    "typecheck": "tsgo && bun --bun --filter '@tegaki/*' typecheck",
     "lint": "biome lint",
     "format": "biome format",
     "check": "biome check",

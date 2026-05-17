@@ -81,7 +81,7 @@ export default defineConfig({
     enabled: false,
   },
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [tailwindcss() as any],
     resolve: {
       conditions: ['tegaki@dev', 'browser'],
     },
