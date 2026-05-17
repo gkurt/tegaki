@@ -107,6 +107,7 @@ export function GeneratorApp() {
   const [staggerEnabled, setStaggerEnabled] = useState(initialUrlState.staggerEnabled);
   const [staggerAdvance, setStaggerAdvance] = useState(initialUrlState.staggerAdvance);
   const [staggerDuration, setStaggerDuration] = useState(initialUrlState.staggerDuration);
+  const [sound, setSound] = useState(initialUrlState.sound);
 
   // Animation state (lifted up so controls live outside the canvas area)
   const [animPlaying, setAnimPlaying] = useState(true);
@@ -277,6 +278,7 @@ export function GeneratorApp() {
         staggerEnabled,
         staggerAdvance,
         staggerDuration,
+        sound,
       });
     }, 300);
     return () => clearTimeout(syncTimerRef.current);
@@ -306,6 +308,7 @@ export function GeneratorApp() {
     staggerEnabled,
     staggerAdvance,
     staggerDuration,
+    sound,
   ]);
 
   // Auto-load font on mount (from URL state or default)
@@ -872,6 +875,8 @@ export function GeneratorApp() {
             onStaggerAdvanceChange={setStaggerAdvance}
             staggerDuration={staggerDuration}
             onStaggerDurationChange={setStaggerDuration}
+            sound={sound}
+            onSoundChange={setSound}
           />
         )}
       </main>

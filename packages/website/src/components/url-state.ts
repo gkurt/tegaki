@@ -82,6 +82,12 @@ export interface UrlState {
   staggerAdvance: string;
   /** Stagger per-glyph duration. `'auto'` keeps bundled timing; numeric string scales strokes to that many seconds. */
   staggerDuration: string;
+  /**
+   * Built-in audio driver name to play while strokes animate. `'none'` (default)
+   * disables audio. Audio won't actually play until the user interacts with the
+   * page (browser autoplay policy), so this is a no-op for snapshot tests.
+   */
+  sound: 'none' | 'pencil' | 'chalk' | 'brush';
 }
 
 export const URL_DEFAULTS: UrlState = {
@@ -110,6 +116,7 @@ export const URL_DEFAULTS: UrlState = {
   staggerEnabled: false,
   staggerAdvance: '0.2',
   staggerDuration: 'auto',
+  sound: 'none',
 };
 
 // Short keys for compact URLs — only non-default values are written
@@ -184,6 +191,10 @@ export function parseUrlState(): UrlState {
   if (p.has('st')) state.staggerEnabled = p.get('st') === '1';
   if (p.has('sa')) state.staggerAdvance = p.get('sa')!;
   if (p.has('sd')) state.staggerDuration = p.get('sd')!;
+  if (p.has('sn')) {
+    const v = p.get('sn');
+    if (v === 'pencil' || v === 'chalk' || v === 'brush' || v === 'none') state.sound = v;
+  }
 
   // Pipeline options — read short keys
   for (const [short, long] of Object.entries(REVERSE_OPTION_KEYS)) {
@@ -239,6 +250,7 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
   if (state.staggerEnabled !== URL_DEFAULTS.staggerEnabled) p.set('st', '1');
   if (state.staggerAdvance !== URL_DEFAULTS.staggerAdvance) p.set('sa', state.staggerAdvance);
   if (state.staggerDuration !== URL_DEFAULTS.staggerDuration) p.set('sd', state.staggerDuration);
+  if (state.sound !== URL_DEFAULTS.sound) p.set('sn', state.sound);
 
   // Pipeline options — only non-defaults. Array-valued options are serialized
   // as comma-separated and compared structurally.

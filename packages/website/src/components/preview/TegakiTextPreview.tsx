@@ -13,6 +13,7 @@ import {
   type Timeline,
   type TimelineConfig,
 } from 'tegaki';
+import { registerBuiltInAudio } from 'tegaki/audio';
 import harfbuzzShaper from 'tegaki/shaper-harfbuzz';
 import {
   createHbShaper,
@@ -25,6 +26,13 @@ import {
 } from 'tegaki-generator';
 
 TegakiEngine.registerShaper(harfbuzzShaper);
+// Register pencil / chalk / brush so any preview can opt in via the `sound`
+// prop. Idempotent — re-registering replaces the previous driver, which is
+// fine across HMR / multiple instances.
+registerBuiltInAudio();
+
+/** Built-in audio driver names; matches what `registerBuiltInAudio` provides. */
+export type SoundPreset = 'none' | 'pencil' | 'chalk' | 'brush';
 
 // Must mirror the set in `packages/renderer/src/shaper-harfbuzz/index.ts` and the
 // generator's `hb-shaper.ts`. Explicit enables of these features override
@@ -83,6 +91,12 @@ export interface TegakiTextPreviewProps {
    * to `true`.
    */
   useShaper?: boolean;
+  /**
+   * Built-in audio driver to play during stroke animation. `'none'` (default)
+   * disables audio. Browsers gate AudioContext on user gesture, so silence
+   * before the first interaction is expected, not a bug.
+   */
+  sound?: SoundPreset;
 }
 
 export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPreviewProps>(function TegakiTextPreview(
@@ -104,6 +118,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     resultsCache,
     onReady,
     useShaper = true,
+    sound = 'none',
   },
   ref,
 ) {
@@ -340,6 +355,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       quality={quality}
       timing={timing}
       shaper={useShaper}
+      sound={sound === 'none' ? undefined : sound}
       onChangeTimeline={handleTimelineChange}
     />
   );

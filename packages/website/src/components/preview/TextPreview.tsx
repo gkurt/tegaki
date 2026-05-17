@@ -4,7 +4,7 @@ import type { ParsedFontInfo, PipelineOptions, PipelineResult } from 'tegaki-gen
 import { type CustomEffect, DEFAULT_EFFECTS_STATE, EFFECT_DEFAULTS, type EffectsState, type TimeMode } from '../url-state.ts';
 import { EASING_PRESETS, getEasingFn, TEXT_PRESETS } from './constants.ts';
 import { CustomEffectControls, EffectColor, EffectSlider, GradientColorStops } from './effect-controls.tsx';
-import { TegakiTextPreview } from './TegakiTextPreview.tsx';
+import { type SoundPreset, TegakiTextPreview } from './TegakiTextPreview.tsx';
 import { buildEffects, parseStaggerInputs } from './utils.ts';
 
 export function TextPreview({
@@ -51,6 +51,8 @@ export function TextPreview({
   onStaggerAdvanceChange,
   staggerDuration,
   onStaggerDurationChange,
+  sound,
+  onSoundChange,
 }: {
   fontInfo: ParsedFontInfo | null;
   fontBuffer: ArrayBuffer | null;
@@ -95,6 +97,8 @@ export function TextPreview({
   onStaggerAdvanceChange: (v: string) => void;
   staggerDuration: string;
   onStaggerDurationChange: (v: string) => void;
+  sound: SoundPreset;
+  onSoundChange: (v: SoundPreset) => void;
 }) {
   // Initial time/paused state come from the URL (controlled mode only): a non-zero
   // `ct` param loads the timeline paused at that position so agents can inspect a
@@ -350,6 +354,7 @@ export function TextPreview({
                 resultsCache={resultsCache}
                 onReady={handleReady}
                 useShaper={useShaper}
+                sound={sound}
               />
             )}
           </div>
@@ -953,6 +958,23 @@ export function TextPreview({
           >
             <input type="checkbox" checked={useShaper} onChange={(e) => onUseShaperChange(e.target.checked)} />
             Shaper
+          </label>
+
+          <label
+            className="flex items-center gap-1.5 text-xs text-gray-600"
+            title="Play a procedural sound while strokes animate. Browser autoplay policy requires a user gesture first — click any control to unlock."
+          >
+            Sound
+            <select
+              className="px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
+              value={sound}
+              onChange={(e) => onSoundChange(e.target.value as SoundPreset)}
+            >
+              <option value="none">None</option>
+              <option value="pencil">Pencil</option>
+              <option value="chalk">Chalk</option>
+              <option value="brush">Brush</option>
+            </select>
           </label>
 
           <span className="border-l border-gray-200 h-6" />

@@ -171,6 +171,7 @@ Common keys (non-exhaustive — `url-state.ts` is the source of truth):
 | `fx` | Effects state as JSON                                          | `fx=%7B...%7D`       |
 | `se` / `ge` | Stroke / glyph easing preset                            | `se=ease-out-cubic`  |
 | `pr` / `ss` | Render quality — pixel ratio / stroke segment size      | `pr=2&ss=1`          |
+| `sn` | Sound preset: `none` (default) / `pencil` / `chalk` / `brush`. Browser autoplay policy keeps audio silent until the first user gesture. | `sn=pencil` |
 
 Pipeline options are also URL-addressable (`res`, `sk`, `bt`, `rt`, ... — see `OPTION_KEYS` in url-state.ts).
 

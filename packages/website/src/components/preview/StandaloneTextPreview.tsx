@@ -133,6 +133,7 @@ export function StandaloneTextPreview() {
         showOverlay={state.showOverlay}
         fontSizePx={state.fontSizePx}
         lineHeightRatio={state.lineHeightRatio}
+        sound={state.sound}
         onReady={handleReady}
       />
     </div>
