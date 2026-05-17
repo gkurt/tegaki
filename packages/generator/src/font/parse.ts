@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import * as opentype from 'opentype.js';
 import type { BBox, LineCap, PathCommand } from 'tegaki';
 
@@ -67,8 +68,8 @@ export async function loadFont(fontPathOrPaths: string | string[]): Promise<Pars
   const paths = Array.isArray(fontPathOrPaths) ? fontPathOrPaths : [fontPathOrPaths];
   const fonts = await Promise.all(
     paths.map(async (p) => {
-      const buffer = await Bun.file(p).arrayBuffer();
-      return opentype.parse(buffer);
+      const data = await readFile(p);
+      return opentype.parse(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
     }),
   );
   const font = fonts[0]!;

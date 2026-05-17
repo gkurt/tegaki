@@ -8,6 +8,7 @@
     "build": "remotion render src/index.ts Handwriting out/video.mp4",
     "build:promo": "remotion render src/index.ts Promo out/promo.mp4",
     "build:scripts-promo": "remotion render src/index.ts ScriptsPromo out/scripts-promo.mp4",
+    "typecheck": "tsc --noEmit",
     "upgrade": "remotion upgrade"
   },
   "dependencies": {

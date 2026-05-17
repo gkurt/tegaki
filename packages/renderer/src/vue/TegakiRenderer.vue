@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="E extends TegakiEffects<E> = Record<string, never>">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { TegakiEngine } from '../core/engine.ts';
 import type { TegakiEngineOptions, TegakiQuality, TimeControlProp } from '../core/types.ts';
@@ -9,7 +9,7 @@ const props = defineProps<{
   text?: string;
   font?: TegakiBundle | string;
   time?: TimeControlProp;
-  effects?: TegakiEffects<Record<string, any>>;
+  effects?: E;
   timing?: TimelineConfig;
   quality?: TegakiQuality;
   showOverlay?: boolean;

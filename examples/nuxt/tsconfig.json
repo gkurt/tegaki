@@ -1,6 +1,8 @@
 {
   "extends": "./.nuxt/tsconfig.json",
   "compilerOptions": {
-    "customConditions": ["tegaki@dev"]
+    "customConditions": ["tegaki@dev"],
+    "allowImportingTsExtensions": true,
+    "noEmit": true
   }
 }

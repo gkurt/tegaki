@@ -37,7 +37,7 @@ const time = ref(0);
         :font="bundle"
         text="Fancy!"
         :time="{ mode: 'uncontrolled', speed: 1, loop: true, loopGap: 1 }"
-        :effects="{ glow: { radius: 8, color: '#00ccff' }, pressureWidth: true, gradient: { colors: 'rainbow' } }"
+        :effects="{ glow: { radius: 8, color: '#00ccff' }, pressureWidth: true, strokeGradient: { colors: 'rainbow' } }"
         :style="{ fontSize: '56px' }"
       />
     </section>

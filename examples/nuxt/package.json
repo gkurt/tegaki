@@ -7,11 +7,15 @@
     "dev": "nuxt dev",
     "build": "nuxt build",
     "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
     "nuxt": "^4.4.4",
     "tegaki": "workspace:*",
     "vue": "^3.5.34"
+  },
+  "devDependencies": {
+    "vue-router": "^5.0.7"
   }
 }
