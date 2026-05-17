@@ -1,5 +1,4 @@
-/// <reference path="../lib/harfbuzzjs.d.ts" />
-import type { Hb } from 'harfbuzzjs';
+import { Blob, Face, Feature, Font, Buffer as HbBuffer, shape } from 'harfbuzzjs';
 import type { ShaperFactory } from '../core/shaper-registry.ts';
 import type { BundleShaper, ShapedGlyph } from '../lib/shaper.ts';
 import type { TegakiBundle } from '../types.ts';
@@ -69,42 +68,25 @@ export function toHbFeatureString(enabled: readonly string[]): string {
   }
   return parts.join(',');
 }
-// --- Module-level caches ---------------------------------------------------
-// The wasm runtime and each face are expensive to initialize, so we reuse them
-// across every engine instance. Face cache is keyed by fontUrl (the bundle's
-// stable identifier) and pinned for the process lifetime — there are only a
-// handful of fonts in typical usage.
 
-let hbPromise: Promise<Hb> | null = null;
-
-/**
- * Load harfbuzzjs. The package's default entry (`require('harfbuzzjs')`) calls
- * into an Emscripten-generated `hb.js` that tries to locate `hb.wasm` relative
- * to the module's script URL — which is unreliable under modern bundlers that
- * virtualize module paths. We bypass it and point the loader at the wasm URL
- * emitted by `new URL(..., import.meta.url)` (transformed by Vite/Rollup/Webpack5
- * into the final asset URL).
- */
-function getHb(): Promise<Hb> {
-  if (!hbPromise) {
-    hbPromise = (async () => {
-      const [hbMod, hbjsMod] = await Promise.all([import('harfbuzzjs/hb.js'), import('harfbuzzjs/hbjs.js')]);
-      const wasmUrl = new URL('harfbuzzjs/hb.wasm', import.meta.url).href;
-      const instance = await hbMod.default({ locateFile: () => wasmUrl });
-      return hbjsMod.default(instance);
-    })();
+/** Parse the filtered feature tags into `Feature[]` for `shape()`. */
+function toHbFeatures(enabled: readonly string[]): Feature[] {
+  const out: Feature[] = [];
+  for (const tag of enabled) {
+    if (SHAPER_MANAGED_FEATURES.has(tag)) continue;
+    const f = Feature.fromString(tag);
+    if (f) out.push(f);
   }
-  return hbPromise;
+  return out;
 }
 
 async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
-  const hb = await getHb();
   const urls = [bundle.fontUrl, ...(bundle.extraFontUrls ?? [])];
-  const buffers = await Promise.all(urls.map(async (url) => new Uint8Array(await (await fetch(url)).arrayBuffer())));
+  const buffers = await Promise.all(urls.map(async (url) => (await fetch(url)).arrayBuffer()));
   const subsets = buffers.map((buf) => {
-    const blob = hb.createBlob(buf);
-    const face = hb.createFace(blob, 0);
-    const font = hb.createFont(face);
+    const blob = new Blob(buf);
+    const face = new Face(blob, 0);
+    const font = new Font(face);
     // Pre-scan the cmap so per-cluster routing is a hash lookup, not a wasm
     // call. `collectUnicodes` returns every codepoint the face's cmap maps to
     // a non-`.notdef` glyph — exactly what we need to decide whether this
@@ -112,7 +94,7 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
     const codepoints = new Set<number>(face.collectUnicodes());
     return { font, face, blob, codepoints };
   });
-  const featureStr = toHbFeatureString(bundle.features ?? []);
+  const features = toHbFeatures(bundle.features ?? []);
 
   // Shape `runText` with `subsetIdx`'s font, then prefix output glyph ids with
   // the subset index so lookups in `glyphDataById` pick the right entry.
@@ -120,20 +102,19 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
   // compatibility with single-subset bundles.
   const shapeRun = (subsetIdx: number, runText: string, runStart: number): ShapedGlyph[] => {
     const subset = subsets[subsetIdx]!;
-    const buffer = hb.createBuffer();
+    const buffer = new HbBuffer();
     buffer.addText(runText);
     buffer.guessSegmentProperties();
-    hb.shape(subset.font, buffer, featureStr || undefined);
-    const out = buffer.json() as Array<{ g: number; cl: number; ax: number; ay: number; dx: number; dy: number }>;
-    buffer.destroy();
+    shape(subset.font, buffer, features);
+    const infos = buffer.getGlyphInfosAndPositions();
     const prefix = subsetIdx === 0 ? '' : `${subsetIdx}:`;
-    return out.map((g) => ({
-      g: `${prefix}${g.g}`,
-      cl: runStart + g.cl,
-      ax: g.ax,
-      ay: g.ay,
-      dx: g.dx,
-      dy: g.dy,
+    return infos.map((g) => ({
+      g: `${prefix}${g.codepoint}`,
+      cl: runStart + g.cluster,
+      ax: g.xAdvance ?? 0,
+      ay: g.yAdvance ?? 0,
+      dx: g.xOffset ?? 0,
+      dy: g.yOffset ?? 0,
     }));
   };
 

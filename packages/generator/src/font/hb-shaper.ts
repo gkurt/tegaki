@@ -1,30 +1,4 @@
-import type { Hb } from 'harfbuzzjs';
-
-let hbPromise: Promise<Hb> | null = null;
-
-/**
- * Load harfbuzzjs. The package's default entry calls into an Emscripten wrapper
- * that locates `hb.wasm` relative to its script URL — unreliable under bundlers
- * that virtualize module paths (Vite, Webpack). We bypass it and point the
- * loader at the wasm URL emitted by `new URL(..., import.meta.url)`, which
- * modern bundlers transform into the final asset URL.
- */
-function getHb(): Promise<Hb> {
-  if (!hbPromise) {
-    hbPromise = (async () => {
-      try {
-        const [hbMod, hbjsMod] = await Promise.all([import('harfbuzzjs/hb.js'), import('harfbuzzjs/hbjs.js')]);
-        const wasmUrl = new URL('harfbuzzjs/hb.wasm', import.meta.url).href;
-        const instance = await hbMod.default({ locateFile: () => wasmUrl });
-        const res = await hbjsMod.default(instance);
-        return res;
-      } catch (_err) {
-        return (await import('harfbuzzjs').then((x) => x.default))!; // Fallback to the default entry for environments where the above fails (e.g. WebWorker with no fetch)
-      }
-    })();
-  }
-  return hbPromise;
-}
+import { Blob, Face, Feature, Font, Buffer as HbBuffer, shape } from 'harfbuzzjs';
 
 /**
  * List every feature tag declared in the font's GSUB table — these are the
@@ -39,26 +13,20 @@ function getHb(): Promise<Hb> {
  * that doesn't match what browsers render by default.
  */
 export async function getGsubFeatures(fontBuffer: ArrayBuffer): Promise<string[]> {
-  const hb = await getHb();
-  const blob = hb.createBlob(fontBuffer);
-  const face = hb.createFace(blob, 0);
-  try {
-    // `getTableFeatureTags` returns one entry per (script, language) feature
-    // registration, so tags like `ccmp` or `locl` show up once per script the
-    // font covers. Dedupe while preserving first-seen order so the UI list
-    // stays stable.
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const tag of face.getTableFeatureTags('GSUB')) {
-      if (tag === 'aalt' || seen.has(tag)) continue;
-      seen.add(tag);
-      out.push(tag);
-    }
-    return out;
-  } finally {
-    face.destroy();
-    blob.destroy();
+  const blob = new Blob(fontBuffer);
+  const face = new Face(blob, 0);
+  // `getTableFeatureTags` returns one entry per (script, language) feature
+  // registration, so tags like `ccmp` or `locl` show up once per script the
+  // font covers. Dedupe while preserving first-seen order so the UI list
+  // stays stable.
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const tag of face.getTableFeatureTags('GSUB')) {
+    if (tag === 'aalt' || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
   }
+  return out;
 }
 
 export interface ShapedGlyph {
@@ -99,45 +67,61 @@ export interface HbShaper {
 const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig']);
 
 export async function createHbShaper(fontBuffer: ArrayBuffer, features: string[] = []): Promise<HbShaper> {
-  const hb = await getHb();
-  const blob = hb.createBlob(fontBuffer);
-  const face = hb.createFace(blob, 0);
-  const font = hb.createFont(face);
-  const featureStr = features.filter((f) => !SHAPER_MANAGED_FEATURES.has(f)).join(',');
+  const blob = new Blob(fontBuffer);
+  const face = new Face(blob, 0);
+  const font = new Font(face);
+  const featureList: Feature[] = [];
+  for (const tag of features) {
+    if (SHAPER_MANAGED_FEATURES.has(tag)) continue;
+    const f = Feature.fromString(tag);
+    if (f) featureList.push(f);
+  }
 
   // A fresh buffer per shape keeps state isolated and avoids the need to
   // guess-reset between calls. Shaping is cheap; reusing a buffer would only
   // matter in very tight loops.
-  const shape = (text: string): ShapedGlyph[] => {
-    const buffer = hb.createBuffer();
+  const shapeText = (text: string): ShapedGlyph[] => {
+    const buffer = new HbBuffer();
     buffer.addText(text);
     buffer.guessSegmentProperties();
-    hb.shape(font, buffer, featureStr || undefined);
-    const out = buffer.json() as Array<{ g: number; cl: number; ax: number; ay: number; dx: number; dy: number }>;
-    buffer.destroy();
-    return out.map((g) => ({ g: g.g, cl: g.cl, ax: g.ax, ay: g.ay, dx: g.dx, dy: g.dy }));
+    shape(font, buffer, featureList);
+    const infos = buffer.getGlyphInfosAndPositions();
+    return infos.map((g) => ({
+      g: g.codepoint,
+      cl: g.cluster,
+      ax: g.xAdvance ?? 0,
+      ay: g.yAdvance ?? 0,
+      dx: g.xOffset ?? 0,
+      dy: g.yOffset ?? 0,
+    }));
   };
+
+  // Pre-parse the "no shaping" feature list once; reused for every charToGlyphId call.
+  const nominalFeatures: Feature[] = [];
+  for (const tag of ['-liga', '-calt', '-clig', '-dlig', '-rlig']) {
+    const f = Feature.fromString(tag);
+    if (f) nominalFeatures.push(f);
+  }
 
   const charToGlyphId = (char: string): number => {
     // Shape the char with all features disabled to get the nominal glyph id.
-    // Faster than querying the cmap via a dedicated API (harfbuzzjs doesn't
-    // expose one) and produces the same result for isolated characters.
-    const buffer = hb.createBuffer();
+    // Faster than querying the cmap via a dedicated API and produces the same
+    // result for isolated characters.
+    const buffer = new HbBuffer();
     buffer.addText(char);
     buffer.guessSegmentProperties();
-    hb.shape(font, buffer, '-liga,-calt,-clig,-dlig,-rlig');
-    const out = buffer.json() as Array<{ g: number }>;
-    buffer.destroy();
-    return out[0]?.g ?? 0;
+    shape(font, buffer, nominalFeatures);
+    const infos = buffer.getGlyphInfos();
+    return infos[0]?.codepoint ?? 0;
   };
 
   return {
-    shape,
+    shape: shapeText,
     charToGlyphId,
     destroy() {
-      font.destroy();
-      face.destroy();
-      blob.destroy();
+      // Finalization-registry based destruction means explicit destroy is a
+      // no-op for objects we still hold references to; release our refs to
+      // let GC clean up.
     },
   };
 }
