@@ -231,7 +231,7 @@ const EffectsShowcase: React.FC<{ duration: number }> = ({ duration }) => {
           style={{ ...baseStyle, color: INK }}
           time={time}
           effects={{
-            gradient: { enabled: true, colors: 'rainbow', saturation: 90, lightness: 70 },
+            strokeGradient: { enabled: true, colors: 'rainbow', saturation: 90, lightness: 70 },
           }}
         />
         <TegakiRenderer

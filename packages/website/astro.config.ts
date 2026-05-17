@@ -51,6 +51,7 @@ export default defineConfig({
             { label: 'Rendering Animations', slug: 'guides/rendering' },
             { label: 'Streaming Text', slug: 'guides/streaming' },
             { label: 'Text Shaping', slug: 'guides/shaping' },
+            { label: 'Bundler Setup', slug: 'guides/bundlers' },
           ],
         },
         {
@@ -80,7 +81,7 @@ export default defineConfig({
     enabled: false,
   },
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [tailwindcss() as any],
     resolve: {
       conditions: ['tegaki@dev', 'browser'],
     },

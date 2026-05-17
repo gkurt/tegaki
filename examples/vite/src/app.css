@@ -1,0 +1,20 @@
+.page {
+  font-family: system-ui, sans-serif;
+  max-width: 720px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  line-height: 1.5;
+}
+.page section {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+}
+.page h2 {
+  margin-top: 0;
+}
+.page input[type="range"] {
+  width: 100%;
+  margin-bottom: 1rem;
+}

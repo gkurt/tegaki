@@ -6,7 +6,9 @@
     "jsx": "react-jsx",
     "strict": true,
     "skipLibCheck": true,
-    "customConditions": ["tegaki@dev"]
+    "customConditions": ["tegaki@dev"],
+    "allowImportingTsExtensions": true,
+    "noEmit": true
   },
   "include": ["src"]
 }

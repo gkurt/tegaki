@@ -1,3 +1,4 @@
+/// <reference path="../lib/harfbuzzjs.d.ts" />
 import type { Hb } from 'harfbuzzjs';
 import type { ShaperFactory } from '../core/shaper-registry.ts';
 import type { BundleShaper, ShapedGlyph } from '../lib/shaper.ts';

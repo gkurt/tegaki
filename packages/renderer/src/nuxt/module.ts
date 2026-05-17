@@ -35,7 +35,4 @@ declare module '@nuxt/schema' {
   interface NuxtConfig {
     tegaki?: ModuleOptions;
   }
-  interface NuxtOptions {
-    tegaki?: ModuleOptions;
-  }
 }
