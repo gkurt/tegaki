@@ -1,5 +1,4 @@
-import { readFile } from 'node:fs/promises';
-import * as opentype from 'opentype.js';
+import type * as opentype from 'opentype.js';
 import type { BBox, LineCap, PathCommand } from 'tegaki';
 
 export interface ParsedFont {
@@ -60,30 +59,6 @@ export function inferLineCap(font: opentype.Font): LineCap {
   if (/\b(hand|script|cursive|brush|marker|chalk|crayon|writing|handwrit)/i.test(name)) return 'round';
 
   return 'round';
-}
-
-export async function loadFont(fontPath: string): Promise<ParsedFont>;
-export async function loadFont(fontPaths: string[]): Promise<ParsedFont>;
-export async function loadFont(fontPathOrPaths: string | string[]): Promise<ParsedFont> {
-  const paths = Array.isArray(fontPathOrPaths) ? fontPathOrPaths : [fontPathOrPaths];
-  const fonts = await Promise.all(
-    paths.map(async (p) => {
-      const data = await readFile(p);
-      return opentype.parse(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
-    }),
-  );
-  const font = fonts[0]!;
-
-  return {
-    family: font.names.fontFamily?.en ?? 'Unknown',
-    style: font.names.fontSubfamily?.en ?? 'Regular',
-    unitsPerEm: font.unitsPerEm,
-    ascender: font.ascender,
-    descender: font.descender,
-    lineCap: inferLineCap(font),
-    font,
-    extraFonts: fonts.length > 1 ? fonts.slice(1) : undefined,
-  };
 }
 
 /**
