@@ -46,6 +46,6 @@
     ]
   },
   "dependencies": {
-    "harfbuzzjs": "^0.10.3"
+    "harfbuzzjs": "^1.1.0"
   }
 }

@@ -165,7 +165,7 @@
   },
   "dependencies": {},
   "peerDependencies": {
-    "harfbuzzjs": "^0.10.3",
+    "harfbuzzjs": "^1.1.0",
     "@nuxt/kit": "^3.0.0 || ^4.0.0",
     "react": ">=18",
     "svelte": ">=5",
@@ -193,7 +193,7 @@
     }
   },
   "devDependencies": {
-    "harfbuzzjs": "^0.10.3",
+    "harfbuzzjs": "^1.1.0",
     "@nuxt/kit": "^4.4.5",
     "@nuxt/schema": "^4.4.5",
     "@types/react": "^19.2.14",

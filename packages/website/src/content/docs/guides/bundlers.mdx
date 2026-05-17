@@ -17,8 +17,6 @@ Most bundlers handle this transparently. The note below covers Vite, where two `
 
 In **dev mode**, Vite's pre-bundler (esbuild) processes Tegaki's JS but does not propagate the `with { type: 'url' }` asset references — the runtime fetch for `<family>.ttf` then 404s from `/node_modules/.vite/deps/`. Excluding `tegaki` from pre-bundling routes the imports through Vite's normal asset pipeline, where the URL transform works correctly.
 
-That exclusion has a knock-on effect: Vite stops statically discovering the dynamic `import('harfbuzzjs/hb.js')` inside `tegaki/shaper-harfbuzz`. `harfbuzzjs` is plain CJS, so without pre-bundling the ESM `default` export is `undefined` and the shaper crashes with `hbMod.default is not a function`. Pinning those two subpaths to `include` forces Vite to pre-bundle the CJS → ESM regardless.
-
 Add to `vite.config.ts`:
 
 ```ts
@@ -28,7 +26,6 @@ export default defineConfig({
   // ...
   optimizeDeps: {
     exclude: ['tegaki'],
-    include: ['harfbuzzjs/hb.js', 'harfbuzzjs/hbjs.js'],
   },
 });
 ```
@@ -42,7 +39,6 @@ Production builds (Rollup) handle Tegaki out of the box; this only affects `vite
 | Symptom in the browser | What's happening | Fix |
 | --- | --- | --- |
 | `GET /node_modules/.vite/deps/<family>.ttf 404` plus `NetworkError: A network error occurred` from `_loadFont` | The `.ttf` import lost its asset reference during pre-bundling. | `optimizeDeps.exclude: ['tegaki']` |
-| `TypeError: hbMod.default is not a function` inside `buildShaper` | `harfbuzzjs/hb.js` is being served as raw CJS to a `import()` that expects an ESM default. | `optimizeDeps.include: ['harfbuzzjs/hb.js', 'harfbuzzjs/hbjs.js']` |
 
 ## Other bundlers
 
