@@ -1,0 +1,49 @@
+---
+title: Bundler Setup
+description: Bundler-specific configuration for getting Tegaki running, especially Vite.
+---
+
+Tegaki's font bundles use the ESM import-attributes syntax to load their assets:
+
+```ts
+// inside tegaki/fonts/<family>/bundle.ts (and any bundle the generator produces)
+import fontUrl from './<family>.ttf' with { type: 'url' };
+import glyphData from './glyphData.json' with { type: 'json' };
+```
+
+Most bundlers handle this transparently. The note below covers Vite, where two `optimizeDeps` settings are needed for development to behave like production.
+
+## Vite
+
+In **dev mode**, Vite's pre-bundler (esbuild) processes Tegaki's JS but does not propagate the `with { type: 'url' }` asset references — the runtime fetch for `<family>.ttf` then 404s from `/node_modules/.vite/deps/`. Excluding `tegaki` from pre-bundling routes the imports through Vite's normal asset pipeline, where the URL transform works correctly.
+
+That exclusion has a knock-on effect: Vite stops statically discovering the dynamic `import('harfbuzzjs/hb.js')` inside `tegaki/shaper-harfbuzz`. `harfbuzzjs` is plain CJS, so without pre-bundling the ESM `default` export is `undefined` and the shaper crashes with `hbMod.default is not a function`. Pinning those two subpaths to `include` forces Vite to pre-bundle the CJS → ESM regardless.
+
+Add to `vite.config.ts`:
+
+```ts
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  // ...
+  optimizeDeps: {
+    exclude: ['tegaki'],
+    include: ['harfbuzzjs/hb.js', 'harfbuzzjs/hbjs.js'],
+  },
+});
+```
+
+After changing this, fully restart the dev server (and consider deleting `node_modules/.vite/deps/` once) so Vite re-runs its pre-bundling pass against the new config.
+
+Production builds (Rollup) handle Tegaki out of the box; this only affects `vite dev` and `vite preview`.
+
+### Symptoms this fixes
+
+| Symptom in the browser | What's happening | Fix |
+| --- | --- | --- |
+| `GET /node_modules/.vite/deps/<family>.ttf 404` plus `NetworkError: A network error occurred` from `_loadFont` | The `.ttf` import lost its asset reference during pre-bundling. | `optimizeDeps.exclude: ['tegaki']` |
+| `TypeError: hbMod.default is not a function` inside `buildShaper` | `harfbuzzjs/hb.js` is being served as raw CJS to a `import()` that expects an ESM default. | `optimizeDeps.include: ['harfbuzzjs/hb.js', 'harfbuzzjs/hbjs.js']` |
+
+## Other bundlers
+
+Webpack, Rollup, Parcel, and esbuild's standalone build mode all handle `with { type: 'url' }` natively in the configurations Tegaki has been tested with. Open an issue if you hit something — the maintainer welcomes bundler-specific notes here.
