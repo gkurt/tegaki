@@ -153,6 +153,14 @@ export interface ExtractBundleInput {
   /** Additional font buffers for extra subsets (e.g. CJK subsets from Google Fonts) */
   extraFontBuffers?: ArrayBuffer[];
   /**
+   * Family name to fall back to when the font's `name` table is missing or
+   * empty (e.g. Google Fonts' subset endpoint strips name tables, so opentype
+   * reports the family as undefined). Without this, the bundle's `family` is
+   * set to the literal string `'Unknown'`, which collides across multiple
+   * subset bundles in the same app.
+   */
+  requestedFamily?: string;
+  /**
    * When true (default), the bundle's font family is suffixed with "Tegaki" + a
    * hash so it doesn't collide with the user's full font. The original family
    * is stored as `fullFamily` so the renderer can fall back to it for
@@ -179,7 +187,7 @@ export interface TegakiBundleOutput {
 // ── Pipeline functions ─────────────────────────────────────────────────────
 
 /** Parse a font from an ArrayBuffer (browser-compatible) */
-export async function parseFont(buffer: ArrayBuffer, extraBuffers?: ArrayBuffer[]): Promise<ParsedFontInfo> {
+export async function parseFont(buffer: ArrayBuffer, extraBuffers?: ArrayBuffer[], requestedFamily?: string): Promise<ParsedFontInfo> {
   const font = opentype.parse(buffer);
   const extraFonts = extraBuffers?.map((b) => opentype.parse(b));
   // Google Fonts serves non-Latin scripts (Arabic, Hebrew, CJK, ...) as
@@ -198,7 +206,7 @@ export async function parseFont(buffer: ArrayBuffer, extraBuffers?: ArrayBuffer[
     }
   }
   return {
-    family: font.names.fontFamily?.en ?? 'Unknown',
+    family: font.names.fontFamily?.en ?? requestedFamily ?? 'Unknown',
     style: font.names.fontSubfamily?.en ?? 'Regular',
     unitsPerEm: font.unitsPerEm,
     ascender: font.ascender,
@@ -347,11 +355,12 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
     options,
     onProgress,
     extraFontBuffers,
+    requestedFamily,
     subset = true,
     fullFontBuffer,
     fullFontFileName,
   } = input;
-  const fontInfo = await parseFont(fontBuffer, extraFontBuffers);
+  const fontInfo = await parseFont(fontBuffer, extraFontBuffers, requestedFamily);
 
   const lineCap: LineCap = options.lineCap === 'auto' ? fontInfo.lineCap : options.lineCap;
 

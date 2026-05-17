@@ -68,6 +68,7 @@ export const tegakiProgram = createPadrone('tegaki')
           chars: resolvedChars,
           options: pipelineOptions as PipelineOptions,
           extraFontBuffers,
+          requestedFamily: family,
           subset: isSubset,
           fullFontBuffer,
           fullFontFileName,
