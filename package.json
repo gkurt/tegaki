@@ -26,16 +26,16 @@
     "release": "changeset version && bun scripts/sync-versions.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.14",
+    "@biomejs/biome": "^2.4.15",
     "@changesets/cli": "^2.31.0",
-    "@types/bun": "^1.3.13",
-    "@typescript/native-preview": "^7.0.0-dev.20260508.1",
+    "@types/bun": "^1.3.14",
+    "@typescript/native-preview": "^7.0.0-dev.20260517.1",
     "husky": "^9.1.7",
-    "lint-staged": "^17.0.2",
+    "lint-staged": "^17.0.5",
     "@remotion/fonts": "^4",
     "remotion": "^4",
-    "solid-js": "^1.9.12",
-    "svelte": "^5.55.5",
+    "solid-js": "^1.9.13",
+    "svelte": "^5.55.7",
     "tegaki": "workspace:*",
     "vue": "^3.5.34",
     "zod": "^4"

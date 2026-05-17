@@ -194,8 +194,8 @@
   },
   "devDependencies": {
     "harfbuzzjs": "^0.10.3",
-    "@nuxt/kit": "^4.4.4",
-    "@nuxt/schema": "^4.4.4",
+    "@nuxt/kit": "^4.4.5",
+    "@nuxt/schema": "^4.4.5",
     "@types/react": "^19.2.14",
     "tegaki-generator": "workspace:*",
     "tsdown": "^0.22.0",
