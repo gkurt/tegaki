@@ -1,5 +1,17 @@
 # tegaki
 
+## 0.18.0
+
+### Minor Changes
+
+- b6e883b: Update Harfbuzz to v1.1.0
+- d358cbd: Add `stagger` timing mode where each glyph starts a fixed advance (seconds or `"N%"` of the previous glyph's effective duration) after the previous one, with an optional static per-glyph duration that scales strokes to fit. Exposed in the website previewer via the new `st` / `sa` / `sd` URL keys.
+
+### Patch Changes
+
+- 150296e: Fix the Astro adapter so passing `font={bundle}` hydrates without an explicit `bundle` prop and lookups by human-friendly font name resolve correctly. Animations now also re-hydrate after Astro View Transitions navigations.
+- 150296e: Make the Vue adapter's `effects` prop generic so custom effect configs are correctly type-inferred. Also drop a redundant Nuxt config type augmentation.
+
 ## 0.17.1
 
 ### Patch Changes

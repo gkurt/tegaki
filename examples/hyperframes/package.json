@@ -7,5 +7,6 @@
     "check": "npx --yes hyperframes@0.5.3 lint && npx --yes hyperframes@0.5.3 validate && npx --yes hyperframes@0.5.3 inspect",
     "render": "npx --yes hyperframes@0.5.3 render",
     "publish": "npx --yes hyperframes@0.5.3 publish"
-  }
+  },
+  "version": "0.18.0"
 }
