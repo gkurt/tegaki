@@ -22,6 +22,7 @@ import {
 import { enumerateVariantGlyphIds } from '../font/enumerate-variants.ts';
 import { getGsubFeatures } from '../font/hb-shaper.ts';
 import { extractGlyph, extractGlyphById, inferLineCap } from '../font/parse.ts';
+import { maybeBuildHanziPipelineResult } from '../hanzi-stroke-data.ts';
 import { computePathBBox, flattenPath } from '../processing/bezier.ts';
 import { toFontUnits } from '../processing/font-units.ts';
 import { rasterize } from '../processing/rasterize.ts';
@@ -89,6 +90,7 @@ export interface PipelineResult {
   lineCap: LineCap;
   ascender: number;
   descender: number;
+  dataSource?: 'font-outline' | 'hanzi-strokes';
 
   // Stage 1: Flattened paths
   subPaths: Point[][];
@@ -231,6 +233,16 @@ export function processGlyph(fontInfo: ParsedFontInfo, char: string, options: Pi
   return runPipeline(fontInfo, rawGlyph.char, rawGlyph, options, isRtlChar(char));
 }
 
+export async function processGlyphWithDataSource(
+  fontInfo: ParsedFontInfo,
+  char: string,
+  options: PipelineOptions,
+): Promise<PipelineResult | null> {
+  const hanziResult = await maybeBuildHanziPipelineResult(fontInfo, char, options);
+  if (hanziResult) return hanziResult;
+  return processGlyph(fontInfo, char, options);
+}
+
 /**
  * Run the pipeline for a variant glyph identified by its opentype index.
  *
@@ -307,6 +319,7 @@ function runPipeline(
     polylines,
     strokes,
     strokesFontUnits,
+    dataSource: 'font-outline',
   };
 }
 
@@ -390,7 +403,7 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
   const glyphResults: Record<string, PipelineResult> = {};
 
   for (const char of chars) {
-    const result = processGlyph(fontInfo, char, options);
+    const result = await processGlyphWithDataSource(fontInfo, char, options);
     if (!result) {
       skipped++;
       continue;
