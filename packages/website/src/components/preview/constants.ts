@@ -41,8 +41,8 @@ export const EXAMPLE_FONT_TEXTS: Record<string, string> = {
   // Klee One's bundled charset is Kyōiku grade 1–2 only; `素` (grade 5) would
   // miss the subset, so use a phrase that stays inside the bundled kanji.
   'Klee One': '手書きは楽しい',
-  'Noto Sans SC': '手写真棒',
-  'Ma Shan Zheng': '手写真棒',
+  'Noto Sans SC': '手写真好看',
+  'Ma Shan Zheng': '手写真好看',
   'Noto Sans KR': '손글씨는 멋져요',
   'Nanum Myeongjo': '손글씨는 멋져요',
   Rubik: 'الكتابة اليدوية رائعة',
@@ -54,6 +54,10 @@ export const EXAMPLE_FONT_TEXTS: Record<string, string> = {
 };
 
 export const DEFAULT_EXAMPLE_FONT_TEXT = 'Handwriting is awesome';
+export const SIMPLIFIED_CHINESE_PRESET_NAME = 'Simplified Chinese';
+export const SIMPLIFIED_CHINESE_SAMPLE_TEXT = '手写真好看';
+export const SIMPLIFIED_CHINESE_FONT_FAMILIES = ['Noto Sans SC', 'Ma Shan Zheng'] as const;
+export const DEFAULT_SIMPLIFIED_CHINESE_FONT_FAMILY = 'Ma Shan Zheng';
 
 /**
  * Per-writing-system sample text for the Text Preview tab. Independent of the
@@ -68,6 +72,7 @@ export const TEXT_PRESETS: { name: string; text: string }[] = [
   { name: 'Arabic', text: 'الكتابة اليدوية رائعة' },
   { name: 'Devanagari', text: 'हस्तलेखन अद्भुत है' },
   { name: 'Japanese', text: '手書きは楽しい' },
+  { name: SIMPLIFIED_CHINESE_PRESET_NAME, text: SIMPLIFIED_CHINESE_SAMPLE_TEXT },
 ];
 
 export const SKELETON_METHODS: { value: SkeletonMethod; label: string }[] = [
