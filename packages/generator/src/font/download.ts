@@ -59,8 +59,15 @@ export async function downloadFont(
   // The &text= parameter makes Google Fonts return only the subsets that cover
   // the requested characters. This is critical for CJK fonts which may have
   // 100+ subsets — without filtering, we'd download them all.
+  //
+  // For very large character sets (e.g. Simplified Chinese with 3500+ chars),
+  // the URL-encoded &text= can exceed Google Fonts' URL length limit (~8 KB).
+  // When that happens we skip the parameter and download all subsets instead.
   if (options.chars) {
-    cssUrl += `&text=${encodeURIComponent(options.chars)}`;
+    const textParam = `&text=${encodeURIComponent(options.chars)}`;
+    if (cssUrl.length + textParam.length <= 8000) {
+      cssUrl += textParam;
+    }
   }
 
   const cssResponse = await fetch(cssUrl, {
