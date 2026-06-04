@@ -11,18 +11,48 @@ import {
   type PipelineOptions,
   type PipelineResult,
   parseFont,
-  processGlyph,
+  processGlyphWithDataSource,
   type SkeletonMethod,
 } from 'tegaki-generator';
 import { ZoomCanvas } from '../reactive-canvas.tsx';
 import { parseUrlState, syncUrlState, type TimeMode } from '../url-state.ts';
-import { DEFAULT_EXAMPLE_FONT_TEXT, EXAMPLE_FONT_TEXTS, type PreviewMode, SKELETON_METHODS, STAGES, type Stage } from './constants.ts';
+import {
+  DEFAULT_EXAMPLE_FONT_TEXT,
+  DEFAULT_SIMPLIFIED_CHINESE_FONT_FAMILY,
+  EXAMPLE_FONT_TEXTS,
+  type PreviewMode,
+  SIMPLIFIED_CHINESE_FONT_FAMILIES,
+  SIMPLIFIED_CHINESE_PRESET_NAME,
+  SIMPLIFIED_CHINESE_SAMPLE_TEXT,
+  SKELETON_METHODS,
+  STAGES,
+  type Stage,
+} from './constants.ts';
 import { fetchFontFromCDN } from './font-cdn.ts';
 import { SelectOption, SliderOption } from './form-controls.tsx';
 import { AnimationControls, StageRenderer } from './stage-views.tsx';
 import { TextPreview } from './TextPreview.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+const simplifiedChineseFontFamilies = new Set<string>(SIMPLIFIED_CHINESE_FONT_FAMILIES);
+
+function fontSupportsText(fontInfo: ParsedFontInfo | null, text: string): boolean {
+  if (!fontInfo) return false;
+  const fonts = [fontInfo.font, ...(fontInfo.extraFonts ?? [])];
+  for (const char of text) {
+    if (!char.trim()) continue;
+    let supported = false;
+    for (const font of fonts) {
+      const glyph = font.charToGlyph(char);
+      if (glyph && glyph.index !== 0) {
+        supported = true;
+        break;
+      }
+    }
+    if (!supported) return false;
+  }
+  return true;
+}
 
 export function GeneratorApp() {
   const [initialUrlState] = useState(parseUrlState);
@@ -108,6 +138,12 @@ export function GeneratorApp() {
   const [staggerAdvance, setStaggerAdvance] = useState(initialUrlState.staggerAdvance);
   const [staggerDuration, setStaggerDuration] = useState(initialUrlState.staggerDuration);
 
+  const applySimplifiedChineseTimingDefaults = useCallback(() => {
+    setStaggerEnabled(false);
+    setStaggerAdvance('0.2');
+    setStaggerDuration('auto');
+  }, []);
+
   // Animation state (lifted up so controls live outside the canvas area)
   const [animPlaying, setAnimPlaying] = useState(true);
   const [animTime, setAnimTime] = useState(0);
@@ -152,6 +188,24 @@ export function GeneratorApp() {
     }
   }, []);
 
+  const ensureSimplifiedChineseFont = useCallback(() => {
+    if (fontSupportsText(fontInfo, SIMPLIFIED_CHINESE_SAMPLE_TEXT)) return;
+    if (fontFamily === DEFAULT_SIMPLIFIED_CHINESE_FONT_FAMILY) return;
+    setFontFamily(DEFAULT_SIMPLIFIED_CHINESE_FONT_FAMILY);
+    loadFont(DEFAULT_SIMPLIFIED_CHINESE_FONT_FAMILY);
+  }, [fontFamily, fontInfo, loadFont]);
+
+  const handlePreviewTextChange = useCallback(
+    (text: string) => {
+      setPreviewText(text);
+      if (text === SIMPLIFIED_CHINESE_SAMPLE_TEXT) {
+        applySimplifiedChineseTimingDefaults();
+        ensureSimplifiedChineseFont();
+      }
+    },
+    [applySimplifiedChineseTimingDefaults, ensureSimplifiedChineseFont],
+  );
+
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -192,16 +246,30 @@ export function GeneratorApp() {
     }
 
     setProcessing(true);
-    // Use setTimeout to let the UI update before heavy computation
+    let cancelled = false;
+    // Use setTimeout to let the UI update before heavy computation / network fetch
     const id = setTimeout(() => {
-      const res = processGlyph(fontInfo, selectedChar, options);
-      if (res) {
-        resultsCache.current.set(cacheKey, res);
-      }
-      setResult(res);
-      setProcessing(false);
+      void processGlyphWithDataSource(fontInfo, selectedChar, options)
+        .then((res) => {
+          if (cancelled) return;
+          if (res) {
+            resultsCache.current.set(cacheKey, res);
+          }
+          setResult(res);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setResult(null);
+        })
+        .finally(() => {
+          if (cancelled) return;
+          setProcessing(false);
+        });
     }, 10);
-    return () => clearTimeout(id);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
   }, [fontInfo, selectedChar, options]);
 
   // Auto-play animation when result changes
@@ -317,6 +385,32 @@ export function GeneratorApp() {
     }
   }, [fontFamily, loadFont]);
 
+  const seededChineseDefaultsRef = useRef(false);
+  useEffect(() => {
+    if (seededChineseDefaultsRef.current) return;
+    seededChineseDefaultsRef.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const hasLegacyChineseStaggerParams =
+      params.get('st') === '1' && params.get('sa') === '20%' && (!params.has('sd') || params.get('sd') === 'auto');
+    const hasExplicitStaggerParams = params.has('st') || params.has('sa') || params.has('sd');
+    const usesRawStaggerDefaults =
+      !initialUrlState.staggerEnabled && initialUrlState.staggerAdvance === '0.2' && initialUrlState.staggerDuration === 'auto';
+    const initialChineseContext =
+      simplifiedChineseFontFamilies.has(initialUrlState.fontFamily) ||
+      initialUrlState.previewText === SIMPLIFIED_CHINESE_SAMPLE_TEXT ||
+      initialUrlState.chars === CHARSET_PRESETS.find((p) => p.name === SIMPLIFIED_CHINESE_PRESET_NAME)?.chars;
+
+    if (initialChineseContext && hasLegacyChineseStaggerParams) {
+      applySimplifiedChineseTimingDefaults();
+    }
+    if (!hasExplicitStaggerParams && usesRawStaggerDefaults && initialChineseContext) {
+      applySimplifiedChineseTimingDefaults();
+    }
+    if (!params.has('f') && initialChineseContext) {
+      ensureSimplifiedChineseFont();
+    }
+  }, [applySimplifiedChineseTimingDefaults, ensureSimplifiedChineseFont, initialUrlState]);
+
   const updateOption = useCallback(<K extends keyof PipelineOptions>(key: K, value: PipelineOptions[K]) => {
     resultsCache.current.clear();
     setOptions((prev) => ({ ...prev, [key]: value }));
@@ -407,7 +501,10 @@ export function GeneratorApp() {
                   }`}
                   onClick={() => {
                     loadFont(f);
-                    setPreviewText(EXAMPLE_FONT_TEXTS[f] ?? DEFAULT_EXAMPLE_FONT_TEXT);
+                    handlePreviewTextChange(EXAMPLE_FONT_TEXTS[f] ?? DEFAULT_EXAMPLE_FONT_TEXT);
+                    if (simplifiedChineseFontFamilies.has(f)) {
+                      applySimplifiedChineseTimingDefaults();
+                    }
                   }}
                   disabled={fontLoading}
                 >
@@ -508,7 +605,13 @@ export function GeneratorApp() {
                   className={`px-2 py-0.5 text-xs rounded cursor-pointer transition-colors ${
                     chars === p.chars ? 'bg-gray-800 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                   }`}
-                  onClick={() => setChars(p.chars)}
+                  onClick={() => {
+                    setChars(p.chars);
+                    if (p.name === SIMPLIFIED_CHINESE_PRESET_NAME) {
+                      applySimplifiedChineseTimingDefaults();
+                      ensureSimplifiedChineseFont();
+                    }
+                  }}
                 >
                   {p.name}
                 </button>
@@ -834,7 +937,7 @@ export function GeneratorApp() {
             extraFontBuffers={extraFontBuffers}
             options={options}
             text={previewText}
-            onTextChange={setPreviewText}
+            onTextChange={handlePreviewTextChange}
             resultsCache={resultsCache}
             animSpeed={animSpeed}
             onAnimSpeedChange={setAnimSpeed}
