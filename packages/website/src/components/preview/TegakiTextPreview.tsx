@@ -16,12 +16,13 @@ import {
 import harfbuzzShaper from 'tegaki/shaper-harfbuzz';
 import {
   createHbShaper,
+  isHanziCharacter,
   isRtlChar,
   type ParsedFontInfo,
   type PipelineOptions,
   type PipelineResult,
-  processGlyph,
   processGlyphById,
+  processGlyphWithDataSource,
 } from 'tegaki-generator';
 
 TegakiEngine.registerShaper(harfbuzzShaper);
@@ -195,6 +196,8 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // harfbuzz needs wasm. Nominal glyphs still go through the char-keyed
   // `glyphData` path below.
   const [variantData, setVariantData] = useState<Record<string, TegakiGlyphData>>({});
+  const [glyphData, setGlyphData] = useState<TegakiBundle['glyphData']>({});
+  const [glyphDataReady, setGlyphDataReady] = useState(false);
 
   useEffect(() => {
     if (!useShaper) {
@@ -228,6 +231,11 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
               seen.add(variantKey);
               const clusterChar = runText[g.cl];
               if (!clusterChar) continue;
+              // Hanzi shaping is nominal: the renderer can keep using the
+              // char-keyed glyph data, which now comes from real stroke-order
+              // data. Emitting a glyph-id override here would route CJK back
+              // through processGlyphById(), i.e. the old outline heuristic.
+              if (isHanziCharacter(clusterChar)) continue;
               // Process every glyph the shaper emits, including nominal forms
               // (where g.g === font.charToGlyph(clusterChar).index). For Latin
               // clusters the nominal glyph is also reachable via glyphData[char],
@@ -265,31 +273,48 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     };
   }, [fontBuffer, extraFontBuffers, fontInfo, normalizedText, options, enabledFeatures, activeCache, useShaper]);
 
-  const fontBundle = useMemo<TegakiBundle>(() => {
-    const glyphData: TegakiBundle['glyphData'] = {};
+  useEffect(() => {
     const optionsKey = JSON.stringify(options);
+    let cancelled = false;
+    setGlyphDataReady(false);
+    void (async () => {
+      try {
+        const nextGlyphData: TegakiBundle['glyphData'] = {};
+        const seen = new Set<string>();
+        for (const char of normalizedText) {
+          if (seen.has(char) || char === ' ' || char === '\n') continue;
+          seen.add(char);
 
-    const seen = new Set<string>();
-    for (const char of normalizedText) {
-      if (seen.has(char) || char === ' ' || char === '\n') continue;
-      seen.add(char);
+          const cacheKey = `${char}:${optionsKey}`;
+          let res = activeCache.get(cacheKey);
+          if (!res) {
+            res = (await processGlyphWithDataSource(fontInfo, char, options)) ?? undefined;
+            if (res) activeCache.set(cacheKey, res);
+          }
+          if (!res) continue;
 
-      const cacheKey = `${char}:${optionsKey}`;
-      let res = activeCache.get(cacheKey);
-      if (!res) {
-        res = processGlyph(fontInfo, char, options) ?? undefined;
-        if (res) activeCache.set(cacheKey, res);
+          const last = res.strokesFontUnits[res.strokesFontUnits.length - 1];
+          nextGlyphData[char] = {
+            w: res.advanceWidth,
+            t: last ? Math.round((last.delay + last.animationDuration) * 1000) / 1000 : 0,
+            s: res.strokesFontUnits.map(toCompactStroke),
+          };
+        }
+
+        if (cancelled) return;
+        setGlyphData(nextGlyphData);
+      } catch {
+        if (cancelled) return;
+        setGlyphData({});
       }
-      if (!res) continue;
+      if (!cancelled) setGlyphDataReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fontInfo, normalizedText, options, activeCache]);
 
-      const last = res.strokesFontUnits[res.strokesFontUnits.length - 1];
-      glyphData[char] = {
-        w: res.advanceWidth,
-        t: last ? Math.round((last.delay + last.animationDuration) * 1000) / 1000 : 0,
-        s: res.strokesFontUnits.map(toCompactStroke),
-      };
-    }
-
+  const fontBundle = useMemo<TegakiBundle>(() => {
     const hasVariants = Object.keys(variantData).length > 0;
     return {
       version: BUNDLE_VERSION,
@@ -305,7 +330,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       ...(hasVariants ? { glyphDataById: variantData } : {}),
       ...(enabledFeatures.length > 0 ? { features: enabledFeatures } : {}),
     } satisfies TegakiBundle;
-  }, [fontInfo, fontUrl, extraFontUrls, normalizedText, options, activeCache, enabledFeatures, variantData]);
+  }, [fontInfo, fontUrl, extraFontUrls, glyphData, enabledFeatures, variantData, options.lineCap]);
 
   // Latest bundle, captured by ref so the stable `handleTimelineChange`
   // callback can read it without re-subscribing the engine. Without this,
@@ -325,7 +350,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     onReadyRef.current?.({ bundle: bundleRef.current, totalDuration: timeline.totalDuration });
   }, []);
 
-  if (!fontReady) return null;
+  if (!fontReady || !glyphDataReady) return null;
 
   return (
     <TegakiRenderer
