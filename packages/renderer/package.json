@@ -146,6 +146,13 @@
       "types": "./dist/fonts/tillana/bundle.d.mts",
       "node": "./fonts/tillana/bundle.ts",
       "default": "./dist/fonts/tillana/bundle.mjs"
+    },
+    "./fonts/ma-shan-zheng": {
+      "tegaki@dev": "./fonts/ma-shan-zheng/bundle.ts",
+      "source": "./fonts/ma-shan-zheng/bundle.ts",
+      "types": "./dist/fonts/ma-shan-zheng/bundle.d.mts",
+      "node": "./fonts/ma-shan-zheng/bundle.ts",
+      "default": "./dist/fonts/ma-shan-zheng/bundle.mjs"
     }
   },
   "files": [
