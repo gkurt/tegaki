@@ -3,6 +3,8 @@ import { type PipelineResult, renderStage, STROKE_COLORS, type VisualizationStag
 import type { Stage } from './constants.ts';
 import { fitSize } from './utils.ts';
 
+const STROKE_DATA_UNAVAILABLE_STAGES = new Set<Stage>(['bitmap', 'skeleton', 'overlay', 'distance']);
+
 export function PNGView({ data, width, height }: { data: Uint8Array; width: number; height: number }) {
   const url = useMemo(() => URL.createObjectURL(new Blob([data.buffer as ArrayBuffer], { type: 'image/png' })), [data]);
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
@@ -30,6 +32,14 @@ export function SVGView({ svg }: { svg: string }) {
 export function StageRenderer({ result, stage, animTime }: { result: PipelineResult; stage: Stage; animTime: number }) {
   if (stage === 'animation') return <AnimationView result={result} time={animTime} />;
   if (stage === 'final') return <FinalView result={result} time={animTime} />;
+  if (result.dataSource === 'hanzi-strokes' && STROKE_DATA_UNAVAILABLE_STAGES.has(stage)) {
+    return (
+      <div className="w-[600px] max-w-full min-h-64 border border-dashed border-gray-300 bg-white px-6 py-10 text-sm text-gray-500">
+        This stage is unavailable for stroke-data glyphs. Switch to `Traced`, `Strokes`, `Animation`, or `Final` to inspect Hanzi stroke
+        order.
+      </div>
+    );
+  }
 
   const rendered = renderStage(result, stage as VisualizationStage);
   if (rendered instanceof Uint8Array) {
