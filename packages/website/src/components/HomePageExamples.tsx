@@ -21,6 +21,7 @@ const FONT_IMPORTS = {
   Amiri: () => import('tegaki/fonts/amiri'),
   Tillana: () => import('tegaki/fonts/tillana'),
   'Klee One': () => import('tegaki/fonts/klee-one'),
+  'Ma Shan Zheng': () => import('tegaki/fonts/ma-shan-zheng'),
 } as const;
 
 const FONT_NAMES = Object.keys(FONT_IMPORTS) as (keyof typeof FONT_IMPORTS)[];
@@ -36,6 +37,7 @@ const SHOWCASE_TEXTS: Partial<Record<keyof typeof FONT_IMPORTS, string>> = {
   // 素晴らしい" doesn't work — `素` is grade 5. `楽` ("fun") is grade 2 and
   // gives a phrase that's just as natural to a Japanese reader.
   'Klee One': '手書きは楽しい',
+  'Ma Shan Zheng': '手写体真漂亮',
 };
 
 function FontCard({ name, bundle, text }: { name: string; bundle: TegakiBundle | null; text: string }) {
