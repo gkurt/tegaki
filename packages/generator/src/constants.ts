@@ -1,3 +1,5 @@
+export const BUNDLE_VERSION = 0;
+
 export const DEFAULT_RESOLUTION = 400;
 
 export const DEFAULT_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:!?\'"-()/\\@#$%&*+=<>~`^_|';

@@ -4,7 +4,7 @@
 // included). Run via `bun --filter tegaki generate-fonts`.
 
 import { spawn } from 'node:child_process';
-import { ARABIC_CHARS, DEVANAGARI_CHARS, HEBREW_CHARS, JAPANESE_CHARS, SIMPLIFIED_CHINESE_CHARS } from '../../generator/src/charsets.ts';
+import { ARABIC_CHARS, DEVANAGARI_CHARS, HEBREW_CHARS, JAPANESE_CHARS, SIMPLIFIED_CHINESE_CHARS } from 'tegaki-generator';
 
 interface FontSpec {
   family: string;
