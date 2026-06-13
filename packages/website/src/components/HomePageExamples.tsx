@@ -21,6 +21,7 @@ const FONT_IMPORTS = {
   Amiri: () => import('tegaki/fonts/amiri'),
   Tillana: () => import('tegaki/fonts/tillana'),
   'Klee One': () => import('tegaki/fonts/klee-one'),
+  'Nanum Pen Script': () => import('tegaki/fonts/nanum-pen-script'),
 } as const;
 
 const FONT_NAMES = Object.keys(FONT_IMPORTS) as (keyof typeof FONT_IMPORTS)[];
@@ -36,6 +37,12 @@ const SHOWCASE_TEXTS: Partial<Record<keyof typeof FONT_IMPORTS, string>> = {
   // 素晴らしい" doesn't work — `素` is grade 5. `楽` ("fun") is grade 2 and
   // gives a phrase that's just as natural to a Japanese reader.
   'Klee One': '手書きは楽しい',
+  // Nanum Pen Script ships ~650 most-frequent Hangul syllables. The phrase
+  // "손글씨는 즐거워" was the original candidate but `즐` (U+C990) falls outside
+  // the 650-syllable cap — swapped for `한국어 손글씨` ("Korean handwriting"),
+  // whose syllables 한(U+D55C) 국(U+AD6D) 어(U+C5B4) 손(U+C190) 글(U+AE00)
+  // 씨(U+C528) are all confirmed in-set.
+  'Nanum Pen Script': '한국어 손글씨',
 };
 
 function FontCard({ name, bundle, text }: { name: string; bundle: TegakiBundle | null; text: string }) {

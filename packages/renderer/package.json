@@ -146,6 +146,13 @@
       "types": "./dist/fonts/tillana/bundle.d.mts",
       "node": "./fonts/tillana/bundle.ts",
       "default": "./dist/fonts/tillana/bundle.mjs"
+    },
+    "./fonts/nanum-pen-script": {
+      "tegaki@dev": "./fonts/nanum-pen-script/bundle.ts",
+      "source": "./fonts/nanum-pen-script/bundle.ts",
+      "types": "./dist/fonts/nanum-pen-script/bundle.d.mts",
+      "node": "./fonts/nanum-pen-script/bundle.ts",
+      "default": "./dist/fonts/nanum-pen-script/bundle.mjs"
     }
   },
   "files": [

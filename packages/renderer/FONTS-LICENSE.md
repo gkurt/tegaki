@@ -51,6 +51,12 @@ All fonts are licensed under the [SIL Open Font License, Version 1.1](https://op
 - **Copyright**: Copyright (c) 2014, Indian Type Foundry (info@indiantypefoundry.com)
 - **License**: SIL Open Font License, Version 1.1
 
+## Nanum Pen Script
+
+- **Designer**: Sandoll Communications Inc. for NHN Corporation
+- **Copyright**: Copyright © 2010 NHN Corporation. All rights reserved. Font designed by Sandoll Communications Inc.
+- **License**: SIL Open Font License, Version 1.1
+
 ---
 
 ## SIL Open Font License, Version 1.1

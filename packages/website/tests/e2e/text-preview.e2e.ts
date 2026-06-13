@@ -135,6 +135,20 @@ const CASES: PreviewCase[] = [
     name: 'devanagari-cluster-fallback',
     params: { f: 'Tillana', t: 'नमस्ते हिन्दी', tm: 'controlled', ct: 1000, fs: 96, w: 800, h: 200, ol: 1 },
   },
+  {
+    // Korean precomposed Hangul: each syllable is one codepoint, rendered by
+    // the standalone preview's CDN-fetch + in-browser glyph generation (no
+    // shaper needed — Hangul is precomposed in Unicode). Guards the Korean
+    // rendering pipeline end-to-end (Fontsource CDN → in-browser generation →
+    // render). `ch` omitted as in the Tillana case — the preview derives its
+    // working set from the rendered text + the live font, not a `ch` list.
+    // Text: `반가워요` ("nice to meet you") — syllables 반(U+BC18) 가(U+AC00)
+    // 워(U+C6CC) 요(U+C694) are all in the committed 650-syllable KOREAN_CHARS
+    // set. (Original candidate `안녕하세요` was dropped because `녕`(U+B155)
+    // falls outside the 650-syllable cap; `반가워요` is fully in-set.)
+    name: 'korean-hangul-syllables',
+    params: { f: 'Nanum Pen Script', t: '반가워요', tm: 'controlled', ct: 1000, fs: 96, w: 600, h: 220 },
+  },
 ];
 
 test('Standalone text preview — snapshots across URL params', async ({ page }) => {
