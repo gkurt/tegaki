@@ -27,6 +27,7 @@ export const EXAMPLE_FONTS = [
   'Ma Shan Zheng', // Chinese Cursive
   'Noto Sans KR', // Korean Sans
   'Nanum Myeongjo', // Korean Serif
+  'Nanum Pen Script', // Korean handwriting
   'Rubik', // Arabic Sans
   'Amiri', // Arabic Cursive
   'Cardo', // Hebrew
