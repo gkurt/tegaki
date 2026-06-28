@@ -75,8 +75,8 @@
     "./solid": {
       "tegaki@dev": "./src/solid/index.ts",
       "source": "./src/solid/index.ts",
-      "types": "./dist/solid/index.d.mts",
-      "import": "./dist/solid/index.mjs"
+      "solid": "./src/solid/index.ts",
+      "default": "./src/solid/index.ts"
     },
     "./wc": {
       "tegaki@dev": "./src/wc/index.ts",

@@ -99,7 +99,9 @@ export default defineConfig({
     index: 'src/index.ts',
     'core/index': 'src/core/index.ts',
     'react/index': 'src/react/index.ts',
-    'solid/index': 'src/solid/index.ts',
+    // Solid is shipped as source (compiled by the consumer's solid plugin via
+    // the `solid` export condition) — tsdown/rolldown can't run babel-preset-solid,
+    // so a prebuilt dist emits an invalid `solid-js/jsx-runtime` import. See ./package.json.
     'wc/index': 'src/wc/index.ts',
     'shaper-harfbuzz/index': 'src/shaper-harfbuzz/index.ts',
     'fonts/caveat/bundle': 'fonts/caveat/bundle.ts',

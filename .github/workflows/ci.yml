@@ -28,6 +28,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun i --frozen-lockfile
       - run: bun check
+      # Build the renderer's dist/ first: the next example resolves `tegaki`
+      # to its published entry points (./dist/*), so typecheck needs them.
+      - run: bun --filter tegaki build
       - run: bun typecheck
       - run: bun run test
 
