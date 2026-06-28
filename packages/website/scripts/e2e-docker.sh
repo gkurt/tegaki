@@ -8,7 +8,7 @@
 set -euo pipefail
 
 # Keep in sync with the @playwright/test version in package.json and the CI image.
-IMAGE=mcr.microsoft.com/playwright:v1.60.0-noble
+IMAGE=mcr.microsoft.com/playwright:v1.61.1-noble
 
 # Resolve the monorepo root (two levels up from this script).
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"

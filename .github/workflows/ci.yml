@@ -38,7 +38,7 @@ jobs:
     needs: checks
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright:v1.60.0-noble
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
     permissions:
       contents: read
     steps:
@@ -61,7 +61,7 @@ jobs:
     needs: checks
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright:v1.60.0-noble
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
     permissions:
       contents: read
     steps:
