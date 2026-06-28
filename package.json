@@ -5,13 +5,16 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "examples/*"
+    "examples/*",
+    "e2e/*"
   ],
   "scripts": {
     "start": "bun --filter tegaki-generator start",
     "dev": "bun --filter @tegaki/website dev",
     "test": "bun --conditions=tegaki@dev test",
     "build:website": "bun --filter @tegaki/website build",
+    "build:examples": "bun --filter tegaki build && bun --filter @tegaki/example-vite build && bun --filter @tegaki/example-next build && bun --filter @tegaki/example-nuxt build",
+    "test:examples": "bun run build:examples && bun --filter @tegaki/example-e2e test && bun --filter @tegaki/example-e2e remotion-still",
     "compile": "bun --filter tegaki-generator compile --external ink",
     "typecheck": "tsgo && bun --bun --filter '@tegaki/*' typecheck",
     "lint": "biome lint",

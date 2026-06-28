@@ -1,0 +1,16 @@
+{
+  "name": "@tegaki/example-e2e",
+  "version": "0.18.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:update": "playwright test --update-snapshots",
+    "remotion-still": "bun run check-remotion-still.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0"
+  }
+}

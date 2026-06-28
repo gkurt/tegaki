@@ -53,3 +53,31 @@ jobs:
           name: playwright-report
           path: packages/website/playwright-report/
           retention-days: 14
+
+  examples:
+    needs: checks
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.60.0-noble
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - run: apt-get update && apt-get install -y unzip curl
+      - uses: oven-sh/setup-bun@v2
+      - run: bun i --frozen-lockfile
+      # Build the renderer's dist/ (next/nuxt/remotion resolve to it) and the
+      # web examples, then smoke-test that each actually renders handwriting.
+      - name: Build examples
+        run: bun run build:examples
+      - name: Smoke-test web examples (vite, next, nuxt)
+        run: bun --filter @tegaki/example-e2e test
+      - name: Render-test Remotion still
+        run: bun --filter @tegaki/example-e2e remotion-still
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-examples
+          path: e2e/examples/playwright-report/
+          retention-days: 14
