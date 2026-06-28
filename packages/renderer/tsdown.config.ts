@@ -1,9 +1,41 @@
 import { copyFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import MagicString from 'magic-string';
 import { defineConfig } from 'tsdown';
 
 const configDir = dirname(fileURLToPath(import.meta.url));
+
+// Matches a leading `'use client'` / `"use client"` directive prologue.
+const USE_CLIENT_RE = /^\s*(['"])use client\1\s*;?/;
+
+/**
+ * Rolldown treeshakes the bare `'use client'` directive string out of bundled
+ * output (it reads as a side-effect-free expression statement), which strips
+ * the React Server Component boundary the source files declare. Without it,
+ * importing `tegaki`'s React adapter into a Next.js App Router Server Component
+ * fails ("You're importing a module that depends on `useState`...").
+ *
+ * This plugin records which source modules carried the directive, then
+ * re-prepends it to any output chunk built from one of them.
+ */
+function preserveUseClientPlugin() {
+  const clientModules = new Set<string>();
+  return {
+    name: 'tegaki-preserve-use-client',
+    transform(code: string, id: string) {
+      if (USE_CLIENT_RE.test(code)) clientModules.add(id);
+      return null;
+    },
+    renderChunk(code: string, chunk: { moduleIds: string[] }) {
+      if (USE_CLIENT_RE.test(code)) return null; // already present
+      if (!chunk.moduleIds.some((id) => clientModules.has(id))) return null;
+      const s = new MagicString(code);
+      s.prepend("'use client';\n");
+      return { code: s.toString(), map: s.generateMap({ hires: true }) };
+    },
+  };
+}
 
 /**
  * Rolldown plugin that transforms font bundle source files so the built output
@@ -82,5 +114,5 @@ export default defineConfig({
   },
   dts: true,
   sourcemap: true,
-  plugins: [fontBundlePlugin()],
+  plugins: [fontBundlePlugin(), preserveUseClientPlugin()],
 });

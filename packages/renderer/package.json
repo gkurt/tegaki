@@ -95,63 +95,63 @@
       "tegaki@dev": "./fonts/caveat/bundle.ts",
       "source": "./fonts/caveat/bundle.ts",
       "types": "./dist/fonts/caveat/bundle.d.mts",
-      "node": "./fonts/caveat/bundle.ts",
+      "node": "./dist/fonts/caveat/bundle.mjs",
       "default": "./dist/fonts/caveat/bundle.mjs"
     },
     "./fonts/italianno": {
       "tegaki@dev": "./fonts/italianno/bundle.ts",
       "source": "./fonts/italianno/bundle.ts",
       "types": "./dist/fonts/italianno/bundle.d.mts",
-      "node": "./fonts/italianno/bundle.ts",
+      "node": "./dist/fonts/italianno/bundle.mjs",
       "default": "./dist/fonts/italianno/bundle.mjs"
     },
     "./fonts/tangerine": {
       "tegaki@dev": "./fonts/tangerine/bundle.ts",
       "source": "./fonts/tangerine/bundle.ts",
       "types": "./dist/fonts/tangerine/bundle.d.mts",
-      "node": "./fonts/tangerine/bundle.ts",
+      "node": "./dist/fonts/tangerine/bundle.mjs",
       "default": "./dist/fonts/tangerine/bundle.mjs"
     },
     "./fonts/parisienne": {
       "tegaki@dev": "./fonts/parisienne/bundle.ts",
       "source": "./fonts/parisienne/bundle.ts",
       "types": "./dist/fonts/parisienne/bundle.d.mts",
-      "node": "./fonts/parisienne/bundle.ts",
+      "node": "./dist/fonts/parisienne/bundle.mjs",
       "default": "./dist/fonts/parisienne/bundle.mjs"
     },
     "./fonts/suez-one": {
       "tegaki@dev": "./fonts/suez-one/bundle.ts",
       "source": "./fonts/suez-one/bundle.ts",
       "types": "./dist/fonts/suez-one/bundle.d.mts",
-      "node": "./fonts/suez-one/bundle.ts",
+      "node": "./dist/fonts/suez-one/bundle.mjs",
       "default": "./dist/fonts/suez-one/bundle.mjs"
     },
     "./fonts/klee-one": {
       "tegaki@dev": "./fonts/klee-one/bundle.ts",
       "source": "./fonts/klee-one/bundle.ts",
       "types": "./dist/fonts/klee-one/bundle.d.mts",
-      "node": "./fonts/klee-one/bundle.ts",
+      "node": "./dist/fonts/klee-one/bundle.mjs",
       "default": "./dist/fonts/klee-one/bundle.mjs"
     },
     "./fonts/amiri": {
       "tegaki@dev": "./fonts/amiri/bundle.ts",
       "source": "./fonts/amiri/bundle.ts",
       "types": "./dist/fonts/amiri/bundle.d.mts",
-      "node": "./fonts/amiri/bundle.ts",
+      "node": "./dist/fonts/amiri/bundle.mjs",
       "default": "./dist/fonts/amiri/bundle.mjs"
     },
     "./fonts/tillana": {
       "tegaki@dev": "./fonts/tillana/bundle.ts",
       "source": "./fonts/tillana/bundle.ts",
       "types": "./dist/fonts/tillana/bundle.d.mts",
-      "node": "./fonts/tillana/bundle.ts",
+      "node": "./dist/fonts/tillana/bundle.mjs",
       "default": "./dist/fonts/tillana/bundle.mjs"
     },
     "./fonts/nanum-pen-script": {
       "tegaki@dev": "./fonts/nanum-pen-script/bundle.ts",
       "source": "./fonts/nanum-pen-script/bundle.ts",
       "types": "./dist/fonts/nanum-pen-script/bundle.d.mts",
-      "node": "./fonts/nanum-pen-script/bundle.ts",
+      "node": "./dist/fonts/nanum-pen-script/bundle.mjs",
       "default": "./dist/fonts/nanum-pen-script/bundle.mjs"
     }
   },
@@ -204,6 +204,7 @@
     "@nuxt/kit": "^4.4.5",
     "@nuxt/schema": "^4.4.5",
     "@types/react": "^19.2.14",
+    "magic-string": "^0.30.21",
     "tegaki-generator": "workspace:*",
     "tsdown": "^0.22.0",
     "typescript": "^6.0.3"
