@@ -1,0 +1,62 @@
+name: Release smoke (published package)
+
+# After a release is published, install the *actual npm tarball* into copies of
+# each example and verify they typecheck, build, and render. This catches
+# packaging regressions the in-repo `examples` job can't — it tests the
+# workspace-linked package, not what ships to npm.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Published tegaki version (or dist-tag) to test. Defaults to npm latest.'
+        required: false
+        default: 'latest'
+
+jobs:
+  published-examples:
+    name: Published examples
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+            case "$TAG" in
+              tegaki@*) echo "version=${TAG#tegaki@}" >> "$GITHUB_OUTPUT" ;;
+              *) echo "Release tag '$TAG' is not a tegaki release; skipping." ; echo "skip=true" >> "$GITHUB_OUTPUT" ;;
+            esac
+          else
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - run: apt-get update && apt-get install -y unzip curl
+        if: steps.ver.outputs.skip != 'true'
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.ver.outputs.skip != 'true'
+
+      # Installs the harness (e2e smoke runner) — the examples under test pull
+      # the published tegaki from npm, not the workspace.
+      - run: bun i --frozen-lockfile
+        if: steps.ver.outputs.skip != 'true'
+
+      - name: Test published package against examples
+        if: steps.ver.outputs.skip != 'true'
+        run: bun scripts/test-published-examples.ts "${{ steps.ver.outputs.version }}"
+
+      - name: Upload Playwright report
+        if: failure() && steps.ver.outputs.skip != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-published
+          path: e2e/examples/playwright-report/
+          retention-days: 14

@@ -238,6 +238,13 @@ Two layers:
 
 - **Unit tests** (Bun's built-in runner): `*.test.ts` files alongside source. Import from `'bun:test'`, use `describe` / `test` / `expect`. Run with `bun run test` from the repo root.
 - **Visual / e2e tests** (Playwright + committed screenshot snapshots): live in [packages/website/tests/e2e/*.e2e.ts](packages/website/tests/e2e). The `.e2e.ts` extension is intentional — `bun test` matches `*.spec.ts` / `*.test.ts`, so the e2e files stay out of the unit suite.
+- **Example smoke tests** (Playwright + Remotion render): [e2e/examples](e2e/examples) builds each consumer example (`vite`, `next`, `nuxt`, `remotion`) and asserts it actually draws handwriting. The `examples` job in [ci.yml](.github/workflows/ci.yml) runs these against the **workspace** package on every push/PR. A separate [release-smoke.yml](.github/workflows/release-smoke.yml) workflow re-runs the same checks against the **published npm tarball** after a release — see below.
+
+### Post-release published-package check
+
+The in-repo `examples` job links `tegaki` via `workspace:*`, so it validates the source but not the shipped artifact. [scripts/test-published-examples.ts](scripts/test-published-examples.ts) closes that gap: it copies each example *out of the workspace* (a workspace member is linked to the workspace package regardless of the version range written, so escaping it is required), pins the published version, strips the `tegaki@dev` resolve conditions so resolution falls through to the published `dist/` entry points, `bun install`s from npm, then typechecks + builds + smoke-tests each. [release-smoke.yml](.github/workflows/release-smoke.yml) runs it on the `release: published` event (parsing the version from the `tegaki@x.y.z` tag), with a `workflow_dispatch` for on-demand runs against any version or dist-tag. Run it locally with `bun scripts/test-published-examples.ts [version] [--no-smoke]` (version defaults to npm `latest`).
+
+The same script also runs a **web-component CDN smoke** ([e2e/examples/check-wc-cdn.ts](e2e/examples/check-wc-cdn.ts)): it loads `tegaki/wc` + a font bundle from **esm.sh** at the published version (the channel the [hyperframes](examples/hyperframes) example uses), registers the `<tegaki-renderer>` element, and asserts it draws into its shadow-root canvas. Because esm.sh builds on first request, this polls esm.sh for a built module *separately* from the npm-registry propagation poll before opening a browser. It's only invoked from the post-release flow (not a `.e2e.ts` file, so the regular `examples` job skips it); run it standalone with `TEGAKI_VERSION=x.y.z bun --filter @tegaki/example-e2e wc-cdn`.
 
 ### Writing unit tests
 

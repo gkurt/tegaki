@@ -6,7 +6,8 @@
   "scripts": {
     "test": "playwright test",
     "test:update": "playwright test --update-snapshots",
-    "remotion-still": "bun run check-remotion-still.ts"
+    "remotion-still": "bun run check-remotion-still.ts",
+    "wc-cdn": "bun run check-wc-cdn.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

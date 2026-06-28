@@ -10,7 +10,10 @@ import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const remotionDir = resolve(here, '../../examples/remotion');
+// Defaults to the workspace remotion example; the post-release check points this
+// at a copy with the published npm package installed via TEGAKI_EXAMPLES_DIR.
+const examplesDir = process.env.TEGAKI_EXAMPLES_DIR ? resolve(process.env.TEGAKI_EXAMPLES_DIR) : resolve(here, '../../examples');
+const remotionDir = resolve(examplesDir, 'remotion');
 const outPath = resolve(remotionDir, 'out/still.png');
 
 mkdirSync(dirname(outPath), { recursive: true });

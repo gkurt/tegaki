@@ -1,7 +1,15 @@
 /// <reference types="bun-types" />
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 
 const CI = !!process.env.CI;
+
+// The smoke tests normally run against the workspace examples. The post-release
+// check (scripts/test-published-examples.ts) points this at copies that have the
+// *published* npm package installed instead, by setting TEGAKI_EXAMPLES_DIR.
+const here = dirname(fileURLToPath(import.meta.url));
+const EXAMPLES_DIR = process.env.TEGAKI_EXAMPLES_DIR ? resolve(process.env.TEGAKI_EXAMPLES_DIR) : resolve(here, '../../examples');
 
 // Each web example is built ahead of time (see `bun run build:examples`) and
 // served here from its production output on a dedicated port. The smoke tests
@@ -26,7 +34,7 @@ export default defineConfig({
   webServer: [
     {
       command: 'bun run preview --port 4310 --host 127.0.0.1',
-      cwd: '../../examples/vite',
+      cwd: resolve(EXAMPLES_DIR, 'vite'),
       url: 'http://127.0.0.1:4310/',
       reuseExistingServer: !CI,
       timeout: 120_000,
@@ -35,7 +43,7 @@ export default defineConfig({
     },
     {
       command: 'bun run start --port 4311 --hostname 127.0.0.1',
-      cwd: '../../examples/next',
+      cwd: resolve(EXAMPLES_DIR, 'next'),
       url: 'http://127.0.0.1:4311/',
       reuseExistingServer: !CI,
       timeout: 120_000,
@@ -44,7 +52,7 @@ export default defineConfig({
     },
     {
       command: 'bun run preview',
-      cwd: '../../examples/nuxt',
+      cwd: resolve(EXAMPLES_DIR, 'nuxt'),
       env: { PORT: '4312', HOST: '127.0.0.1', NITRO_PORT: '4312', NITRO_HOST: '127.0.0.1' },
       url: 'http://127.0.0.1:4312/',
       reuseExistingServer: !CI,
