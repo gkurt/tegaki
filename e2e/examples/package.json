@@ -9,7 +9,7 @@
     "remotion-still": "bun run check-remotion-still.ts"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0",
+    "@playwright/test": "^1.61.1",
     "@types/pngjs": "^6.0.5",
     "pngjs": "^7.0.0"
   }

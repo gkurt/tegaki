@@ -11,11 +11,11 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-    "nuxt": "^4.4.5",
+    "nuxt": "^4.4.8",
     "tegaki": "workspace:*",
-    "vue": "^3.5.34"
+    "vue": "^3.5.39"
   },
   "devDependencies": {
-    "vue-router": "^5.0.7"
+    "vue-router": "^5.1.0"
   }
 }

@@ -200,13 +200,13 @@
     }
   },
   "devDependencies": {
-    "harfbuzzjs": "^1.1.0",
-    "@nuxt/kit": "^4.4.5",
-    "@nuxt/schema": "^4.4.5",
-    "@types/react": "^19.2.14",
+    "harfbuzzjs": "^1.4.0",
+    "@nuxt/kit": "^4.4.8",
+    "@nuxt/schema": "^4.4.8",
+    "@types/react": "^19.2.17",
     "magic-string": "^0.30.21",
     "tegaki-generator": "workspace:*",
-    "tsdown": "^0.22.0",
+    "tsdown": "^0.22.3",
     "typescript": "^6.0.3"
   }
 }
