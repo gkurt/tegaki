@@ -1,0 +1,42 @@
+core:changelogs:
+  - content: "---\npackages:\n  tegaki:\n    type: minor\n---\n\n## Add `TegakiEngine.toSVG()` and a `canvas` accessor\n\nThe engine can now serialize its current text to a standalone SVG string via `toSVG({ animated, loop })` — either self-drawing (SMIL mask reveal, variable stroke width) or looping (CSS keyframes, constant width), with the viewBox cropped to the ink. The backing `<canvas>` is also exposed through a `canvas` getter so export tooling can read pixels without reaching through the DOM.\n"
+    filename: engine-to-svg-export.md
+    v: 0.0.0
+  - content: "---\npackages:\n  tegaki:\n    type: minor\n---\n\n## Add a `tegaki` CLI and a `textToSvg()` export\n\n`npx tegaki` renders text to an animated handwriting SVG straight from the command line. The same output is available programmatically through the new `textToSvg()` export, along with its `TextToSvgMode` and `TextToSvgOptions` types.\n"
+    filename: cli-and-text-to-svg.md
+    v: 0.0.0
+core:packages:
+  - id: npm:@tegaki/root
+    updated: true
+  - changelogIds:
+      - engine-to-svg-export.md
+      - cli-and-text-to-svg.md
+    id: npm:tegaki
+    updated: true
+  - id: npm:@tegaki/website
+    updated: true
+  - id: npm:tegaki-generator
+    updated: true
+  - id: npm:@tegaki/example-e2e
+    updated: true
+  - id: npm:@tegaki/example-next
+    updated: true
+  - id: npm:@tegaki/example-nuxt
+    updated: true
+  - id: npm:@tegaki/example-remotion
+    updated: true
+  - id: npm:@tegaki/example-vite
+    updated: true
+  - id: npm:hyperframes
+    updated: true
+npm:packages:
+  - id: npm:@tegaki/root
+  - id: npm:tegaki
+  - id: npm:@tegaki/website
+  - id: npm:tegaki-generator
+  - id: npm:@tegaki/example-e2e
+  - id: npm:@tegaki/example-next
+  - id: npm:@tegaki/example-nuxt
+  - id: npm:@tegaki/example-remotion
+  - id: npm:@tegaki/example-vite
+  - id: npm:hyperframes
