@@ -1,0 +1,41 @@
+# Posts the release-preview artifact produced by `tegami-pr.yml` as a PR
+# comment. Triggered by `workflow_run` so it runs in the base-repo context with
+# write permissions, without ever executing the PR's code.
+name: Tegami PR Comment
+
+on:
+  workflow_run:
+    workflows: ['Tegami PR']
+    types: [completed]
+
+jobs:
+  comment:
+    name: Post preview comment
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - uses: oven-sh/setup-bun@v2
+      - run: bun i
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tegami-pr-preview
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Post preview comment
+        run: bun run tegami pr comment tegami-pr-preview.md
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

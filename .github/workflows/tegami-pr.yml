@@ -1,0 +1,36 @@
+# Builds the release-preview comment for a PR. Runs on `pull_request` (not
+# `pull_request_target`), so it executes untrusted code and stays read-only —
+# the actual comment is posted by the separate `tegami-pr-comment.yml` workflow,
+# which has write permissions but never runs PR code.
+name: Tegami PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    name: Release preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - uses: oven-sh/setup-bun@v2
+      - run: bun i
+
+      - name: Build release preview
+        run: bun run tegami pr preview --artifact tegami-pr-preview.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tegami-pr-preview
+          path: tegami-pr-preview.md

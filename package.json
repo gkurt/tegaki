@@ -23,23 +23,20 @@
     "fix": "biome check --write --unsafe",
     "checks": "bun check && bun typecheck && bun run test",
     "prepare": "husky",
-    "changeset": "changeset",
-    "changeset:version": "changeset version && bun scripts/sync-versions.ts",
-    "changeset:status": "changeset status",
-    "release": "changeset version && bun scripts/sync-versions.ts"
+    "tegami": "bun scripts/tegami.mts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
-    "@changesets/cli": "^2.31.0",
+    "@remotion/fonts": "^4",
     "@types/bun": "^1.3.14",
     "@typescript/native-preview": "^7.0.0-dev.20260628.1",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
-    "@remotion/fonts": "^4",
     "remotion": "^4",
     "solid-js": "^1.9.13",
     "svelte": "^5.56.4",
     "tegaki": "workspace:*",
+    "tegami": "^1.0.0-beta.5",
     "vue": "^3.5.39",
     "zod": "^4"
   },

@@ -58,28 +58,53 @@ Tests use Bun's built-in test runner and live alongside the source they cover (e
 
 When fixing a bug, add a failing test first and make it pass.
 
-## Changes that need a changeset
+## Changes that need a changelog
 
-This repo uses [Changesets](https://github.com/changesets/changesets) to version and publish the `tegaki` package. If your change affects the **published renderer** (`packages/renderer`), add a changeset:
+This repo uses [Tegami](https://tegami.fuma-nama.dev) to version and publish the `tegaki` package. If your change affects the **published renderer** (`packages/renderer`), add a changelog entry:
 
 ```bash
-bun changeset
+bun tegami
 ```
 
-Follow the prompts to pick a bump type and write a short summary:
+This opens an interactive prompt that writes a Markdown file under `.tegami/`. You can also write the file by hand — it's frontmatter listing the affected package + bump type, followed by the release notes:
 
-- **patch** — bug fixes, internal refactors, docs in the published package
-- **minor** — new features, non-breaking API additions
-- **major** — breaking API changes
+```md
+---
+packages:
+  tegaki: patch
+---
 
-Changesets are **not** needed for changes that only touch:
+## Fix Hangul baseline alignment
 
-- The generator CLI (`packages/generator`)
-- The website (`packages/website`)
-- CI / tooling / repo-level config
-- Examples (`examples/`)
+Composed syllables now sit on the same baseline as Latin glyphs.
+```
 
-See [.changeset/README.md](.changeset/README.md) for the full release flow.
+The bump type is `patch` (bug fixes, internal refactors, docs in the published package), `minor` (new features, non-breaking API additions), or `major` (breaking API changes).
+
+A changelog is **not** needed for changes that only touch the generator (`packages/generator`), the website (`packages/website`), CI / tooling, or examples (`examples/`) — those packages are private and never published.
+
+### Tegami commands
+
+Run from the repo root. Day to day, contributors only need the first one; the rest run in CI.
+
+```bash
+bun tegami                 # Add a changelog entry (interactive)
+bun tegami version         # Apply pending changelogs: bump versions + write the publish lock
+bun tegami publish         # Publish from the publish lock (CI)
+bun tegami publish --dry-run  # Validate the publish lock without publishing
+bun tegami ci              # CI entry point: version if changelogs are pending, else publish
+bun tegami check-publish   # Exit 0 if a publish is pending, 1 otherwise
+```
+
+### Release flow
+
+Releases are automated by [.github/workflows/release.yml](.github/workflows/release.yml), which runs `tegami ci` on every push to `main`:
+
+1. Merge PRs that add `.tegami/*.md` changelog files.
+2. CI versions the affected packages and opens a **Version Packages** PR.
+3. Merging that PR triggers the next CI run, which publishes to npm and creates the GitHub release.
+
+The publish lock (`.tegami/publish-lock.yaml`) lives in git, so a failed publish job can be re-run safely without duplicating a release. Don't edit the publish lock or `CHANGELOG.md` files by hand — Tegami owns them.
 
 ## Adding a new framework adapter
 
@@ -116,7 +141,7 @@ Keep the subject under ~72 characters. The body (optional) explains the *why*.
 ## Opening a pull request
 
 1. Fork the repo and create a feature branch from `main`.
-2. Make your change + add tests + add a changeset (if the renderer changed).
+2. Make your change + add tests + add a changelog entry with `bun tegami` (if the renderer changed).
 3. Run `bun checks` locally — CI runs the same commands and will auto-apply Biome fixes, which then fail the build.
 4. Push and open a PR against `main`. Describe *what* and *why*; link related issues.
 5. Be ready to iterate — small, focused PRs merge fastest.
