@@ -378,7 +378,7 @@ export function GeneratorApp() {
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </a>
-            <h1 className="text-lg font-semibold">Tegaki generator</h1>
+            <h1 className="text-lg font-semibold">Tegaki studio</h1>
           </div>
           <a
             href="https://github.com/gkurt/tegaki"

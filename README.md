@@ -56,7 +56,7 @@ npx tegaki "Hello World" --font tangerine --mode once -o hello.svg
 npx tegaki "ABC" --stagger 80% --size 140 --color "#222"
 ```
 
-`--mode` is `loop` (repeats forever, the default), `once` (draws itself a single time), or `static` (finished artwork). Run `npx tegaki --help` for every option and `--list-fonts` for the bundled fonts. The CLI emits SVG only — for PNG, GIF, or WebM use the [interactive studio](https://gkurt.com/tegaki/generator/).
+`--mode` is `loop` (repeats forever, the default), `once` (draws itself a single time), or `static` (finished artwork). Run `npx tegaki --help` for every option and `--list-fonts` for the bundled fonts. The CLI emits SVG only — for PNG, GIF, or WebM use the [interactive studio](https://gkurt.com/tegaki/studio/).
 
 ## Framework Support
 
@@ -94,7 +94,7 @@ Several handwriting fonts are bundled and ready to use:
 - **Klee One** — `tegaki/fonts/klee-one` _(Japanese: kana + Kyōiku grade 1–2 kanji + Latin)_
 - **Nanum Pen Script** — `tegaki/fonts/nanum-pen-script` _(Korean: Hangul syllables + jamo + Latin)_
 
-For other fonts, use the [interactive generator](https://gkurt.com/tegaki/generator/) to create a custom bundle.
+For other fonts, use the [interactive studio](https://gkurt.com/tegaki/studio/) to create a custom bundle.
 
 ## Documentation
 

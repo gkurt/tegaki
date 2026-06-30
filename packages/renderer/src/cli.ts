@@ -7,7 +7,7 @@
  *
  * SVG is the only format emitted: it's the one the renderer can produce with
  * zero native dependencies (no canvas, no headless browser). Raster/video
- * export (PNG/GIF/WebM) lives in the browser studio at gkurt.com/tegaki/generator.
+ * export (PNG/GIF/WebM) lives in the browser studio at gkurt.com/tegaki/studio.
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { type TextToSvgMode, textToSvg } from './lib/textToSvg.ts';
@@ -250,7 +250,7 @@ async function main(): Promise<void> {
     process.stderr.write(
       `tegaki: note — "${opts.font}" is a complex/RTL script. The CLI lays glyphs out by ` +
         `advance width without shaping, so joins and direction may be wrong. ` +
-        `Use the browser studio (gkurt.com/tegaki/generator) for shaped output.\n`,
+        `Use the browser studio (gkurt.com/tegaki/studio) for shaped output.\n`,
     );
   }
 

@@ -19,7 +19,7 @@ You can skip it for plain Latin text without ligatures.
 
 ## Bundle requirements
 
-The shaper resolves glyph ids that the bundle was generated with. To get variant glyphs (ligatures, contextual forms) into the bundle, regenerate it with the relevant OpenType features enabled — the [generator](/tegaki/generator/) lets you toggle features per font. The bundle's `features` array records which tags it ships, and the shaper enables those during shaping.
+The shaper resolves glyph ids that the bundle was generated with. To get variant glyphs (ligatures, contextual forms) into the bundle, regenerate it with the relevant OpenType features enabled — the [studio](/tegaki/studio/) lets you toggle features per font. The bundle's `features` array records which tags it ships, and the shaper enables those during shaping.
 
 If the bundle has no `glyphDataById` map, the shaper factory declines and the renderer falls back to the char-keyed path automatically.
 

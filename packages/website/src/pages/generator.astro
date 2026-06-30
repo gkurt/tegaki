@@ -1,16 +1,20 @@
 ---
-import { GeneratorApp } from '../components/preview/GeneratorApp';
-import '../styles/global.css';
+// The interactive tool was renamed /generator → /studio. This page stays behind
+// as a redirect so old links (and the published package's docs URLs) keep working.
+const target = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/studio/`;
 ---
 
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Generator - Tegaki</title>
-    <link rel="icon" type="image/svg+xml" href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/favicon.svg`} />
+    <meta http-equiv="refresh" content={`0; url=${target}`} />
+    <link rel="canonical" href={target} />
+    <title>Redirecting to Studio - Tegaki</title>
+    <script is:inline define:vars={{ target }}>
+      window.location.replace(target);
+    </script>
   </head>
   <body>
-    <GeneratorApp client:only="react" />
+    <p>The generator moved to <a href={target}>the Tegaki studio</a>.</p>
   </body>
 </html>

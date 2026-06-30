@@ -281,7 +281,7 @@ export function TextPreview({
           <button
             type="button"
             onClick={() => {
-              const href = window.location.href.replace('/generator', '/preview');
+              const href = window.location.href.replace('/studio', '/preview');
               window.open(href, '_blank', 'noopener,noreferrer');
             }}
             title="Open this text in the standalone /preview page (new tab)"
