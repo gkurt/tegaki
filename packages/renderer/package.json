@@ -21,13 +21,13 @@
     "text-animation",
     "writing-animation"
   ],
-  "homepage": "https://github.com/KurtGokhan/tegaki#readme",
+  "homepage": "https://github.com/gkurt/tegaki#readme",
   "bugs": {
-    "url": "https://github.com/KurtGokhan/tegaki/issues"
+    "url": "https://github.com/gkurt/tegaki/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/KurtGokhan/tegaki.git",
+    "url": "git+ssh://git@github.com/gkurt/tegaki.git",
     "directory": "packages/renderer"
   },
   "license": "MIT",

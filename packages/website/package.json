@@ -6,7 +6,7 @@
   "description": "Documentation and demo website for Tegaki",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/KurtGokhan/tegaki.git",
+    "url": "git+ssh://git@github.com/gkurt/tegaki.git",
     "directory": "packages/website"
   },
   "imports": {

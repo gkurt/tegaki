@@ -13,7 +13,7 @@ Node is not required. All scripts, tests, and the dev server run on Bun.
 ## Setup
 
 ```bash
-git clone https://github.com/KurtGokhan/tegaki.git
+git clone https://github.com/gkurt/tegaki.git
 cd tegaki
 bun install
 ```
@@ -123,7 +123,7 @@ Keep the subject under ~72 characters. The body (optional) explains the *why*.
 
 ## Reporting bugs and requesting features
 
-Open an issue on [GitHub](https://github.com/KurtGokhan/tegaki/issues). For bugs, include:
+Open an issue on [GitHub](https://github.com/gkurt/tegaki/issues). For bugs, include:
 
 - A minimal repro (a short URL to the [interactive generator](https://gkurt.com/tegaki/generator/) with URL state is often ideal — see the "Testing the preview app via URL state" section of [AGENTS.md](AGENTS.md))
 - Expected vs. actual behavior

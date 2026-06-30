@@ -21,7 +21,7 @@ export default defineConfig({
       logo: { src: './src/assets/tegaki.svg', alt: 'Tegaki logo' },
       head: [{ tag: 'meta', attrs: { property: 'og:image', content: '/tegaki/tegaki-card.png' } }],
       social: [
-        { icon: 'github', label: 'GitHub', href: 'https://github.com/KurtGokhan/tegaki' },
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/gkurt/tegaki' },
         { icon: 'twitter', label: 'Twitter', href: 'https://twitter.com/gkurttech' },
         { icon: 'npm', label: 'npm', href: 'https://www.npmjs.com/package/tegaki' },
       ],

@@ -6,7 +6,7 @@ Tegaki (手書き) turns any font into animated handwriting.
 No manual path authoring. No native dependencies. Just pick a font.
 
 [![npm](https://img.shields.io/npm/v/tegaki)](https://www.npmjs.com/package/tegaki)
-[![license](https://img.shields.io/npm/l/tegaki)](https://github.com/KurtGokhan/tegaki/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/tegaki)](https://github.com/gkurt/tegaki/blob/main/LICENSE)
 
 <br clear="both" />
 
@@ -91,7 +91,7 @@ Visit **[gkurt.com/tegaki](https://gkurt.com/tegaki)** for full documentation:
 ## Integrations
 
 - [Sli.dev](https://sli.dev/) - Create presentations using markdown. [See Tegaki integration example](https://andreas-taranetz.github.io/slidev-addon-animated-text/)
-- [Remotion](https://www.remotion.dev/) - Create videos programmatically with React. [See Tegaki integration example](https://github.com/KurtGokhan/tegaki/blob/gokhan/support-font-features/examples/remotion/src/Root.tsx)
+- [Remotion](https://www.remotion.dev/) - Create videos programmatically with React. [See Tegaki integration example](https://github.com/gkurt/tegaki/blob/gokhan/support-font-features/examples/remotion/src/Root.tsx)
 
 ## License
 

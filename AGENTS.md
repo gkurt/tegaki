@@ -6,7 +6,7 @@ Monorepo for generating and rendering handwriting animations from any font.
 
 - **Runtime**: Bun
 - **Language**: TypeScript (strict mode, ESNext, nodenext modules)
-- **CLI framework**: [Padrone](https://github.com/KurtGokhan/padrone) - schema-first CLI with Zod v4
+- **CLI framework**: [Padrone](https://github.com/gkurt/padrone) - schema-first CLI with Zod v4
 - **Font parsing**: opentype.js
 - **Linter/Formatter**: Biome (2-space indent, single quotes, 140 line width)
 - **Testing**: Bun's built-in test runner
