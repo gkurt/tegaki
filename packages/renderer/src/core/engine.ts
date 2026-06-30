@@ -20,6 +20,7 @@ import {
 import { ensureFont } from '../lib/font.ts';
 import type { BundleShaper } from '../lib/shaper.ts';
 import { type SubdividedStroke, subdivideStroke } from '../lib/strokeCache.ts';
+import { placementsToSvg, type SvgGlyphPlacement } from '../lib/svgExport.ts';
 import type { TextLayout } from '../lib/textLayout.ts';
 import { applyShaperPositions, computeLayoutBbox, computeTextLayout } from '../lib/textLayout.ts';
 import type { Timeline, TimelineConfig, TimelineEntry } from '../lib/timeline.ts';
@@ -284,6 +285,100 @@ export class TegakiEngine {
 
   get element(): HTMLElement {
     return this._rootEl;
+  }
+
+  /**
+   * The backing `<canvas>` strokes are drawn onto. Exposed so export tooling
+   * can snapshot the current frame (PNG) or sample it over time (WebM/GIF)
+   * without reaching through the DOM. Reflects the latest `_render()`.
+   */
+  get canvas(): HTMLCanvasElement {
+    return this._canvasEl;
+  }
+
+  /**
+   * Serialize the current text to an SVG string, reusing the engine's measured
+   * layout and timeline so glyph positions match the canvas render exactly.
+   *
+   * `animated: true` (default) emits a self-drawing SVG — each stroke is
+   * revealed through a dashed-centerline mask over its own timeline window, so
+   * the file draws itself when opened. `animated: false` emits the finished
+   * artwork (every stroke fully drawn).
+   *
+   * `loop: true` emits a looping CSS-keyframe animation (constant width) that
+   * draws, holds, fades, and repeats forever — reliable in `<img>`-embedded
+   * SVGs (e.g. a README hero). Implies `animated`.
+   *
+   * Variable stroke width (pressureWidth) is honoured in single-play mode (not
+   * `loop`). Glow, wobble, gradient, taper, and clip-to-text are not modelled
+   * in the SVG output.
+   */
+  toSVG(opts: { animated?: boolean; loop?: boolean } = {}): string {
+    const font = this._font;
+    const layout = this._layout;
+    const fontSize = this._fontSize;
+    const canvas = this._canvasEl;
+    const width = canvas.offsetWidth;
+    const height = canvas.offsetHeight;
+
+    if (!font?.glyphData || !layout || !fontSize) {
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"></svg>`;
+    }
+
+    const padH = PADDING_H_EM * fontSize;
+    const lineHeight = this._lineHeight;
+    const padV = Math.max(MIN_PADDING_V_EM * fontSize, (MIN_LINE_HEIGHT_EM * fontSize - lineHeight) / 2);
+    const emHeightPx = ((font.ascender - font.descender) / font.unitsPerEm) * fontSize;
+    const halfLeading = (lineHeight - emHeightPx) / 2;
+    const scale = fontSize / font.unitsPerEm;
+    const characters = graphemes(this._text);
+
+    // Mirror _render's subdivision threshold + variable-width inputs.
+    const pressureEffect = findEffect(this._resolvedEffects, 'pressureWidth');
+    const pressure = pressureEffect ? Math.max(0, Math.min(pressureEffect.config.strength ?? 1, 1)) : 0;
+    const smoothing = this._quality?.smoothing === true;
+    const userSegmentSize = this._quality?.segmentSize;
+    const resolvedSegmentSize = userSegmentSize ?? (pressure > 0 || smoothing ? 2 : undefined);
+    const segmentLengthFU = resolvedSegmentSize != null ? resolvedSegmentSize / scale : Infinity;
+    const clipText = this._quality?.clipText;
+    const strokeScale = typeof clipText === 'number' ? clipText : 1;
+
+    const graphemeToLine = new Int32Array(characters.length).fill(-1);
+    for (let li = 0; li < layout.lines.length; li++) {
+      for (const charIdx of layout.lines[li]!) graphemeToLine[charIdx] = li;
+    }
+
+    const placements: SvgGlyphPlacement[] = [];
+    for (const entry of this._timeline.entries) {
+      if (entry.char === '\n' || !entry.hasGlyph) continue;
+      const charIdx = entry.graphemeIndex;
+      const lineIdx = graphemeToLine[charIdx] ?? -1;
+      if (lineIdx < 0) continue;
+      const glyph = (entry.glyphId !== undefined ? font.glyphDataById?.[entry.glyphId] : undefined) ?? lookupGlyphData(font, entry.char);
+      if (!glyph) continue;
+      const y = lineIdx * lineHeight;
+      const lineLeftEm = layout.lineLefts?.[lineIdx];
+      const x =
+        entry.xOffsetEm !== undefined && lineLeftEm !== undefined
+          ? (lineLeftEm + entry.xOffsetEm) * fontSize
+          : (layout.charOffsets[charIdx] ?? 0) * fontSize;
+      const glyphY = y + halfLeading + (entry.yOffsetEm ?? 0) * fontSize;
+      placements.push({ glyph, ox: padH + x, oy: padV + glyphY, scale, ascender: font.ascender, offset: entry.offset });
+    }
+
+    return placementsToSvg(placements, {
+      width,
+      height,
+      lineCap: font.lineCap,
+      color: this._currentColor || 'black',
+      pressure,
+      segmentLengthFU,
+      smoothing,
+      strokeScale,
+      animated: opts.animated ?? true,
+      loop: opts.loop ?? false,
+      totalDuration: this._timeline.totalDuration,
+    });
   }
 
   play(): void {

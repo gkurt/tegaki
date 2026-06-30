@@ -35,6 +35,7 @@
     "@tailwindcss/vite": "^4.3.1",
     "astro": "^7.0.3",
     "fflate": "^0.8.3",
+    "gifenc": "^1.0.3",
     "harfbuzzjs": "^1.4.0",
     "opentype.js": "^2.0.0",
     "react": "^19.2.7",

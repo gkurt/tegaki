@@ -3,6 +3,7 @@ import type { TegakiBundle, TegakiRendererHandle, TimeControlProp } from 'tegaki
 import type { ParsedFontInfo, PipelineOptions, PipelineResult } from 'tegaki-generator';
 import { type CustomEffect, DEFAULT_EFFECTS_STATE, EFFECT_DEFAULTS, type EffectsState, type TimeMode } from '../url-state.ts';
 import { EASING_PRESETS, getEasingFn, TEXT_PRESETS } from './constants.ts';
+import { ExportPanel } from './ExportPanel.tsx';
 import { CustomEffectControls, EffectColor, EffectSlider, GradientColorStops } from './effect-controls.tsx';
 import { TegakiTextPreview } from './TegakiTextPreview.tsx';
 import { buildEffects, parseStaggerInputs } from './utils.ts';
@@ -1038,6 +1039,8 @@ export function TextPreview({
           >
             Effects{activeEffectCount > 0 ? ` (${activeEffectCount})` : ''}
           </button>
+
+          <ExportPanel getEngine={() => rendererRef.current?.engine ?? null} text={text} onExportStart={() => setPlaying(false)} />
         </div>
       </div>
     </div>
