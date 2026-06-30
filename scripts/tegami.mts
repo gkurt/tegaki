@@ -3,12 +3,21 @@ import { createCli } from 'tegami/cli';
 import { github } from 'tegami/plugins/github';
 
 // Tegami versioning + publishing config.
-// - Only `tegaki` (packages/renderer) is published. Everything else is
-//   private/unpublished, so we keep it out of the version graph entirely.
+// - Only `tegaki` (packages/renderer) is published; every other package is
+//   private and never published.
+// - All packages live in one `tegaki` group with `syncBump`, so they stay on a
+//   single shared version: bumping the published renderer bumps everything else
+//   by the same amount (replacing the old scripts/sync-versions.ts step). They
+//   are aligned today, so syncBump keeps them aligned going forward.
 // - Bun is the registry client (Tegami runs prepack via `bun run` and packs
 //   with `bun pm pack`, then publishes the tarball with `npm publish`).
 const paper = tegami({
-  ignore: [/^@tegaki\//, 'tegaki-generator', 'hyperframes'],
+  groups: {
+    tegaki: {
+      syncBump: true,
+    },
+  },
+  packages: () => ({ group: 'tegaki' }),
   npm: {
     client: 'bun',
   },
