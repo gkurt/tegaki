@@ -26,6 +26,15 @@ const paper = tegami({
       repo: 'gkurt/tegaki',
       versionPr: {
         base: 'main',
+        // Put the release version in the PR title (e.g. "chore: release v0.20.0"),
+        // mirroring the old Changesets workflow. Every package shares one version
+        // via the group, so the published renderer's bumped version stands in for
+        // the whole release.
+        create({ draft }) {
+          const pkg = this.graph.get('npm:tegaki');
+          const version = pkg ? draft.getPackageDraft('npm:tegaki')?.bumpVersion(pkg) : undefined;
+          return { title: version ? `chore: release v${version}` : 'chore: release' };
+        },
       },
     }),
   ],
