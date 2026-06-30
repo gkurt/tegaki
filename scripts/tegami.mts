@@ -30,9 +30,13 @@ const paper = tegami({
         // mirroring the old Changesets workflow. Every package shares one version
         // via the group, so the published renderer's bumped version stands in for
         // the whole release.
-        create({ draft }) {
-          const pkg = this.graph.get('npm:tegaki');
-          const version = pkg ? draft.getPackageDraft('npm:tegaki')?.bumpVersion(pkg) : undefined;
+        //
+        // `create` runs AFTER the draft is applied, so the graph already holds the
+        // bumped versions — read the new version directly. Do NOT call
+        // `bumpVersion` here: the graph is post-apply, so it would bump a second
+        // time (e.g. 0.20.0 -> 0.21.0).
+        create() {
+          const version = this.graph.get('npm:tegaki')?.version;
           return { title: version ? `chore: release v${version}` : 'chore: release' };
         },
       },
