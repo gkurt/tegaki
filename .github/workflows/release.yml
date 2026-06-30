@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Version & publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - uses: oven-sh/setup-bun@v2
+      - run: bun i
+
+      # `tegami ci` versions when pending .tegami/*.md changelogs exist (opening
+      # a "Version Packages" PR via the github plugin), otherwise it publishes
+      # from the committed .tegami/publish-lock.yaml. Bun runs the renderer's
+      # prepack (build + asset copy) and packs the tarball; npm publish ships it
+      # with provenance via the id-token permission.
+      - name: Version & publish
+        run: bun run tegami ci
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

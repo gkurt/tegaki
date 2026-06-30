@@ -1,1 +1,1 @@
-See [CHANGELOG](https://github.com/KurtGokhan/tegaki/blob/main/packages/renderer/CHANGELOG.md) for details.
+See [CHANGELOG](https://github.com/gkurt/tegaki/blob/main/packages/renderer/CHANGELOG.md) for details.
