@@ -41,6 +41,23 @@ function App() {
 
 That's it. The text draws itself stroke by stroke with natural timing.
 
+## Command Line
+
+Don't want to wire up a component? Generate an animated handwriting SVG straight from your terminal — nothing to install:
+
+```bash
+npx tegaki "Tegaki is awesome"
+```
+
+This writes a self-drawing, looping `tegaki-is-awesome.svg` — drop it into a README, a slide, or any page. Pick a font, mode, size, or color:
+
+```bash
+npx tegaki "Hello World" --font tangerine --mode once -o hello.svg
+npx tegaki "ABC" --stagger 80% --size 140 --color "#222"
+```
+
+`--mode` is `loop` (repeats forever, the default), `once` (draws itself a single time), or `static` (finished artwork). Run `npx tegaki --help` for every option and `--list-fonts` for the bundled fonts. The CLI emits SVG only — for PNG, GIF, or WebM use the [interactive studio](https://gkurt.com/tegaki/generator/).
+
 ## Framework Support
 
 Tegaki works with all major frameworks:

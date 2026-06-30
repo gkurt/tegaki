@@ -31,6 +31,9 @@
     "directory": "packages/renderer"
   },
   "license": "MIT",
+  "bin": {
+    "tegaki": "./dist/cli.mjs"
+  },
   "author": {
     "name": "Gokhan Kurt",
     "email": "krtgkn@gmail.com",

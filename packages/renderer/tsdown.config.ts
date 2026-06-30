@@ -97,6 +97,7 @@ function fontBundlePlugin() {
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
+    cli: 'src/cli.ts',
     'core/index': 'src/core/index.ts',
     'react/index': 'src/react/index.ts',
     // Solid is shipped as source (compiled by the consumer's solid plugin via
