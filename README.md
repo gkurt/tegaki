@@ -11,7 +11,7 @@ No manual path authoring. No native dependencies. Just pick a font.
 <br clear="both" />
 
 <p align="center">
-  <img src="media/hello-world.svg" alt="Hello World handwriting animation" width="500" />
+  <img src="media/hello-world.svg" alt="Tegaki is awesome handwriting animation" width="560" />
 </p>
 
 ---
