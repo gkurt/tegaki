@@ -1,0 +1,11 @@
+# Generated Editframe outputs
+*.mp4
+*.mov
+*.webm
+*.png
+*.jpg
+*.jpeg
+
+# Local build/dependency outputs
+dist/
+node_modules/
