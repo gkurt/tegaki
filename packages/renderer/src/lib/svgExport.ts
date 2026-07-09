@@ -1,8 +1,6 @@
 import type { LineCap, TegakiGlyphData } from '../types.ts';
 import { subdivideStroke } from './strokeCache.ts';
 
-type Stroke = TegakiGlyphData['s'][number];
-
 /**
  * One positioned glyph ready to serialize. Coordinates are the engine's ctx
  * space with the pad translation already folded into `ox`/`oy`, so an absolute

@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 :root {
   color-scheme: dark;
@@ -75,7 +75,7 @@ body {
 
 .writing-line path {
   fill: none;
-  stroke: url('#ink-gradient');
+  stroke: url("#ink-gradient");
   stroke: #8dd8ff;
   stroke-width: 20;
   stroke-linecap: round;
@@ -117,10 +117,13 @@ body {
 .grid-bg {
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(rgba(141, 216, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(141, 216, 255, 0.08) 1px, transparent 1px),
+  background-image:
+    linear-gradient(rgba(141, 216, 255, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(141, 216, 255, 0.08) 1px, transparent 1px),
     radial-gradient(circle at 75% 50%, rgba(255, 79, 184, 0.22), transparent 34%);
-  background-size: 72px 72px, 72px 72px, 100% 100%;
+  background-size:
+    72px 72px,
+    72px 72px,
+    100% 100%;
   mask-image: linear-gradient(90deg, transparent, black 14%, black 86%, transparent);
 }
 
@@ -178,7 +181,8 @@ body {
 .final-glow {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 50% 54%, rgba(141, 216, 255, 0.34), transparent 32%),
+  background:
+    radial-gradient(circle at 50% 54%, rgba(141, 216, 255, 0.34), transparent 32%),
     radial-gradient(circle at 50% 54%, rgba(255, 79, 184, 0.22), transparent 52%);
   animation: pulse 3.4s ease-in-out both;
 }
@@ -245,7 +249,8 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.86;
     transform: scale(1);
   }

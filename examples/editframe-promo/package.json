@@ -4,10 +4,12 @@
   "description": "",
   "type": "module",
   "scripts": {
-    "start": "editframe preview"
+    "start": "editframe preview",
+    "render": "editframe render . -o tegaki-promo.mp4 --fps 30 --scale 0.5"
   },
   "dependencies": {
     "@editframe/cli": "0.58.3",
+    "@editframe/elements": "0.58.3",
     "@editframe/react": "0.58.3",
     "@editframe/vite-plugin": "0.58.3",
     "@tailwindcss/vite": "^4.0.0",

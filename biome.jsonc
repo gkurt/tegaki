@@ -69,7 +69,8 @@
         "noArrayIndexKey": "off",
         "noAssignInExpressions": "off",
         "noConfusingVoidType": "off",
-        "noExplicitAny": "off"
+        "noExplicitAny": "off",
+        "noDuplicateProperties": "off"
       },
       "style": {
         "noParameterAssign": "off",

@@ -1,5 +1,5 @@
-import React from 'react';
 import { Text, Timegroup } from '@editframe/react';
+import type React from 'react';
 
 const sceneClass = 'absolute inset-0 overflow-hidden bg-[#080711] text-white';
 
@@ -78,13 +78,24 @@ export const Video = () => {
             RENDER EVERYWHERE
           </Text>
           <div className="mt-14 grid grid-cols-3 gap-8">
-            <FeatureCard title="Framework adapters" body="React, Svelte, Vue, Solid, Astro, Web Components, and vanilla JavaScript." index={0} />
-            <FeatureCard title="Built for timelines" body="Control playback with time props, CSS variables, and deterministic preview URLs." index={1} />
+            <FeatureCard
+              title="Framework adapters"
+              body="React, Svelte, Vue, Solid, Astro, Web Components, and vanilla JavaScript."
+              index={0}
+            />
+            <FeatureCard
+              title="Built for timelines"
+              body="Control playback with time props, CSS variables, and deterministic preview URLs."
+              index={1}
+            />
             <FeatureCard title="International fonts" body="Latin, Hebrew, Arabic, and Japanese bundles ship ready to import." index={2} />
           </div>
           <div className="code-card absolute bottom-24 left-24 right-24 rounded-[44px] border border-white/10 bg-[#05040a]/85 p-10 text-[34px] leading-[1.45] text-[#d7f8ff] shadow-2xl">
-            <span className="text-[#8dd8ff]">import</span> {'{ TegakiRenderer }'} <span className="text-[#8dd8ff]">from</span> 'tegaki/react';<br />
-            <span className="text-[#ffb7dc]">&lt;TegakiRenderer</span> text="Ship beautiful handwriting" <span className="text-[#ffb7dc]">/&gt;</span>
+            <span className="text-[#8dd8ff]">import</span> {'{ TegakiRenderer }'} <span className="text-[#8dd8ff]">from</span>{' '}
+            'tegaki/react';
+            <br />
+            <span className="text-[#ffb7dc]">&lt;TegakiRenderer</span> text="Ship beautiful handwriting"{' '}
+            <span className="text-[#ffb7dc]">/&gt;</span>
           </div>
         </div>
       </Timegroup>
