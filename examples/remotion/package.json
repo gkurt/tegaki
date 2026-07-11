@@ -13,12 +13,12 @@
     "upgrade": "remotion upgrade"
   },
   "dependencies": {
-    "@remotion/cli": "4.0.484",
-    "@remotion/fonts": "4.0.484",
+    "@remotion/cli": "4.0.488",
+    "@remotion/fonts": "4.0.488",
     "harfbuzzjs": "^1.4.0",
     "react": "^19",
     "react-dom": "^19",
-    "remotion": "4.0.484",
+    "remotion": "4.0.488",
     "tegaki": "workspace:*",
     "zod": "4.4.3"
   },

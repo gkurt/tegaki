@@ -209,7 +209,7 @@
     "@types/react": "^19.2.17",
     "magic-string": "^0.30.21",
     "tegaki-generator": "workspace:*",
-    "tsdown": "^0.22.3",
+    "tsdown": "^0.22.4",
     "typescript": "^6.0.3"
   }
 }
