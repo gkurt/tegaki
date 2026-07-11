@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scene crossfade — driven by CSS (not JS timing) so it survives export.
+   The out-phase is anchored to --ef-transition-out-start, which editframe sets
+   on each scene timegroup from the sequence `overlapMs`. */
+@keyframes sceneIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sceneOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}

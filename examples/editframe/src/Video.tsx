@@ -1,5 +1,6 @@
-import { Text, Timegroup, useTimingInfo } from '@editframe/react';
-import type React from 'react';
+import { Text, Timegroup } from '@editframe/react';
+import { type CSSProperties, type ElementRef, type RefObject, useEffect, useRef } from 'react';
+import type { TegakiBundle, TegakiEngine } from 'tegaki/react';
 import { fonts } from './fonts';
 import { Ink } from './Handwriting';
 
@@ -20,51 +21,92 @@ const inkGradient = (colors: string[]) => ({
 });
 
 /**
+ * Crossfade the whole scene in CSS (not JS timing) so it survives export. The
+ * out-phase is anchored to `--ef-transition-out-start`, which editframe sets on
+ * each scene timegroup from the sequence's `overlapMs`.
+ */
+const SCENE_FADE: CSSProperties = {
+  animation: 'sceneIn 0.4s ease-out both, sceneOut 0.4s ease-in var(--ef-transition-out-start) both',
+};
+
+/**
  * Map a scene's 0–1 progress onto a word's 0–1 writing progress across a
  * sub-window `[start, end]`. Before `start` nothing is drawn; after `end` the
- * word is fully written and holds. This is what lets us drive Tegaki purely by
- * progress — the word always finishes writing at `end` of the scene, whatever
- * its intrinsic stroke duration.
+ * word is fully written and holds. Driving Tegaki purely by progress means a
+ * word always finishes writing at `end` of the scene, whatever its intrinsic
+ * stroke duration.
  */
 function writeWindow(pct: number, start: number, end: number) {
   return Math.max(0, Math.min(1, (pct - start) / (end - start)));
 }
 
-/** Opacity envelope: fade in over the first `fade`s, out over the last `fade`s. */
-function edgeFade(t: number, dur: number, fade = 0.45) {
-  return Math.max(0, Math.min(1, t / fade, (dur - t) / fade));
-}
+type TimegroupEl = ElementRef<typeof Timegroup>;
 
 /**
- * `useTimingInfo()` returns a React-19-style `RefObject<EFTimegroup | null>`,
- * but this project pins React 18 types whose `<Timegroup ref>` prop rejects the
- * `| null`. Runtime is unaffected; this reconciles the types skew in one place
- * (the element type is derived from `Timegroup`, so no extra import is needed).
+ * editframe's per-frame hook lives on the timegroup element but isn't in its
+ * public d.ts. The callback receives one frame-info object (not positional
+ * args); `percentComplete` is the scene's 0–1 playback position.
  */
-function useSceneTiming() {
-  const info = useTimingInfo();
-  return { ...info, ref: info.ref as React.Ref<React.ElementRef<typeof Timegroup>> };
+type FrameInfo = { ownCurrentTimeMs: number; durationMs: number; percentComplete: number };
+type FrameTaskHost = {
+  addFrameTask?: (cb: (frame: FrameInfo) => void) => void;
+  removeFrameTask?: (cb: (frame: FrameInfo) => void) => void;
+};
+
+/**
+ * Drive every Tegaki word in a scene from editframe's `addFrameTask`, which
+ * fires synchronously on every rendered frame — in the preview *and*, crucially,
+ * during export. Each frame we push the word's writing progress straight into
+ * the engine via `update({ time })`, which redraws the canvas synchronously so
+ * the export capture sees it. `windows[i]` is engine `i`'s `[start, end]`
+ * progress sub-range within the scene.
+ */
+function useInkFrameDriver(
+  tgRef: RefObject<TimegroupEl | null>,
+  enginesRef: RefObject<(TegakiEngine | null)[]>,
+  windows: readonly (readonly [number, number])[],
+) {
+  useEffect(() => {
+    const host = tgRef.current as unknown as FrameTaskHost | null;
+    if (!host?.addFrameTask) return;
+    const task = ({ percentComplete }: FrameInfo) => {
+      const engines = enginesRef.current ?? [];
+      for (let i = 0; i < windows.length; i++) {
+        const [start, end] = windows[i];
+        engines[i]?.update({
+          time: { mode: 'controlled', value: writeWindow(percentComplete, start, end), unit: 'progress' },
+        });
+      }
+    };
+    host.addFrameTask(task);
+    return () => host.removeFrameTask?.(task);
+  }, [tgRef, enginesRef, windows]);
 }
 
 /* -------------------------------------------------------------------- scenes */
 
 /** 1 — Wordmark. "Tegaki" writes itself, then the tagline fades up. */
+const INTRO_WINDOWS = [[0.05, 0.62]] as const;
+
 const SceneIntro = () => {
-  const { ref, ownCurrentTimeMs, durationMs, percentComplete } = useSceneTiming();
-  const t = ownCurrentTimeMs / 1000;
-  const dur = durationMs / 1000;
+  const tg = useRef<TimegroupEl>(null);
+  const engines = useRef<(TegakiEngine | null)[]>([]);
+  useInkFrameDriver(tg, engines, INTRO_WINDOWS);
+
   return (
     <Timegroup
-      ref={ref}
+      ref={tg}
       mode="fixed"
       duration="4.5s"
       className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-violet-600 via-fuchsia-500 to-orange-400"
     >
-      <div style={{ opacity: edgeFade(t, dur) }} className="flex flex-col items-center">
+      <div style={SCENE_FADE} className="flex flex-col items-center">
         <Ink
+          onEngine={(e) => {
+            engines.current[0] = e;
+          }}
           font={fonts.caveat}
           text="Tegaki"
-          progress={writeWindow(percentComplete, 0.05, 0.62)}
           effects={WHITE_INK}
           quality={QUALITY}
           style={{ fontSize: 260, color: 'white', lineHeight: 1 }}
@@ -72,11 +114,7 @@ const SceneIntro = () => {
         <Text
           duration="4.5s"
           className="mt-2 text-white/90 text-5xl font-light tracking-tight"
-          style={{
-            opacity: 0,
-            animation: 'fadeUp 0.8s ease-out both',
-            animationDelay: '1.6s',
-          }}
+          style={{ opacity: 0, animation: 'fadeUp 0.8s ease-out both', animationDelay: '1.6s' }}
         >
           handwriting, animated.
         </Text>
@@ -86,18 +124,21 @@ const SceneIntro = () => {
 };
 
 /** 2 — The hook: one big word drawn stroke-by-stroke, slow enough to admire. */
+const HERO_WINDOWS = [[0.12, 0.78]] as const;
+
 const SceneHero = () => {
-  const { ref, ownCurrentTimeMs, durationMs, percentComplete } = useSceneTiming();
-  const t = ownCurrentTimeMs / 1000;
-  const dur = durationMs / 1000;
+  const tg = useRef<TimegroupEl>(null);
+  const engines = useRef<(TegakiEngine | null)[]>([]);
+  useInkFrameDriver(tg, engines, HERO_WINDOWS);
+
   return (
     <Timegroup
-      ref={ref}
+      ref={tg}
       mode="fixed"
       duration="5.5s"
       className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-sky-500 via-cyan-400 to-emerald-400"
     >
-      <div style={{ opacity: edgeFade(t, dur) }} className="flex flex-col items-center">
+      <div style={SCENE_FADE} className="flex flex-col items-center">
         <Text
           duration="5.5s"
           className="mb-2 text-white/85 text-4xl font-medium tracking-wide"
@@ -106,12 +147,14 @@ const SceneHero = () => {
           every stroke, in order, drawn by hand
         </Text>
         <Ink
-          font={fonts.parisienne}
+          onEngine={(e) => {
+            engines.current[0] = e;
+          }}
+          font={fonts.italianno}
           text="Hello!"
-          progress={writeWindow(percentComplete, 0.12, 0.78)}
           effects={WHITE_INK}
           quality={QUALITY}
-          style={{ fontSize: 300, color: 'white', lineHeight: 1 }}
+          style={{ fontSize: 320, color: 'white', lineHeight: 1 }}
         />
       </div>
     </Timegroup>
@@ -119,33 +162,28 @@ const SceneHero = () => {
 };
 
 /** 3 — Multi-script: greetings in four writing systems on a clean paper panel. */
-const SceneScripts = () => {
-  const { ref, ownCurrentTimeMs, durationMs, percentComplete } = useSceneTiming();
-  const t = ownCurrentTimeMs / 1000;
-  const dur = durationMs / 1000;
+type ScriptRow = { font: TegakiBundle; text: string; label: string; colors: string[]; start: number; direction?: 'ltr' | 'rtl' };
+const SCRIPT_ROWS: ScriptRow[] = [
+  { font: fonts.caveat, text: 'Hello', label: 'Latin', colors: ['#d946ef', '#ec4899'], start: 0.05 },
+  { font: fonts.kleeOne, text: 'こんにちは', label: '日本語', colors: ['#0ea5e9', '#06b6d4'], start: 0.18 },
+  { font: fonts.nanumPenScript, text: '안녕하세요', label: '한국어', colors: ['#f59e0b', '#f97316'], start: 0.31 },
+  { font: fonts.suezOne, text: 'שלום', label: 'עברית', colors: ['#7c3aed', '#8b5cf6'], start: 0.44, direction: 'rtl' },
+];
+const SCRIPT_WINDOWS = SCRIPT_ROWS.map((r) => [r.start, r.start + 0.38] as const);
 
-  const rows: {
-    font: (typeof fonts)[keyof typeof fonts];
-    text: string;
-    label: string;
-    colors: string[];
-    start: number;
-    direction?: 'ltr' | 'rtl';
-  }[] = [
-    { font: fonts.caveat, text: 'Hello', label: 'Latin', colors: ['#d946ef', '#ec4899'], start: 0.05 },
-    { font: fonts.kleeOne, text: 'こんにちは', label: '日本語', colors: ['#0ea5e9', '#06b6d4'], start: 0.18 },
-    { font: fonts.nanumPenScript, text: '안녕하세요', label: '한국어', colors: ['#f59e0b', '#f97316'], start: 0.31 },
-    { font: fonts.suezOne, text: 'שלום', label: 'עברית', colors: ['#7c3aed', '#8b5cf6'], start: 0.44, direction: 'rtl' },
-  ];
+const SceneScripts = () => {
+  const tg = useRef<TimegroupEl>(null);
+  const engines = useRef<(TegakiEngine | null)[]>([]);
+  useInkFrameDriver(tg, engines, SCRIPT_WINDOWS);
 
   return (
     <Timegroup
-      ref={ref}
+      ref={tg}
       mode="fixed"
       duration="8s"
       className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 to-slate-200"
     >
-      <div style={{ opacity: edgeFade(t, dur) }} className="flex flex-col items-center w-full">
+      <div style={SCENE_FADE} className="flex flex-col items-center w-full">
         <Text
           duration="8s"
           className="mb-10 text-slate-800 text-5xl font-semibold"
@@ -154,14 +192,16 @@ const SceneScripts = () => {
           Any language. Any script.
         </Text>
         <div className="grid grid-cols-2 gap-x-24 gap-y-6 items-center">
-          {rows.map((r) => (
+          {SCRIPT_ROWS.map((r, i) => (
             <div key={r.label} className="flex items-center justify-center gap-6 h-40">
               <Ink
+                onEngine={(e) => {
+                  engines.current[i] = e;
+                }}
                 font={r.font}
                 text={r.text}
                 direction={r.direction}
-                progress={writeWindow(percentComplete, r.start, r.start + 0.38)}
-                effects={inkGradient(r.colors)}
+                effects={inkGradient([...r.colors])}
                 quality={QUALITY}
                 style={{ fontSize: 120, lineHeight: 1 }}
               />
@@ -174,25 +214,26 @@ const SceneScripts = () => {
 };
 
 /** 4 — Bring your own font: the same word, three fonts, drawn together. */
-const SceneAnyFont = () => {
-  const { ref, ownCurrentTimeMs, durationMs, percentComplete } = useSceneTiming();
-  const t = ownCurrentTimeMs / 1000;
-  const dur = durationMs / 1000;
+const ANYFONT_LINES = [
+  { font: fonts.caveat, label: 'Caveat', size: 140 },
+  { font: fonts.italianno, label: 'Italianno', size: 170 },
+  { font: fonts.tangerine, label: 'Tangerine', size: 170 },
+] as const;
+const ANYFONT_WINDOWS = ANYFONT_LINES.map((_, i) => [0.1 + i * 0.06, 0.8] as const);
 
-  const lines: { font: (typeof fonts)[keyof typeof fonts]; label: string; size: number }[] = [
-    { font: fonts.caveat, label: 'Caveat', size: 140 },
-    { font: fonts.parisienne, label: 'Parisienne', size: 150 },
-    { font: fonts.tangerine, label: 'Tangerine', size: 170 },
-  ];
+const SceneAnyFont = () => {
+  const tg = useRef<TimegroupEl>(null);
+  const engines = useRef<(TegakiEngine | null)[]>([]);
+  useInkFrameDriver(tg, engines, ANYFONT_WINDOWS);
 
   return (
     <Timegroup
-      ref={ref}
+      ref={tg}
       mode="fixed"
       duration="5s"
       className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-rose-500 via-pink-500 to-purple-600"
     >
-      <div style={{ opacity: edgeFade(t, dur) }} className="flex flex-col items-center">
+      <div style={SCENE_FADE} className="flex flex-col items-center">
         <Text
           duration="5s"
           className="mb-8 text-white text-5xl font-semibold"
@@ -201,13 +242,15 @@ const SceneAnyFont = () => {
           Bring your own font.
         </Text>
         <div className="flex flex-col items-center gap-2">
-          {lines.map((l, i) => (
+          {ANYFONT_LINES.map((l, i) => (
             <div key={l.label} className="flex items-center gap-8">
               <span className="w-40 text-right text-white/60 text-2xl font-mono">{l.label}</span>
               <Ink
+                onEngine={(e) => {
+                  engines.current[i] = e;
+                }}
                 font={l.font}
                 text="beautiful"
-                progress={writeWindow(percentComplete, 0.1 + i * 0.06, 0.8)}
                 effects={WHITE_INK}
                 quality={QUALITY}
                 style={{ fontSize: l.size, color: 'white', lineHeight: 1 }}
@@ -221,22 +264,27 @@ const SceneAnyFont = () => {
 };
 
 /** 5 — Outro: 手書き ("tegaki" = handwriting) + install line and adapters. */
+const OUTRO_WINDOWS = [[0.05, 0.5]] as const;
+
 const SceneOutro = () => {
-  const { ref, ownCurrentTimeMs, durationMs, percentComplete } = useSceneTiming();
-  const t = ownCurrentTimeMs / 1000;
-  const dur = durationMs / 1000;
+  const tg = useRef<TimegroupEl>(null);
+  const engines = useRef<(TegakiEngine | null)[]>([]);
+  useInkFrameDriver(tg, engines, OUTRO_WINDOWS);
+
   return (
     <Timegroup
-      ref={ref}
+      ref={tg}
       mode="fixed"
       duration="5s"
       className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-700 via-purple-600 to-fuchsia-500"
     >
-      <div style={{ opacity: edgeFade(t, dur) }} className="flex flex-col items-center">
+      <div style={SCENE_FADE} className="flex flex-col items-center">
         <Ink
+          onEngine={(e) => {
+            engines.current[0] = e;
+          }}
           font={fonts.kleeOne}
           text="手書き"
-          progress={writeWindow(percentComplete, 0.05, 0.5)}
           effects={WHITE_INK}
           quality={QUALITY}
           style={{ fontSize: 240, color: 'white', lineHeight: 1 }}

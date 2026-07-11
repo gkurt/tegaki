@@ -9,10 +9,15 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     vitePluginEditframe({
-      root: path.join(__dirname, 'src'),
-      cacheRoot: path.join(__dirname, 'src', 'assets'),
+      root: path.join(import.meta.dirname, 'src'),
+      cacheRoot: path.join(import.meta.dirname, 'src', 'assets'),
     }),
     viteSingleFile(),
     react(),
   ],
+  // Resolve the workspace `tegaki` to its TypeScript source (same as the other
+  // in-repo examples) so this demo tracks local changes without a build/publish.
+  resolve: {
+    conditions: ['tegaki@dev', 'browser'],
+  },
 });

@@ -1,0 +1,34 @@
+{
+  "name": "@tegaki/example-editframe",
+  "version": "0.21.0",
+  "private": true,
+  "type": "module",
+  "description": "Tegaki handwriting animations composed into a promo video with Editframe.",
+  "scripts": {
+    "start": "editframe preview",
+    "dev": "editframe preview",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@editframe/cli": "0.58.4",
+    "@editframe/elements": "0.58.4",
+    "@editframe/react": "0.58.4",
+    "@editframe/vite-plugin": "0.58.4",
+    "@tailwindcss/vite": "^4.0.0",
+    "harfbuzzjs": "^1.4.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tailwindcss": "^4.0.0",
+    "tegaki": "workspace:*",
+    "vite-plugin-singlefile": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.0"
+  }
+}
