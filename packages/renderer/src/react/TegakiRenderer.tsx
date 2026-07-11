@@ -4,6 +4,8 @@ import {
   type ComponentPropsWithoutRef,
   createElement,
   type ElementType,
+  type ForwardedRef,
+  forwardRef,
   type ReactNode,
   type Ref,
   useEffect,
@@ -26,9 +28,6 @@ export interface TegakiRendererHandle {
 }
 
 interface TegakiRendererBaseProps<E extends TegakiEffects<E> = Record<string, never>> extends Omit<TegakiEngineOptions, 'effects'> {
-  /** Imperative handle ref for playback controls and DOM access. */
-  ref?: Ref<TegakiRendererHandle>;
-
   /** Children coerced to string. Strings and numbers are kept; everything else is ignored. */
   children?: Coercible;
 
@@ -51,12 +50,22 @@ function reactCreateElement(tag: string, props: Record<string, any>, ...children
   return createElement(tag, { ...props, key: props['data-tegaki'] }, ...children);
 }
 
-export function TegakiRenderer<const C extends ElementType = 'div', const E extends TegakiEffects<E> = Record<string, never>>(
-  props: TegakiRendererProps<C, E>,
+/**
+ * Framework-agnostic handwriting renderer for React. Accepts a `ref` exposing
+ * the imperative {@link TegakiRendererHandle} (engine + container element).
+ *
+ * Implemented with `forwardRef` (not React 19's ref-as-prop) so the handle works
+ * on React 18 as well as 19 — the declared `react: >=18` peer. The render
+ * function is inlined into `forwardRef` (so lint recognizes it as a component),
+ * and the `as` cast on the export restores the generic `C`/`E` parameters that
+ * `forwardRef` erases (the standard generic-forwardRef workaround).
+ */
+export const TegakiRenderer = forwardRef(function TegakiRendererInner<const E extends TegakiEffects<E> = Record<string, never>>(
+  props: TegakiRendererProps<ElementType, E>,
+  forwardedRef: ForwardedRef<TegakiRendererHandle>,
 ) {
   const {
     as: Tag = 'div' as ElementType,
-    ref,
     font,
     text,
     children,
@@ -150,7 +159,7 @@ export function TegakiRenderer<const C extends ElementType = 'div', const E exte
 
   // Imperative handle
   useImperativeHandle(
-    ref,
+    forwardedRef,
     () => ({
       get engine() {
         return engineRef.current;
@@ -166,4 +175,6 @@ export function TegakiRenderer<const C extends ElementType = 'div', const E exte
   const mergedStyle = { ...rootStyle, ...elementProps.style };
 
   return createElement(Tag, { ...rootAttrs, ...elementProps, ref: containerRef, style: mergedStyle } as any, content);
-}
+}) as <const C extends ElementType = 'div', const E extends TegakiEffects<E> = Record<string, never>>(
+  props: TegakiRendererProps<C, E> & { ref?: Ref<TegakiRendererHandle> },
+) => ReactNode;
