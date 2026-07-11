@@ -61,6 +61,29 @@ describe('textToSvg', () => {
     expect(max - min).toBeGreaterThan(font.glyphData.A!.w / font.unitsPerEm); // > one em-advance in px-ish
   });
 
+  test('letterSpacing widens the layout and pushes later glyphs right', () => {
+    const tight = textToSvg('AV', font, { mode: 'static', fontSize: 100 });
+    const loose = textToSvg('AV', font, { mode: 'static', fontSize: 100, letterSpacing: 40 });
+    // The overall box is one letter-spacing gap wider (one boundary between two glyphs).
+    const w1 = Number(/width="([\d.]+)"/.exec(tight)![1]);
+    const w2 = Number(/width="([\d.]+)"/.exec(loose)![1]);
+    expect(w2 - w1).toBeCloseTo(40, 1);
+    // The rightmost ink also moves right by ~40px (the second glyph shifted).
+    const maxTight = Math.max(...[...tight.matchAll(/x1="([\d.]+)"/g)].map((m) => Number(m[1])));
+    const maxLoose = Math.max(...[...loose.matchAll(/x1="([\d.]+)"/g)].map((m) => Number(m[1])));
+    expect(maxLoose - maxTight).toBeCloseTo(40, 1);
+  });
+
+  test('letterSpacing does not shift the first glyph on a line', () => {
+    // Spacing is inserted between units, never before the first — so the
+    // leftmost ink stays put regardless of letter-spacing.
+    const tight = textToSvg('AV', font, { mode: 'static', fontSize: 100 });
+    const loose = textToSvg('AV', font, { mode: 'static', fontSize: 100, letterSpacing: 40 });
+    const minTight = Math.min(...[...tight.matchAll(/x1="([\d.]+)"/g)].map((m) => Number(m[1])));
+    const minLoose = Math.min(...[...loose.matchAll(/x1="([\d.]+)"/g)].map((m) => Number(m[1])));
+    expect(minLoose).toBeCloseTo(minTight, 1);
+  });
+
   test('a newline produces a two-line layout (taller box)', () => {
     const one = textToSvg('Ab', font, { mode: 'static' });
     const two = textToSvg('A\nb', font, { mode: 'static' });

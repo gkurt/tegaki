@@ -133,6 +133,8 @@ export function StandaloneTextPreview() {
         showOverlay={state.showOverlay}
         fontSizePx={state.fontSizePx}
         lineHeightRatio={state.lineHeightRatio}
+        letterSpacingPx={state.letterSpacingPx}
+        useShaper={state.useShaper}
         onReady={handleReady}
       />
     </div>

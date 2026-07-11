@@ -63,6 +63,8 @@ export interface TegakiTextPreviewProps {
   showOverlay?: boolean;
   fontSizePx?: number;
   lineHeightRatio?: number;
+  /** CSS `letter-spacing` in px — inferred by the renderer and applied to glyph positions. */
+  letterSpacingPx?: number;
   className?: string;
   style?: React.CSSProperties;
   /**
@@ -99,6 +101,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     showOverlay,
     fontSizePx = 128,
     lineHeightRatio = 1.5,
+    letterSpacingPx = 0,
     className,
     style,
     resultsCache,
@@ -331,7 +334,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     <TegakiRenderer
       ref={ref}
       className={className}
-      style={{ fontSize: `${fontSizePx}px`, lineHeight: lineHeightRatio, ...style }}
+      style={{ fontSize: `${fontSizePx}px`, lineHeight: lineHeightRatio, letterSpacing: `${letterSpacingPx}px`, ...style }}
       text={text}
       time={time}
       font={fontBundle}

@@ -49,6 +49,17 @@ function parsePercentage(s: string): number | null {
   return Number.isFinite(num) ? num / 100 : null;
 }
 
+/**
+ * Parse a computed CSS `letter-spacing` value into pixels. `getComputedStyle`
+ * returns either `"normal"` (→ 0) or a resolved pixel length like `"2px"`.
+ * Returns 0 for anything unparseable.
+ */
+function parseLetterSpacing(value: string): number {
+  if (!value || value === 'normal') return 0;
+  const n = Number.parseFloat(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function resolveTimeControl(prop: TimeControlProp): TimeControlMode[keyof TimeControlMode] {
   if (prop == null) return { mode: 'uncontrolled' };
   if (typeof prop === 'number') return { mode: 'controlled', value: prop };
@@ -131,6 +142,7 @@ export class TegakiEngine {
   private _fontSize = 0;
   private _lineHeight = 0;
   private _currentColor = '';
+  private _letterSpacing = 0;
 
   // --- Playback state ---
   private _internalTime = 0;
@@ -597,6 +609,7 @@ export class TegakiEngine {
     const parsedLh = Number.parseFloat(styles.lineHeight);
     this._lineHeight = Number.isNaN(parsedLh) ? this._fallbackLineHeight(this._fontSize) : parsedLh;
     this._currentColor = styles.color;
+    this._letterSpacing = parseLetterSpacing(styles.letterSpacing);
   }
 
   private _updateDom(): void {
@@ -642,8 +655,8 @@ export class TegakiEngine {
   private _updateSentinelTransition(): void {
     const isCss = this._timeControl.mode === 'css';
     this._sentinelEl.style.transition = isCss
-      ? `font-size 0.001s, line-height 0.001s, color 0.001s, ${CSS_PROGRESS} 0.001s`
-      : 'font-size 0.001s, line-height 0.001s, color 0.001s';
+      ? `font-size 0.001s, line-height 0.001s, color 0.001s, letter-spacing 0.001s, ${CSS_PROGRESS} 0.001s`
+      : 'font-size 0.001s, line-height 0.001s, color 0.001s, letter-spacing 0.001s';
   }
 
   // =========================================================================
@@ -659,6 +672,7 @@ export class TegakiEngine {
     const parsedLh = Number.parseFloat(styles.lineHeight);
     const newLineHeight = Number.isNaN(parsedLh) ? this._fallbackLineHeight(newFontSize) : parsedLh;
     const newColor = styles.color;
+    const newLetterSpacing = parseLetterSpacing(styles.letterSpacing);
 
     let changed = false;
     let layoutChanged = false;
@@ -680,6 +694,11 @@ export class TegakiEngine {
     }
     if (newColor !== this._currentColor) {
       this._currentColor = newColor;
+      changed = true;
+    }
+    if (newLetterSpacing !== this._letterSpacing) {
+      this._letterSpacing = newLetterSpacing;
+      layoutChanged = true;
       changed = true;
     }
 
@@ -707,6 +726,15 @@ export class TegakiEngine {
       const newColor = styles.color;
       if (newColor !== this._currentColor) {
         this._currentColor = newColor;
+        changed = true;
+      }
+    }
+
+    if (e.propertyName === 'letter-spacing') {
+      const newLetterSpacing = parseLetterSpacing(styles.letterSpacing);
+      if (newLetterSpacing !== this._letterSpacing) {
+        this._letterSpacing = newLetterSpacing;
+        this._recomputeLayout();
         changed = true;
       }
     }
@@ -810,7 +838,7 @@ export class TegakiEngine {
   private _recomputeLayout(): void {
     if (this._fontReady && this._font?.family && this._fontSize && this._containerWidth && this._text) {
       const shaperId = this._shaper ? '1' : '0';
-      const key = `${this._text}\0${this._font.family}\0${this._fontSize}\0${this._lineHeight}\0${this._containerWidth}\0${this._direction ?? ''}\0${shaperId}`;
+      const key = `${this._text}\0${this._font.family}\0${this._fontSize}\0${this._lineHeight}\0${this._containerWidth}\0${this._direction ?? ''}\0${shaperId}\0${this._letterSpacing}`;
       if (key === this._layoutKey) return;
       this._layoutKey = key;
       let layout = computeTextLayout(this._overlayEl, this._fontSize);
@@ -821,7 +849,17 @@ export class TegakiEngine {
         // timeline — essential for Arabic cursive attachment and mark
         // positioning, where each glyph in a cluster needs its own origin.
         // The DOM is still the source of truth for line breaks.
-        layout = applyShaperPositions(layout, this._overlayEl, this._text, this._fontSize, this._font, this._shaper, this._timeline);
+        const letterSpacingEm = this._fontSize > 0 ? this._letterSpacing / this._fontSize : 0;
+        layout = applyShaperPositions(
+          layout,
+          this._overlayEl,
+          this._text,
+          this._fontSize,
+          this._font,
+          this._shaper,
+          this._timeline,
+          letterSpacingEm,
+        );
       }
       this._layout = layout;
     } else {

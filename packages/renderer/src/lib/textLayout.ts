@@ -178,6 +178,17 @@ function measureElement(el: HTMLElement, fontSize: number): TextLayout {
  * Line anchor (the leftmost visual pixel of each line) is measured from the
  * DOM using a full-line Range — per-grapheme rects inside shaped clusters are
  * not reliable enough to anchor against.
+ *
+ * `letterSpacingEm` (CSS `letter-spacing` divided by font size) is inserted
+ * between clusters during the pen-walk so the shaper path tracks whatever the
+ * DOM already applied to line-breaking — the char-keyed fallback path picks it
+ * up automatically through the measured `charOffsets`, but the shaper rebuilds
+ * positions from glyph advances and would otherwise ignore it. This matches the
+ * browser exactly for non-joining scripts (Latin, CJK, Hebrew); for cursive
+ * scripts with GPOS cursive attachment (Arabic) the per-cluster HarfBuzz
+ * advance doesn't map linearly onto the browser's per-grapheme spacing, so the
+ * spaced canvas can drift slightly from the (hidden) DOM overlay — the glyphs
+ * are still spread apart, just not pixel-matched to the debug overlay.
  */
 export function applyShaperPositions(
   layout: TextLayout,
@@ -187,6 +198,7 @@ export function applyShaperPositions(
   font: TegakiBundle,
   shaper: BundleShaper,
   timeline?: Timeline,
+  letterSpacingEm = 0,
 ): TextLayout {
   const chars = graphemes(text);
   if (!chars.length) return layout;
@@ -279,7 +291,14 @@ export function applyShaperPositions(
     const clusterAdvance = new Map<number, number>();
     let penEm = 0;
     let penYEm = 0;
+    let prevCl: number | undefined;
     for (const g of visualGlyphs) {
+      // CSS `letter-spacing` adds a gap after each typographic unit. Insert it
+      // once per cluster boundary (before every cluster except the first) so
+      // the extra advance accumulates just like the browser applied it to the
+      // overlay the DOM broke lines against.
+      if (prevCl !== undefined && g.cl !== prevCl) penEm += letterSpacingEm;
+      prevCl = g.cl;
       const axEm = g.ax * emPerUnit;
       const ayEm = g.ay * emPerUnit;
       const dxEm = g.dx * emPerUnit;

@@ -136,6 +136,32 @@ const CASES: PreviewCase[] = [
     params: { f: 'Tillana', t: 'नमस्ते हिन्दी', tm: 'controlled', ct: 1000, fs: 96, w: 800, h: 200, ol: 1 },
   },
   {
+    // Letter-spacing (shaper path, LTR) with the overlay on at the final
+    // frame: the inferred CSS `letter-spacing` must widen the gaps between
+    // glyphs *and* keep the canvas strokes aligned with the DOM overlay the
+    // browser spaced. A regression that drops letter-spacing from the shaper
+    // pen-walk shows the black canvas bunched tighter than the red overlay.
+    name: 'letter-spacing-shaper',
+    params: { t: 'Hello World', tm: 'controlled', ct: 1000, fs: 96, ls: 24, w: 1000, h: 200, ol: 1 },
+  },
+  {
+    // Letter-spacing on the char-keyed (non-shaper) path: positions come from
+    // the DOM-measured overlay, which inherits `letter-spacing` via CSS. Guards
+    // that the layout-cache key includes letter-spacing (a spacing-only change
+    // must re-measure) and that /preview honours the `hb` param. Overlay on so
+    // the canvas-vs-DOM alignment is locked in here too.
+    name: 'letter-spacing-non-shaper',
+    params: { t: 'Hello World', tm: 'controlled', ct: 1000, fs: 96, ls: 24, hb: 0, w: 1000, h: 200, ol: 1 },
+  },
+  {
+    // Letter-spacing on a non-cursive RTL script (Hebrew, Suez One). RTL lines
+    // pen-walk visual-LTR after run reversal; the per-cluster spacing must
+    // accumulate correctly against the DOM-measured line-left anchor. Overlay
+    // on to catch drift between the spaced canvas and the spaced overlay.
+    name: 'letter-spacing-rtl',
+    params: { f: 'Suez One', ch: '', t: 'שלום עולם', tm: 'controlled', ct: 1000, fs: 96, ls: 18, w: 800, h: 220, ol: 1 },
+  },
+  {
     // Korean precomposed Hangul: each syllable is one codepoint, rendered by
     // the standalone preview's CDN-fetch + in-browser glyph generation (no
     // shaper needed — Hangul is precomposed in Unicode). Guards the Korean

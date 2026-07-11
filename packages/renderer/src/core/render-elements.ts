@@ -62,10 +62,11 @@ export function buildChildren<T>(options: TegakiEngineOptions, h: CreateElementF
         pointerEvents: 'none',
         fontSize: 'inherit',
         lineHeight: 'inherit',
+        letterSpacing: 'inherit',
         visibility: 'hidden',
         transition: isCss
-          ? `font-size 0.001s, line-height 0.001s, color 0.001s, ${CSS_PROGRESS} 0.001s`
-          : 'font-size 0.001s, line-height 0.001s, color 0.001s',
+          ? `font-size 0.001s, line-height 0.001s, color 0.001s, letter-spacing 0.001s, ${CSS_PROGRESS} 0.001s`
+          : 'font-size 0.001s, line-height 0.001s, color 0.001s, letter-spacing 0.001s',
       },
     }),
     h(
