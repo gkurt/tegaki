@@ -1,3 +1,17 @@
+## tegaki@0.21.0
+
+### Infer and apply CSS `letter-spacing`
+
+The renderer now reads `letter-spacing` from the container's computed style — alongside `font-size`, `line-height`, and `color` — and applies it to the animated strokes, re-measuring when it changes. Spacing is inserted between clusters in the shaper pen-walk (matching the browser exactly for Latin, CJK, and non-cursive RTL like Hebrew) and picked up automatically from the DOM-measured offsets on the char-keyed fallback path, so line wrapping, glyph positions, and the drawn text stay in sync. The headless `textToSvg` export gained a matching `letterSpacing` option.
+
+### Fix the React `TegakiRenderer` ref handle on React 18
+
+`TegakiRenderer` exposed its imperative handle via React 19's ref-as-prop, which React 18 silently drops (`ref is not a prop`), leaving the ref `null` despite the declared `react: >=18` support. It now uses `forwardRef`, so the `{ engine, element }` handle works on both React 18 and 19 (the generic component API is preserved).
+
+### Fix doubled ghost text when exporting through DOM rasterizers
+
+The DOM text overlay (kept for selection, accessibility and layout measurement) was hidden only with `-webkit-text-fill-color: transparent`. DOM-to-image/video rasterizers that don't implement that non-standard property — Editframe, html-to-image, Satori, headless-screenshot pipelines — repainted the overlay text in the inherited color and a default font, doubled on top of the canvas handwriting. It is now hidden with the standard `color: transparent`, which those exporters honor. (In `editable` mode the caret follows `currentColor`, so it is no longer independently visible — an accepted trade-off for correct exports.)
+
 ## tegaki@0.20.0
 
 ### Add `TegakiEngine.toSVG()` and a `canvas` accessor
