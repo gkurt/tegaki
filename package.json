@@ -26,24 +26,27 @@
     "tegami": "bun scripts/tegami.mts"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.1",
-    "@remotion/fonts": "^4",
+    "@biomejs/biome": "^2.5.3",
+    "@remotion/fonts": "^4.0.488",
     "@types/bun": "^1.3.14",
-    "@typescript/native-preview": "^7.0.0-dev.20260628.1",
+    "@typescript/native-preview": "^7.0.0-dev.20260707.2",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
-    "remotion": "^4",
-    "solid-js": "^1.9.13",
+    "remotion": "^4.0.488",
+    "solid-js": "^1.9.14",
     "svelte": "^5.56.4",
     "tegaki": "workspace:*",
-    "tegami": "^1.0.0-beta.5",
+    "tegami": "^1.2.5",
     "vue": "^3.5.39",
-    "zod": "^4"
+    "zod": "^4.4.3"
   },
   "lint-staged": {
     "*": [
       "biome check --write --no-errors-on-unmatched --files-ignore-unknown=true"
     ]
+  },
+  "overrides": {
+    "@types/node": "26.1.1"
   },
   "dependencies": {
     "harfbuzzjs": "^1.4.0"
