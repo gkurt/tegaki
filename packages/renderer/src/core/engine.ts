@@ -625,13 +625,9 @@ export class TegakiEngine {
   }
 
   private _updateOverlayStyle(): void {
-    if (this._showOverlay) {
-      this._overlayEl.style.webkitTextFillColor = '';
-      this._overlayEl.style.color = 'rgba(255, 0, 0, 0.4)';
-    } else {
-      this._overlayEl.style.webkitTextFillColor = 'transparent';
-      this._overlayEl.style.color = '';
-    }
+    // Hide the overlay glyphs with `color: transparent` (not the non-standard
+    // `-webkit-text-fill-color`, which DOM rasterizers skip — see render-elements).
+    this._overlayEl.style.color = this._showOverlay ? 'rgba(255, 0, 0, 0.4)' : 'transparent';
     // When the shaper is off, the renderer iterates raw graphemes and looks
     // each char up in the bundle's char-keyed `glyphData` — i.e. nominal
     // glyphs only. The overlay (which provides layout measurement and the

@@ -106,8 +106,15 @@ export function buildChildren<T>(options: TegakiEngineOptions, h: CreateElementF
           overflowWrap: 'break-word',
           paddingInlineEnd: 1,
           textRendering: 'geometricPrecision',
-          WebkitTextFillColor: showOverlay ? undefined : 'transparent',
-          color: showOverlay ? 'rgba(255, 0, 0, 0.4)' : undefined,
+          // Hide the overlay glyphs with `color: transparent` rather than
+          // `-webkit-text-fill-color`. The latter is non-standard, so DOM
+          // rasterizers that skip it (video/image exporters like editframe,
+          // html-to-image, Satori, headless-screenshot pipelines) repaint the
+          // overlay text in the inherited color, doubled over the canvas. The
+          // trade-off: in `editable` mode the caret follows `currentColor`, so a
+          // transparent color also hides the caret — acceptable, since editing
+          // is a niche path and correct exports are the common one.
+          color: showOverlay ? 'rgba(255, 0, 0, 0.4)' : 'transparent',
         },
       },
       text,
