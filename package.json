@@ -45,6 +45,9 @@
       "biome check --write --no-errors-on-unmatched --files-ignore-unknown=true"
     ]
   },
+  "overrides": {
+    "@types/node": "22.20.1"
+  },
   "dependencies": {
     "harfbuzzjs": "^1.4.0"
   }
