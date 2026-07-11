@@ -70,6 +70,21 @@ Tegaki handles text layout, line wrapping, and animation playback. See the [fram
   </TabItem>
 </Tabs>
 
+## Styling
+
+Tegaki reads its typography from the container's own CSS — set `font-size`,
+`line-height`, `color`, and `letter-spacing` however you normally would (inline
+style, a class, a CSS variable) and the renderer picks them up, re-measuring
+when they change. `letter-spacing` is applied to the animated strokes just as
+the browser would space static text, so spacing, line wrapping, and the drawn
+glyphs stay in sync.
+
+```tsx
+<TegakiRenderer font={bundle} style={{ fontSize: 48, letterSpacing: '0.1em', color: '#3b82f6' }}>
+  Hello World
+</TegakiRenderer>
+```
+
 ## Time control modes
 
 ### Uncontrolled

@@ -92,6 +92,7 @@ export function GeneratorApp() {
   const [animSpeed, setAnimSpeed] = useState(initialUrlState.animSpeed);
   const [fontSizePx, setFontSizePx] = useState(initialUrlState.fontSizePx);
   const [lineHeightRatio, setLineHeightRatio] = useState(initialUrlState.lineHeightRatio);
+  const [letterSpacingPx, setLetterSpacingPx] = useState(initialUrlState.letterSpacingPx);
   const [showOverlay, setShowOverlay] = useState(initialUrlState.showOverlay);
   const [timeMode, setTimeMode] = useState<TimeMode>(initialUrlState.timeMode);
   const [currentTime, setCurrentTime] = useState(initialUrlState.currentTime);
@@ -262,6 +263,7 @@ export function GeneratorApp() {
         animSpeed,
         fontSizePx,
         lineHeightRatio,
+        letterSpacingPx,
         showOverlay,
         timeMode,
         currentTime,
@@ -291,6 +293,7 @@ export function GeneratorApp() {
     animSpeed,
     fontSizePx,
     lineHeightRatio,
+    letterSpacingPx,
     showOverlay,
     timeMode,
     currentTime,
@@ -842,6 +845,8 @@ export function GeneratorApp() {
             onFontSizePxChange={setFontSizePx}
             lineHeightRatio={lineHeightRatio}
             onLineHeightRatioChange={setLineHeightRatio}
+            letterSpacingPx={letterSpacingPx}
+            onLetterSpacingPxChange={setLetterSpacingPx}
             showOverlay={showOverlay}
             onShowOverlayChange={setShowOverlay}
             timeMode={timeMode}

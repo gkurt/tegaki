@@ -18,6 +18,8 @@ export interface TextToSvgOptions {
   fontSize?: number;
   /** Line height in px. Default: the bundle's em-height (`(ascender − descender) / unitsPerEm × fontSize`). */
   lineHeight?: number;
+  /** Extra spacing inserted after each character, in px (CSS `letter-spacing`). Default `0`. */
+  letterSpacing?: number;
   /** Stroke color (any CSS color). Default `#1a1a1a`. */
   color?: string;
   /** Animation flavour. Default `'loop'`. */
@@ -56,7 +58,7 @@ interface HeadlessLayout {
  * complex-script GPOS positioning (Arabic cursive joins, Indic conjuncts) needs
  * the browser shaper and is not modelled here.
  */
-function headlessLayout(text: string, font: TegakiBundle): HeadlessLayout {
+function headlessLayout(text: string, font: TegakiBundle, letterSpacingEm = 0): HeadlessLayout {
   const chars = graphemes(text);
   const upm = font.unitsPerEm;
   const lines: number[][] = [];
@@ -75,6 +77,9 @@ function headlessLayout(text: string, font: TegakiBundle): HeadlessLayout {
       penEm = 0;
       continue;
     }
+    // Insert letter-spacing before every character except the first on its
+    // line, mirroring the DOM/shaper paths (spacing accumulates between units).
+    if (current.length > 0) penEm += letterSpacingEm;
     charOffsets[i] = penEm;
     const glyph = lookupGlyphData(font, ch);
     // Unknown glyphs (no bundle entry, no advance) get a half-em placeholder so
@@ -114,8 +119,9 @@ export function textToSvg(text: string, font: TegakiBundle, options: TextToSvgOp
   const padV = Math.max(MIN_PADDING_V_EM * fontSize, (MIN_LINE_HEIGHT_EM * fontSize - lineHeight) / 2);
   const halfLeading = (lineHeight - emHeightPx) / 2;
 
+  const letterSpacingEm = (options.letterSpacing ?? 0) / fontSize;
   const timeline = computeTimeline(text, font, options.timing, null);
-  const { lines, charOffsets, maxRightEm } = headlessLayout(text, font);
+  const { lines, charOffsets, maxRightEm } = headlessLayout(text, font, letterSpacingEm);
 
   // grapheme index → visual line index, so timeline entries place onto a line.
   const totalChars = charOffsets.length;

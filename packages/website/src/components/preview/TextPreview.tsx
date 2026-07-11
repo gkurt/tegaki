@@ -22,6 +22,8 @@ export function TextPreview({
   onFontSizePxChange,
   lineHeightRatio,
   onLineHeightRatioChange,
+  letterSpacingPx,
+  onLetterSpacingPxChange,
   showOverlay,
   onShowOverlayChange,
   timeMode,
@@ -66,6 +68,8 @@ export function TextPreview({
   onFontSizePxChange: (v: number) => void;
   lineHeightRatio: number;
   onLineHeightRatioChange: (v: number) => void;
+  letterSpacingPx: number;
+  onLetterSpacingPxChange: (v: number) => void;
   showOverlay: boolean;
   onShowOverlayChange: (v: boolean) => void;
   timeMode: TimeMode;
@@ -348,6 +352,7 @@ export function TextPreview({
                 showOverlay={showOverlay}
                 fontSizePx={fontSizePx}
                 lineHeightRatio={lineHeightRatio}
+                letterSpacingPx={letterSpacingPx}
                 resultsCache={resultsCache}
                 onReady={handleReady}
                 useShaper={useShaper}
@@ -933,6 +938,20 @@ export function TextPreview({
               onChange={(e) => onLineHeightRatioChange(Number(e.target.value))}
             />
             <span className="tabular-nums text-gray-400 w-8">{lineHeightRatio}</span>
+          </label>
+
+          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+            Letter spacing
+            <input
+              type="range"
+              className="w-20"
+              min={-20}
+              max={40}
+              step={1}
+              value={letterSpacingPx}
+              onChange={(e) => onLetterSpacingPxChange(Number(e.target.value))}
+            />
+            <span className="tabular-nums text-gray-400 w-10">{letterSpacingPx}px</span>
           </label>
 
           <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
