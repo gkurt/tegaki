@@ -16,7 +16,7 @@ Monorepo for generating and rendering handwriting animations from any font.
 
 - `packages/renderer` (`tegaki`) — Published npm package. Framework-agnostic animated handwriting renderer with adapters for React, Svelte, Vue, Nuxt, SolidJS, Astro, Web Components, vanilla JS, and Remotion. Ships pre-generated bundles under `tegaki/fonts/*`: Caveat, Italianno, Tangerine, Parisienne (Latin), Suez One (Hebrew), Amiri (Arabic), Tillana (Devanagari), Klee One (Japanese — kana + Kyōiku grade 1–2 kanji), Nanum Pen Script (Korean), and Atma (Bengali). Bundle generation is orchestrated by [packages/renderer/scripts/generate-fonts.ts](packages/renderer/scripts/generate-fonts.ts); per-script character sets are exported from `tegaki-generator` (`HEBREW_CHARS`, `ARABIC_CHARS`, `DEVANAGARI_CHARS`, `BENGALI_CHARS`, `JAPANESE_CHARS`, `KOREAN_CHARS`, `CHARSET_PRESETS` — see [packages/generator/src/charsets.ts](packages/generator/src/charsets.ts)).
 - `packages/generator` (`tegaki-generator`) — Internal CLI + library that generates glyph data from fonts. Not published; users generate font data via the website UI (which calls the same pipeline in-browser).
-- `packages/website` (`@tegaki/website`) — Astro + Starlight site containing the docs, framework examples, and the interactive generator/preview app at `/tegaki/generator/`.
+- `packages/website` (`@tegaki/website`) — Astro + Starlight site containing the docs, framework examples, and the interactive studio/preview app at `/tegaki/studio/`.
 
 ## Commands
 
@@ -118,14 +118,15 @@ packages/generator/src/
 
 ### Website (`packages/website`)
 
-Astro 6 site built on Starlight (theme: Nova) serving the public docs at the root and the interactive generator at `/tegaki/generator/`. Starlight handles the sidebar/content docs under `src/content/docs/`; the generator page is a standalone Astro page mounting the React `GeneratorApp`.
+Astro 6 site built on Starlight (theme: Nova) serving the public docs at the root and the interactive studio at `/tegaki/studio/`. Starlight handles the sidebar/content docs under `src/content/docs/`; the studio page is a standalone Astro page mounting the React `GeneratorApp`. (The tool was renamed `/generator` → `/studio`; `/tegaki/generator/` remains as a redirect so old links keep working.)
 
 ```
 packages/website/
   astro.config.ts             # Astro config — `base: '/tegaki'`, integrations (React, Svelte, Vue, Solid, Starlight), vite aliases (`tegaki@dev`)
   public/                     # Static assets served as-is (favicon, OG card, robots.txt)
   src/
-    pages/generator.astro     # Mounts <GeneratorApp client:only="react" />
+    pages/studio.astro        # Mounts <GeneratorApp client:only="react" />
+    pages/generator.astro     # Redirect shim → /studio/ (kept for old links)
     components/
       GeneratorApp.tsx        # The generator UI: glyph inspector + text preview, all state persisted to URL
       url-state.ts            # URL <-> state serialization (short keys, only non-defaults written)
@@ -143,10 +144,10 @@ packages/website/
 
 Dev server: `bun dev` → Astro at `http://localhost:4321/tegaki/`. Two preview routes share the same URL-state schema:
 
-- `/tegaki/generator/` — the interactive UI (`GeneratorApp`): sidebar, controls, glyph inspector, text preview tab.
+- `/tegaki/studio/` — the interactive UI (`GeneratorApp`): sidebar, controls, glyph inspector, text preview tab.
 - `/tegaki/preview/` — a chrome-free standalone text renderer (`StandaloneTextPreview`) that reads the same URL state and renders only the text. Use this for screenshots / snapshots — no UI to crop out, and `window.__tegakiPreviewReady` / `body[data-tegaki-ready]` are set once the bundle is built so tooling can wait deterministically.
 
-The Text Preview tab in the generator has an "open in new tab" icon button next to the textarea that opens the current state in `/preview` (just swaps `/generator` → `/preview` in the URL).
+The Text Preview tab in the studio has an "open in new tab" icon button next to the textarea that opens the current state in `/preview` (just swaps `/studio` → `/preview` in the URL).
 
 #### Testing the preview app via URL state
 
@@ -179,12 +180,12 @@ Pipeline options are also URL-addressable (`res`, `sk`, `bt`, `rt`, ... — see 
 1. Start the dev server (`bun dev`) if it isn't already running.
 2. Navigate to a `/tegaki/preview/` URL encoding the desired state, e.g.
    `http://localhost:4321/tegaki/preview/?t=Hello&tm=controlled&ct=1.25&fs=96`
-   Use `/preview` (not `/generator`) for visual testing — it has no chrome, so the rendered text fills the viewport and screenshots are easy to crop. Pass `w=…&h=…` to fix the container size in pixels (defaults to `100%`).
+   Use `/preview` (not `/studio`) for visual testing — it has no chrome, so the rendered text fills the viewport and screenshots are easy to crop. Pass `w=…&h=…` to fix the container size in pixels (defaults to `100%`).
 3. Take a screenshot / snapshot via whatever browser tooling is available (e.g. the `chrome-devtools` MCP — `new_page`, `navigate_page`, `take_screenshot`). The timeline will be **paused at `ct`**, so screenshots are deterministic. Wait for `body[data-tegaki-ready="true"]` (or `window.__tegakiPreviewReady`) before snapshotting so the font and bundle are guaranteed to be loaded.
 4. To sweep frames, vary `ct` and re-navigate; the page does not hot-swap URL state, so a reload / re-navigation is required.
 5. To capture the final frame, pass a `ct` value greater than the timeline duration — it clamps to the end and stays paused.
 
-If you need to drive the interactive UI instead of taking a screenshot (e.g. flipping pipeline options through controls rather than URL params), use `/tegaki/generator/` with the same state keys.
+If you need to drive the interactive UI instead of taking a screenshot (e.g. flipping pipeline options through controls rather than URL params), use `/tegaki/studio/` with the same state keys.
 
 Caveats:
 - `ct` only applies in `tm=controlled`. In `uncontrolled` (engine-driven rAF) or `css` (scroll-timeline) modes the animation is not seekable by time; the param is ignored.
