@@ -93,6 +93,7 @@ Several handwriting fonts are bundled and ready to use:
 - **Tillana** — `tegaki/fonts/tillana` _(Devanagari + Latin)_
 - **Klee One** — `tegaki/fonts/klee-one` _(Japanese: kana + Kyōiku grade 1–2 kanji + Latin)_
 - **Nanum Pen Script** — `tegaki/fonts/nanum-pen-script` _(Korean: Hangul syllables + jamo + Latin)_
+- **Atma** — `tegaki/fonts/atma` _(Bengali + Latin)_
 
 For other fonts, use the [interactive studio](https://gkurt.com/tegaki/studio/) to create a custom bundle.
 
