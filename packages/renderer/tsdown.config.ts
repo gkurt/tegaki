@@ -79,7 +79,18 @@ function fontBundlePlugin() {
     },
     writeBundle() {
       // Copy .ttf files next to built bundles so import.meta.url references resolve
-      const fonts = ['caveat', 'italianno', 'tangerine', 'parisienne', 'suez-one', 'amiri', 'klee-one', 'tillana', 'nanum-pen-script'];
+      const fonts = [
+        'caveat',
+        'italianno',
+        'tangerine',
+        'parisienne',
+        'suez-one',
+        'amiri',
+        'klee-one',
+        'tillana',
+        'nanum-pen-script',
+        'atma',
+      ];
       for (const font of fonts) {
         const srcDir = resolve(configDir, 'fonts', font);
         const destDir = resolve(configDir, 'dist', 'fonts', font);
@@ -114,6 +125,7 @@ export default defineConfig({
     'fonts/klee-one/bundle': 'fonts/klee-one/bundle.ts',
     'fonts/tillana/bundle': 'fonts/tillana/bundle.ts',
     'fonts/nanum-pen-script/bundle': 'fonts/nanum-pen-script/bundle.ts',
+    'fonts/atma/bundle': 'fonts/atma/bundle.ts',
   },
   dts: true,
   sourcemap: true,
