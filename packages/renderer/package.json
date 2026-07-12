@@ -156,6 +156,13 @@
       "types": "./dist/fonts/nanum-pen-script/bundle.d.mts",
       "node": "./dist/fonts/nanum-pen-script/bundle.mjs",
       "default": "./dist/fonts/nanum-pen-script/bundle.mjs"
+    },
+    "./fonts/atma": {
+      "tegaki@dev": "./fonts/atma/bundle.ts",
+      "source": "./fonts/atma/bundle.ts",
+      "types": "./dist/fonts/atma/bundle.d.mts",
+      "node": "./dist/fonts/atma/bundle.mjs",
+      "default": "./dist/fonts/atma/bundle.mjs"
     }
   },
   "files": [

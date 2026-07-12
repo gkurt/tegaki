@@ -80,6 +80,21 @@ export const DEVANAGARI_CHARS =
   DEVANAGARI_DIGITS +
   DEFAULT_CHARS;
 
+// ── Bengali ───────────────────────────────────────────────────────────────
+// Independent vowels (12) + 33 base consonants + 3 nukta-form consonants
+// (ড় ঢ় য়) + matras (dependent vowel signs) + anusvara/visarga/candrabindu/
+// virama + Bengali digits. Conjuncts (consonant + virama + consonant) are
+// formed at shape time via the harfbuzz shaper from these base codepoints,
+// same as Devanagari.
+const BENGALI_VOWELS = 'অআইঈউঊঋএঐওঔ';
+const BENGALI_CONSONANTS = 'কখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহ';
+const BENGALI_NUKTA_CONSONANTS = 'ড়ঢ়য়';
+const BENGALI_MATRAS = 'ািীুূৃেৈোৌ';
+const BENGALI_MARKS = 'ংঃঁ্';
+const BENGALI_DIGITS = '০১২৩৪৫৬৭৮৯';
+export const BENGALI_CHARS =
+  BENGALI_VOWELS + BENGALI_CONSONANTS + BENGALI_NUKTA_CONSONANTS + BENGALI_MATRAS + BENGALI_MARKS + BENGALI_DIGITS + DEFAULT_CHARS;
+
 // ── Korean ────────────────────────────────────────────────────────────────
 // ~650 most-frequent precomposed Hangul syllables (U+AC00–U+D7A3), capped so
 // the generator's Google Fonts &text= request returns a real subset rather
@@ -108,6 +123,7 @@ export const CHARSET_PRESETS: { name: string; chars: string }[] = [
   { name: 'Hebrew', chars: HEBREW_CHARS },
   { name: 'Arabic', chars: ARABIC_CHARS },
   { name: 'Devanagari', chars: DEVANAGARI_CHARS },
+  { name: 'Bengali', chars: BENGALI_CHARS },
   { name: 'Japanese', chars: JAPANESE_CHARS },
   { name: 'Korean', chars: KOREAN_CHARS },
 ];

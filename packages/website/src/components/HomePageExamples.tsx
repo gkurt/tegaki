@@ -20,6 +20,7 @@ const FONT_IMPORTS = {
   'Suez One': () => import('tegaki/fonts/suez-one'),
   Amiri: () => import('tegaki/fonts/amiri'),
   Tillana: () => import('tegaki/fonts/tillana'),
+  Atma: () => import('tegaki/fonts/atma'),
   'Klee One': () => import('tegaki/fonts/klee-one'),
   'Nanum Pen Script': () => import('tegaki/fonts/nanum-pen-script'),
 } as const;
@@ -43,6 +44,7 @@ const SHOWCASE_TEXTS: Partial<Record<keyof typeof FONT_IMPORTS, string>> = {
   // whose syllables 한(U+D55C) 국(U+AD6D) 어(U+C5B4) 손(U+C190) 글(U+AE00)
   // 씨(U+C528) are all confirmed in-set.
   'Nanum Pen Script': '한국어 손글씨',
+  Atma: 'হাতের লেখা সুন্দর',
 };
 
 function FontCard({ name, bundle, text }: { name: string; bundle: TegakiBundle | null; text: string }) {
