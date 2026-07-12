@@ -1,49 +1,41 @@
 core:changelogs:
-  - content: "---\npackages:\n  tegaki:\n    type: minor\n---\n\n## Infer and apply CSS `letter-spacing`\n\nThe renderer now reads `letter-spacing` from the container's computed style — alongside `font-size`, `line-height`, and `color` — and applies it to the animated strokes, re-measuring when it changes. Spacing is inserted between clusters in the shaper pen-walk (matching the browser exactly for Latin, CJK, and non-cursive RTL like Hebrew) and picked up automatically from the DOM-measured offsets on the char-keyed fallback path, so line wrapping, glyph positions, and the drawn text stay in sync. The headless `textToSvg` export gained a matching `letterSpacing` option.\n"
-    filename: letter-spacing.md
-    v: 0.0.0
-  - content: "---\npackages:\n  tegaki:\n    type: patch\n---\n\n## Fix the React `TegakiRenderer` ref handle on React 18\n\n`TegakiRenderer` exposed its imperative handle via React 19's ref-as-prop, which React 18 silently drops (`ref is not a prop`), leaving the ref `null` despite the declared `react: >=18` support. It now uses `forwardRef`, so the `{ engine, element }` handle works on both React 18 and 19 (the generic component API is preserved).\n"
-    filename: react-forwardref.md
-    v: 0.0.0
-  - content: "---\npackages:\n  tegaki:\n    type: patch\n---\n\n## Fix doubled ghost text when exporting through DOM rasterizers\n\nThe DOM text overlay (kept for selection, accessibility and layout measurement) was hidden only with `-webkit-text-fill-color: transparent`. DOM-to-image/video rasterizers that don't implement that non-standard property — Editframe, html-to-image, Satori, headless-screenshot pipelines — repainted the overlay text in the inherited color and a default font, doubled on top of the canvas handwriting. It is now hidden with the standard `color: transparent`, which those exporters honor. (In `editable` mode the caret follows `currentColor`, so it is no longer independently visible — an accepted trade-off for correct exports.)\n"
-    filename: overlay-export-color.md
+  - content: "---\npackages:\n  tegaki:\n    type: minor\n---\n\n## Add Bengali support (Atma bundled font)\n\nNew `tegaki/fonts/atma` bundle covers Bengali, following the same pattern as the existing Devanagari (Tillana) and other non-Latin bundles.\n"
+    filename: bengali-atma-font.md
     v: 0.0.0
 core:packages:
   - id: npm:@tegaki/root
     updated: true
+  - changelogIds:
+      - bengali-atma-font.md
+    id: npm:tegaki
+    updated: true
+  - id: npm:hyperframes
+    updated: true
+  - id: npm:@tegaki/example-editframe
+    updated: true
+  - id: npm:@tegaki/example-vite
+    updated: true
+  - id: npm:@tegaki/example-remotion
+    updated: true
   - id: npm:@tegaki/example-nuxt
     updated: true
   - id: npm:@tegaki/example-next
     updated: true
-  - id: npm:@tegaki/example-remotion
-    updated: true
   - id: npm:@tegaki/example-e2e
-    updated: true
-  - id: npm:hyperframes
     updated: true
   - id: npm:tegaki-generator
     updated: true
-  - id: npm:@tegaki/example-vite
-    updated: true
   - id: npm:@tegaki/website
-    updated: true
-  - changelogIds:
-      - letter-spacing.md
-      - react-forwardref.md
-      - overlay-export-color.md
-    id: npm:tegaki
-    updated: true
-  - id: npm:@tegaki/example-editframe
     updated: true
 npm:packages:
   - id: npm:@tegaki/root
+  - id: npm:tegaki
+  - id: npm:hyperframes
+  - id: npm:@tegaki/example-editframe
+  - id: npm:@tegaki/example-vite
+  - id: npm:@tegaki/example-remotion
   - id: npm:@tegaki/example-nuxt
   - id: npm:@tegaki/example-next
-  - id: npm:@tegaki/example-remotion
   - id: npm:@tegaki/example-e2e
-  - id: npm:hyperframes
   - id: npm:tegaki-generator
-  - id: npm:@tegaki/example-vite
   - id: npm:@tegaki/website
-  - id: npm:tegaki
-  - id: npm:@tegaki/example-editframe
