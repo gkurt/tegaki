@@ -8,5 +8,5 @@
     "render": "npx --yes hyperframes@0.5.3 render",
     "publish": "npx --yes hyperframes@0.5.3 publish"
   },
-  "version": "0.21.0"
+  "version": "0.22.0"
 }

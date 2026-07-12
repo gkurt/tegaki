@@ -1,3 +1,9 @@
+## tegaki@0.22.0
+
+### Add Bengali support (Atma bundled font)
+
+New `tegaki/fonts/atma` bundle covers Bengali, following the same pattern as the existing Devanagari (Tillana) and other non-Latin bundles.
+
 ## tegaki@0.21.0
 
 ### Infer and apply CSS `letter-spacing`
