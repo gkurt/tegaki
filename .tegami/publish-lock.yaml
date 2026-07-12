@@ -1,41 +1,41 @@
 core:changelogs:
-  - content: "---\npackages:\n  tegaki:\n    type: minor\n---\n\n## Add Bengali support (Atma bundled font)\n\nNew `tegaki/fonts/atma` bundle covers Bengali, following the same pattern as the existing Devanagari (Tillana) and other non-Latin bundles.\n"
-    filename: bengali-atma-font.md
+  - content: "---\npackages:\n  tegaki:\n    type: patch\n---\n\n## Ship the `tegaki/fonts/atma` build output\n\nThe Atma (Bengali) bundle was wired into the package `exports` map but never added to the renderer's `tsdown` build config, so `dist/fonts/atma/bundle.mjs` was missing from the published package and `import 'tegaki/fonts/atma'` failed to resolve. Registered the bundle in both the build `entry` map and the `.ttf` copy step so the compiled output ships alongside the other font bundles.\n"
+    filename: atma-build-entry.md
     v: 0.0.0
 core:packages:
   - id: npm:@tegaki/root
     updated: true
-  - changelogIds:
-      - bengali-atma-font.md
-    id: npm:tegaki
+  - id: npm:@tegaki/example-nuxt
     updated: true
-  - id: npm:hyperframes
+  - changelogIds:
+      - atma-build-entry.md
+    id: npm:tegaki
     updated: true
   - id: npm:@tegaki/example-editframe
     updated: true
-  - id: npm:@tegaki/example-vite
-    updated: true
   - id: npm:@tegaki/example-remotion
     updated: true
-  - id: npm:@tegaki/example-nuxt
+  - id: npm:@tegaki/example-vite
     updated: true
-  - id: npm:@tegaki/example-next
-    updated: true
-  - id: npm:@tegaki/example-e2e
+  - id: npm:hyperframes
     updated: true
   - id: npm:tegaki-generator
     updated: true
+  - id: npm:@tegaki/example-next
+    updated: true
   - id: npm:@tegaki/website
+    updated: true
+  - id: npm:@tegaki/example-e2e
     updated: true
 npm:packages:
   - id: npm:@tegaki/root
-  - id: npm:tegaki
-  - id: npm:hyperframes
-  - id: npm:@tegaki/example-editframe
-  - id: npm:@tegaki/example-vite
-  - id: npm:@tegaki/example-remotion
   - id: npm:@tegaki/example-nuxt
-  - id: npm:@tegaki/example-next
-  - id: npm:@tegaki/example-e2e
+  - id: npm:tegaki
+  - id: npm:@tegaki/example-editframe
+  - id: npm:@tegaki/example-remotion
+  - id: npm:@tegaki/example-vite
+  - id: npm:hyperframes
   - id: npm:tegaki-generator
+  - id: npm:@tegaki/example-next
   - id: npm:@tegaki/website
+  - id: npm:@tegaki/example-e2e
