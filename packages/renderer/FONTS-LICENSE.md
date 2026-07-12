@@ -57,6 +57,12 @@ All fonts are licensed under the [SIL Open Font License, Version 1.1](https://op
 - **Copyright**: Copyright © 2010 NHN Corporation. All rights reserved. Font designed by Sandoll Communications Inc.
 - **License**: SIL Open Font License, Version 1.1
 
+## Atma
+
+- **Designer**: Black Foundry
+- **Copyright**: Copyright 2015 The Atma Project Authors (www.black-foundry.com)
+- **License**: SIL Open Font License, Version 1.1
+
 ---
 
 ## SIL Open Font License, Version 1.1

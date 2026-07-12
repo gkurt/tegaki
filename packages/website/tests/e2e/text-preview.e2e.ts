@@ -162,6 +162,33 @@ const CASES: PreviewCase[] = [
     params: { f: 'Suez One', ch: '', t: 'שלום עולם', tm: 'controlled', ct: 1000, fs: 96, ls: 18, w: 800, h: 220, ol: 1 },
   },
   {
+    // Bengali (Atma) exercises the same Indic cluster machinery as the
+    // Devanagari case, and then some. `তে` / `লে` reorder the pre-base
+    // e-matra (U+09C7) to the *left* of its consonant, and `সুন্দর` contains
+    // the `ন্দ` conjunct (na + virama U+09CD + da) which HarfBuzz fuses into
+    // a single ligature glyph. Both shape into multiple glyphs per grapheme,
+    // so — exactly like Devanagari — the reordered/ligated glyph lives in
+    // glyphDataById while the bare consonant must fall through to its real
+    // strokes rather than the 0.2s unknown-glyph slot. Final frame with the
+    // overlay on: every cluster must be fully drawn and the black canvas must
+    // sit on the red DOM overlay, proving the bundled Bengali glyphs resolve
+    // and the cluster fallback holds. Text `হাতের লেখা সুন্দর` ("handwriting
+    // is beautiful") — all codepoints are in BENGALI_CHARS / the Atma bundle.
+    name: 'bengali-cluster-fallback',
+    params: { f: 'Atma', t: 'হাতের লেখা সুন্দর', tm: 'controlled', ct: 1000, fs: 96, w: 800, h: 200, ol: 1 },
+  },
+  {
+    // Mid-animation seam guard for Bengali: at ct=4 the first word `হাতের`
+    // is fully canvas-drawn while `লেখা সুন্দর` is still the not-yet-drawn
+    // overlay. The drawn portion must land on the same reordered-matra
+    // positions as the overlay ahead of it — a regression that drops the
+    // Indic reorder/GPOS threading diverges here even when the fully-drawn
+    // final frame still looks correct (because the overlay is misplaced the
+    // same way). Pairs with `bengali-cluster-fallback`.
+    name: 'bengali-cluster-mid',
+    params: { f: 'Atma', t: 'হাতের লেখা সুন্দর', tm: 'controlled', ct: 4, fs: 96, w: 800, h: 200, ol: 1 },
+  },
+  {
     // Korean precomposed Hangul: each syllable is one codepoint, rendered by
     // the standalone preview's CDN-fetch + in-browser glyph generation (no
     // shaper needed — Hangul is precomposed in Unicode). Guards the Korean

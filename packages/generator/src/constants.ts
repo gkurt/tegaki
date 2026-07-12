@@ -33,6 +33,7 @@ export const EXAMPLE_FONTS = [
   'Cardo', // Hebrew
   'Suez One', // Hebrew display
   'Tillana', // Devanagari (Hindi)
+  'Atma', // Bengali handwriting
   'EB Garamond', // Greek
 ];
 

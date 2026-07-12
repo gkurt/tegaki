@@ -50,6 +50,7 @@ export const EXAMPLE_FONT_TEXTS: Record<string, string> = {
   Cardo: 'כתב היד מדהים',
   'Suez One': 'כתב היד מדהים',
   Tillana: 'हस्तलेखन अद्भुत है',
+  Atma: 'হাতের লেখা সুন্দর',
   'EB Garamond': 'Η χειρογραφία είναι υπέροχη',
 };
 
@@ -67,6 +68,7 @@ export const TEXT_PRESETS: { name: string; text: string }[] = [
   { name: 'Hebrew', text: 'כתב היד מדהים' },
   { name: 'Arabic', text: 'الكتابة اليدوية رائعة' },
   { name: 'Devanagari', text: 'हस्तलेखन अद्भुत है' },
+  { name: 'Bengali', text: 'হাতের লেখা সুন্দর' },
   { name: 'Japanese', text: '手書きは楽しい' },
 ];
 
