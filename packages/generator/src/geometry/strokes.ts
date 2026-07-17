@@ -126,6 +126,19 @@ function scorePair(a: AxisEnd, b: AxisEnd, options: ResolvedGeometryOptions): nu
 /** Greedily accept best-scoring continuation pairs at one junction, each end used once. */
 export function matchContinuations(junction: JunctionInfo, segments: SegmentInfo[], options: ResolvedGeometryOptions): void {
   const ends = junction.incident.map((inc) => segments[inc.segmentIndex]!.ends[inc.endIndex]!);
+
+  // Degree-2 junction: exactly two segment ends meet and there is nothing else
+  // to continue into. This is a *bend within a single pen stroke* — one concave
+  // corner carved the cut — so the two ends are the same stroke and must merge
+  // regardless of the turn angle. The bend threshold only exists to *choose*
+  // among alternatives, which only arise at higher-degree junctions (T's,
+  // crossings). Applying it here wrongly splits sharply-curving handwriting
+  // strokes (the belly of ち, the elbow of て) into two.
+  if (ends.length === 2 && junction.incident[0]!.segmentIndex !== junction.incident[1]!.segmentIndex) {
+    junction.pairings.push([0, 1]);
+    return;
+  }
+
   const candidates: PairScore[] = [];
   for (let i = 0; i < ends.length; i++) {
     for (let j = i + 1; j < ends.length; j++) {
