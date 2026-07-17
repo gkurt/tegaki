@@ -1,5 +1,5 @@
 import type { TegakiEffectConfigs, TegakiMultiEffectName } from 'tegaki';
-import { DEFAULT_CHARS, DEFAULT_OPTIONS, type PipelineOptions } from 'tegaki-generator';
+import { DEFAULT_CHARS, DEFAULT_GEOMETRY_OPTIONS, DEFAULT_OPTIONS, type GeometryOptions, type PipelineOptions } from 'tegaki-generator';
 
 type Stage =
   | 'outline'
@@ -14,6 +14,8 @@ type Stage =
   | 'animation'
   | 'final';
 type PreviewMode = 'glyph' | 'text';
+type Pipeline = 'raster' | 'geometry';
+type GeometryStageKey = 'contours' | 'corners' | 'cuts' | 'faces' | 'segments' | 'strokes' | 'animation';
 
 /** All state that gets persisted to the URL */
 export type TimeMode = 'controlled' | 'uncontrolled' | 'css';
@@ -52,6 +54,12 @@ export interface UrlState {
   previewMode: PreviewMode;
   previewText: string;
   options: PipelineOptions;
+  /** Which stroke-extraction pipeline the glyph inspector visualizes. */
+  pipeline: Pipeline;
+  /** Active stage tab in the geometry pipeline (glyph inspector). */
+  geometryStage: GeometryStageKey;
+  /** Tunables for the geometry pipeline. */
+  geometryOptions: GeometryOptions;
   // Text preview settings
   animSpeed: number;
   fontSizePx: number;
@@ -94,6 +102,9 @@ export const URL_DEFAULTS: UrlState = {
   previewMode: 'text',
   previewText: 'Hello World',
   options: DEFAULT_OPTIONS,
+  pipeline: 'raster',
+  geometryStage: 'strokes',
+  geometryOptions: DEFAULT_GEOMETRY_OPTIONS,
   animSpeed: 1,
   fontSizePx: 128,
   lineHeightRatio: 1.5,
@@ -140,10 +151,30 @@ const REVERSE_OPTION_KEYS = Object.fromEntries(Object.entries(OPTION_KEYS).map((
   keyof PipelineOptions
 >;
 
+// Geometry-pipeline option short keys (all numeric).
+const GEO_OPTION_KEYS: Record<keyof GeometryOptions, string> = {
+  cornerAngleThresholdDeg: 'gca',
+  cornerWindowRatio: 'gcw',
+  cutAlignToleranceDeg: 'gct',
+  maxCutLengthFactor: 'gml',
+  junctionCompactness: 'gjc',
+  continuationMaxBendDeg: 'gcb',
+  resampleSpacingRatio: 'grs',
+};
+
+const REVERSE_GEO_OPTION_KEYS = Object.fromEntries(Object.entries(GEO_OPTION_KEYS).map(([k, v]) => [v, k])) as Record<
+  string,
+  keyof GeometryOptions
+>;
+
 /** Read URL state from the current location search params. Returns only overrides (merged with defaults). */
 export function parseUrlState(): UrlState {
   const p = new URLSearchParams(window.location.search);
-  const state: UrlState = { ...URL_DEFAULTS, options: { ...DEFAULT_OPTIONS } };
+  const state: UrlState = {
+    ...URL_DEFAULTS,
+    options: { ...DEFAULT_OPTIONS },
+    geometryOptions: { ...DEFAULT_GEOMETRY_OPTIONS },
+  };
 
   if (p.has('f')) state.fontFamily = p.get('f')!;
   if (p.has('ch')) state.chars = p.get('ch')!;
@@ -188,6 +219,8 @@ export function parseUrlState(): UrlState {
   if (p.has('st')) state.staggerEnabled = p.get('st') === '1';
   if (p.has('sa')) state.staggerAdvance = p.get('sa')!;
   if (p.has('sd')) state.staggerDuration = p.get('sd')!;
+  if (p.has('pl')) state.pipeline = p.get('pl') === 'geometry' ? 'geometry' : 'raster';
+  if (p.has('gs')) state.geometryStage = p.get('gs') as GeometryStageKey;
 
   // Pipeline options — read short keys
   for (const [short, long] of Object.entries(REVERSE_OPTION_KEYS)) {
@@ -201,6 +234,13 @@ export function parseUrlState(): UrlState {
     } else {
       (state.options as unknown as Record<string, unknown>)[long] = raw;
     }
+  }
+
+  // Geometry options — all numeric.
+  for (const [short, long] of Object.entries(REVERSE_GEO_OPTION_KEYS)) {
+    if (!p.has(short)) continue;
+    const v = Number(p.get(short));
+    if (Number.isFinite(v)) (state.geometryOptions as unknown as Record<string, number>)[long] = v;
   }
 
   return state;
@@ -244,6 +284,14 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
   if (state.staggerEnabled !== URL_DEFAULTS.staggerEnabled) p.set('st', '1');
   if (state.staggerAdvance !== URL_DEFAULTS.staggerAdvance) p.set('sa', state.staggerAdvance);
   if (state.staggerDuration !== URL_DEFAULTS.staggerDuration) p.set('sd', state.staggerDuration);
+  if (state.pipeline !== URL_DEFAULTS.pipeline) p.set('pl', state.pipeline);
+  if (state.geometryStage !== URL_DEFAULTS.geometryStage) p.set('gs', state.geometryStage);
+
+  // Geometry options — only non-defaults.
+  for (const [long, short] of Object.entries(GEO_OPTION_KEYS)) {
+    const key = long as keyof GeometryOptions;
+    if (state.geometryOptions[key] !== DEFAULT_GEOMETRY_OPTIONS[key]) p.set(short, String(state.geometryOptions[key]));
+  }
 
   // Pipeline options — only non-defaults. Array-valued options are serialized
   // as comma-separated and compared structurally.

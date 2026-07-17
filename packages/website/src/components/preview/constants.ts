@@ -1,6 +1,9 @@
-import type { SkeletonMethod } from 'tegaki-generator';
+import type { GeometryStage, SkeletonMethod } from 'tegaki-generator';
 
 export type PreviewMode = 'glyph' | 'text';
+
+/** Which stroke-extraction pipeline the glyph inspector visualizes. */
+export type Pipeline = 'raster' | 'geometry';
 
 export type Stage =
   | 'outline'
@@ -27,6 +30,19 @@ export const STAGES: { key: Stage; label: string }[] = [
   { key: 'strokes', label: 'Strokes' },
   { key: 'animation', label: 'Animation' },
   { key: 'final', label: 'Final' },
+];
+
+/** Geometry-pipeline stages, including a client-rendered animation view. */
+export type GeometryStageKey = GeometryStage | 'animation';
+
+export const GEOMETRY_STAGES: { key: GeometryStageKey; label: string }[] = [
+  { key: 'contours', label: 'Contours' },
+  { key: 'corners', label: 'Corners' },
+  { key: 'cuts', label: 'Cuts' },
+  { key: 'faces', label: 'Partition' },
+  { key: 'segments', label: 'Axes' },
+  { key: 'strokes', label: 'Strokes' },
+  { key: 'animation', label: 'Animation' },
 ];
 
 /**

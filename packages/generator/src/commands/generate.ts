@@ -22,6 +22,8 @@ import {
 import { enumerateVariantGlyphIds } from '../font/enumerate-variants.ts';
 import { getGsubFeatures } from '../font/hb-shaper.ts';
 import { extractGlyph, extractGlyphById, inferLineCap } from '../font/parse.ts';
+import { runGeometryPipeline } from '../geometry/pipeline.ts';
+import type { GeometryOptions, GeometryPipelineResult } from '../geometry/types.ts';
 import { computePathBBox, flattenPath } from '../processing/bezier.ts';
 import { toFontUnits } from '../processing/font-units.ts';
 import { rasterize } from '../processing/rasterize.ts';
@@ -229,6 +231,40 @@ export function processGlyph(fontInfo: ParsedFontInfo, char: string, options: Pi
   const rawGlyph = extractGlyph(fontInfo.font, char, fontInfo.extraFonts);
   if (!rawGlyph) return null;
   return runPipeline(fontInfo, rawGlyph.char, rawGlyph, options, isRtlChar(char));
+}
+
+/**
+ * Run the experimental geometry-based stroke extraction pipeline for one glyph.
+ *
+ * Independent of {@link processGlyph} (which drives the rasterize/skeletonize
+ * pipeline). Both consume the same extracted outline; this one works directly
+ * on the flattened polygons instead of a bitmap. Intended for the Studio's
+ * alternative-pipeline visualization while the approach is developed.
+ */
+export function processGlyphGeometry(
+  fontInfo: ParsedFontInfo,
+  char: string,
+  geometryOptions?: GeometryOptions,
+  bezierTolerance?: number,
+): GeometryPipelineResult | null {
+  const rawGlyph = extractGlyph(fontInfo.font, char, fontInfo.extraFonts);
+  if (!rawGlyph) return null;
+  return runGeometryPipeline(
+    {
+      char: rawGlyph.char,
+      unicode: rawGlyph.unicode,
+      advanceWidth: rawGlyph.advanceWidth,
+      boundingBox: rawGlyph.boundingBox,
+      pathString: rawGlyph.pathString,
+      ascender: fontInfo.ascender,
+      descender: fontInfo.descender,
+      unitsPerEm: fontInfo.unitsPerEm,
+      rtl: isRtlChar(char),
+    },
+    rawGlyph,
+    geometryOptions,
+    bezierTolerance,
+  );
 }
 
 /**

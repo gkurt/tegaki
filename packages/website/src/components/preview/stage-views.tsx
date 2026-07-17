@@ -1,6 +1,14 @@
 import { useEffect, useMemo } from 'react';
-import { type PipelineResult, renderStage, STROKE_COLORS, type VisualizationStage } from 'tegaki-generator';
-import type { Stage } from './constants.ts';
+import {
+  type GeometryPipelineResult,
+  type GeometryStage,
+  type PipelineResult,
+  renderGeometryStage,
+  renderStage,
+  STROKE_COLORS,
+  type VisualizationStage,
+} from 'tegaki-generator';
+import type { GeometryStageKey, Stage } from './constants.ts';
 import { fitSize } from './utils.ts';
 
 export function PNGView({ data, width, height }: { data: Uint8Array; width: number; height: number }) {
@@ -36,6 +44,73 @@ export function StageRenderer({ result, stage, animTime }: { result: PipelineRes
     return <PNGView data={rendered} width={result.bitmapWidth} height={result.bitmapHeight} />;
   }
   return <SVGView svg={rendered} />;
+}
+
+/** Geometry-pipeline stage renderer: static SVG stages + a client-driven animation. */
+export function GeometryStageRenderer({
+  result,
+  stage,
+  animTime,
+}: {
+  result: GeometryPipelineResult;
+  stage: GeometryStageKey;
+  animTime: number;
+}) {
+  if (stage === 'animation') return <GeometryAnimationView result={result} time={animTime} />;
+  return <SVGView svg={renderGeometryStage(result, stage as GeometryStage)} />;
+}
+
+/** Progressive stroke draw for the geometry pipeline, in font-unit space. */
+function GeometryAnimationView({ result, time }: { result: GeometryPipelineResult; time: number }) {
+  const bb = result.pathBBox;
+  const w = bb.x2 - bb.x1;
+  const h = bb.y2 - bb.y1;
+  const pad = Math.max(w, h) * 0.08 + 1;
+  const vx = bb.x1 - pad;
+  const vy = bb.y1 - pad;
+  const vw = w + 2 * pad;
+  const vh = h + 2 * pad;
+  const { width: dw, height: dh } = fitSize(vw, vh, 600);
+
+  return (
+    <svg viewBox={`${vx} ${vy} ${vw} ${vh}`} className="border border-gray-200" style={{ width: dw, height: dh }}>
+      <rect x={vx} y={vy} width={vw} height={vh} fill="white" />
+      {result.strokesFontUnits.map((stroke, i) => {
+        const color = STROKE_COLORS[i % STROKE_COLORS.length]!;
+        const avgWidth = stroke.points.reduce((s, p) => s + p.width, 0) / stroke.points.length;
+        const localTime = time - stroke.delay;
+        if (localTime < 0) return null;
+
+        if (stroke.points.length === 1) {
+          const p = stroke.points[0]!;
+          return <circle key={i} cx={p.x} cy={p.y} r={Math.max(avgWidth / 2, 1)} fill={color} />;
+        }
+
+        const d = stroke.points.map((p, j) => `${j === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+        let pathLen = 0;
+        for (let j = 1; j < stroke.points.length; j++) {
+          const dx = stroke.points[j]!.x - stroke.points[j - 1]!.x;
+          const dy = stroke.points[j]!.y - stroke.points[j - 1]!.y;
+          pathLen += Math.sqrt(dx * dx + dy * dy);
+        }
+        const progress = stroke.animationDuration > 0 ? Math.min(localTime / stroke.animationDuration, 1) : 1;
+        const dashLen = pathLen + avgWidth;
+        return (
+          <path
+            key={i}
+            d={d}
+            fill="none"
+            stroke={color}
+            strokeWidth={Math.max(avgWidth, 1)}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray={dashLen}
+            strokeDashoffset={dashLen * (1 - progress)}
+          />
+        );
+      })}
+    </svg>
+  );
 }
 
 function AnimationView({ result, time }: { result: PipelineResult; time: number }) {
@@ -177,24 +252,18 @@ function FinalView({ result, time }: { result: PipelineResult; time: number }) {
 }
 
 export function AnimationControls({
-  result,
+  totalDuration,
   time,
   setTime,
   playing,
   setPlaying,
 }: {
-  result: PipelineResult;
+  totalDuration: number;
   time: number;
   setTime: (t: number) => void;
   playing: boolean;
   setPlaying: (p: boolean) => void;
 }) {
-  const totalDuration = useMemo(() => {
-    if (result.strokesFontUnits.length === 0) return 0;
-    const last = result.strokesFontUnits[result.strokesFontUnits.length - 1]!;
-    return last.delay + last.animationDuration;
-  }, [result.strokesFontUnits]);
-
   return (
     <div className="flex items-center gap-3 px-3 py-1.5 border-t border-gray-200 bg-white h-[44px]">
       <button

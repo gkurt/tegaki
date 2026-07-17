@@ -3,23 +3,37 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LineCap } from 'tegaki';
 import {
   CHARSET_PRESETS,
+  DEFAULT_GEOMETRY_OPTIONS,
   DEFAULT_OPTIONS,
   EXAMPLE_FONTS,
   enumerateFontChars,
   extractTegakiBundle,
+  type GeometryOptions,
+  type GeometryPipelineResult,
   type ParsedFontInfo,
   type PipelineOptions,
   type PipelineResult,
   parseFont,
   processGlyph,
+  processGlyphGeometry,
   type SkeletonMethod,
 } from 'tegaki-generator';
 import { ZoomCanvas } from '../reactive-canvas.tsx';
 import { parseUrlState, syncUrlState, type TimeMode } from '../url-state.ts';
-import { DEFAULT_EXAMPLE_FONT_TEXT, EXAMPLE_FONT_TEXTS, type PreviewMode, SKELETON_METHODS, STAGES, type Stage } from './constants.ts';
+import {
+  DEFAULT_EXAMPLE_FONT_TEXT,
+  EXAMPLE_FONT_TEXTS,
+  GEOMETRY_STAGES,
+  type GeometryStageKey,
+  type Pipeline,
+  type PreviewMode,
+  SKELETON_METHODS,
+  STAGES,
+  type Stage,
+} from './constants.ts';
 import { fetchFontFromCDN } from './font-cdn.ts';
 import { SelectOption, SliderOption } from './form-controls.tsx';
-import { AnimationControls, StageRenderer } from './stage-views.tsx';
+import { AnimationControls, GeometryStageRenderer, StageRenderer } from './stage-views.tsx';
 import { TextPreview } from './TextPreview.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
@@ -86,6 +100,12 @@ export function GeneratorApp() {
   const [options, setOptions] = useState<PipelineOptions>(initialUrlState.options);
   const [result, setResult] = useState<PipelineResult | null>(null);
   const [processing, setProcessing] = useState(false);
+  // Alternative geometry-based pipeline (experimental, glyph inspector only).
+  const [pipeline, setPipeline] = useState<Pipeline>(initialUrlState.pipeline);
+  const [geometryStage, setGeometryStage] = useState<GeometryStageKey>(initialUrlState.geometryStage);
+  const [geometryOptions, setGeometryOptions] = useState<GeometryOptions>(initialUrlState.geometryOptions);
+  const [geoResult, setGeoResult] = useState<GeometryPipelineResult | null>(null);
+  const geoResultsCache = useRef(new Map<string, GeometryPipelineResult>());
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [previewMode, setPreviewMode] = useState<PreviewMode>(initialUrlState.previewMode);
   const [previewText, setPreviewText] = useState(initialUrlState.previewText);
@@ -205,9 +225,34 @@ export function GeneratorApp() {
     return () => clearTimeout(id);
   }, [fontInfo, selectedChar, options]);
 
-  // Auto-play animation when result changes
-  if (prevAnimResultRef.current !== result) {
-    prevAnimResultRef.current = result;
+  // Process glyph through the geometry pipeline (only when that pipeline is active)
+  useEffect(() => {
+    if (pipeline !== 'geometry' || previewMode !== 'glyph' || !fontInfo || !selectedChar) {
+      setGeoResult(null);
+      return;
+    }
+    const cacheKey = `${selectedChar}:${options.bezierTolerance}:${JSON.stringify(geometryOptions)}`;
+    const cached = geoResultsCache.current.get(cacheKey);
+    if (cached) {
+      setGeoResult(cached);
+      return;
+    }
+    setProcessing(true);
+    const id = setTimeout(() => {
+      const res = processGlyphGeometry(fontInfo, selectedChar, geometryOptions, options.bezierTolerance);
+      if (res) geoResultsCache.current.set(cacheKey, res);
+      setGeoResult(res);
+      setProcessing(false);
+    }, 10);
+    return () => clearTimeout(id);
+  }, [pipeline, previewMode, fontInfo, selectedChar, geometryOptions, options.bezierTolerance]);
+
+  // The result whose strokes drive the animation controls / loop for the active pipeline.
+  const animResult: PipelineResult | GeometryPipelineResult | null = pipeline === 'geometry' ? geoResult : result;
+
+  // Auto-play animation when the active result changes
+  if (prevAnimResultRef.current !== animResult) {
+    prevAnimResultRef.current = animResult as PipelineResult | null;
     if (animTime !== 0 || !animPlaying) {
       setAnimTime(0);
       setAnimPlaying(true);
@@ -215,14 +260,18 @@ export function GeneratorApp() {
   }
 
   const totalDuration = useMemo(() => {
-    if (!result || result.strokesFontUnits.length === 0) return 0;
-    const last = result.strokesFontUnits[result.strokesFontUnits.length - 1]!;
+    const strokes = animResult?.strokesFontUnits;
+    if (!strokes || strokes.length === 0) return 0;
+    const last = strokes[strokes.length - 1]!;
     return last.delay + last.animationDuration;
-  }, [result]);
+  }, [animResult]);
+
+  // Whether the active stage in the active pipeline is an animated one.
+  const animStageActive = pipeline === 'geometry' ? geometryStage === 'animation' : activeStage === 'animation' || activeStage === 'final';
 
   // Animation loop
   useEffect(() => {
-    if (!animPlaying || (activeStage !== 'animation' && activeStage !== 'final')) return;
+    if (!animPlaying || !animStageActive) return;
     let lastTs: number | null = null;
     let raf: number;
     const tick = (ts: number) => {
@@ -245,7 +294,7 @@ export function GeneratorApp() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [animPlaying, totalDuration, activeStage]);
+  }, [animPlaying, totalDuration, animStageActive]);
 
   // Sync configurable state to URL (debounced to avoid thrashing during slider drags)
   const syncTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -279,6 +328,9 @@ export function GeneratorApp() {
         staggerEnabled,
         staggerAdvance,
         staggerDuration,
+        pipeline,
+        geometryStage,
+        geometryOptions,
       });
     }, 300);
     return () => clearTimeout(syncTimerRef.current);
@@ -290,6 +342,9 @@ export function GeneratorApp() {
     previewMode,
     previewText,
     options,
+    pipeline,
+    geometryStage,
+    geometryOptions,
     animSpeed,
     fontSizePx,
     lineHeightRatio,
@@ -323,6 +378,10 @@ export function GeneratorApp() {
   const updateOption = useCallback(<K extends keyof PipelineOptions>(key: K, value: PipelineOptions[K]) => {
     resultsCache.current.clear();
     setOptions((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const updateGeometryOption = useCallback(<K extends keyof GeometryOptions>(key: K, value: GeometryOptions[K]) => {
+    setGeometryOptions((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   const [downloading, setDownloading] = useState(false);
@@ -721,6 +780,87 @@ export function GeneratorApp() {
             )}
           </fieldset>
 
+          {/* Geometry pipeline options (glyph inspector, experimental) */}
+          {pipeline === 'geometry' && previewMode === 'glyph' && (
+            <fieldset className="flex flex-col gap-2 border border-indigo-200 rounded p-2 bg-indigo-50/40">
+              <div className="flex items-center justify-between mb-1">
+                <legend className="text-sm font-medium text-indigo-700">Geometry options</legend>
+                {JSON.stringify(geometryOptions) !== JSON.stringify(DEFAULT_GEOMETRY_OPTIONS) && (
+                  <button
+                    type="button"
+                    className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+                    onClick={() => setGeometryOptions(DEFAULT_GEOMETRY_OPTIONS)}
+                  >
+                    Reset all
+                  </button>
+                )}
+              </div>
+              <SliderOption
+                label="Corner angle (deg)"
+                value={geometryOptions.cornerAngleThresholdDeg}
+                defaultValue={DEFAULT_GEOMETRY_OPTIONS.cornerAngleThresholdDeg}
+                min={10}
+                max={90}
+                step={1}
+                onChange={(v) => updateGeometryOption('cornerAngleThresholdDeg', v)}
+              />
+              <SliderOption
+                label="Corner window (×em)"
+                value={geometryOptions.cornerWindowRatio}
+                defaultValue={DEFAULT_GEOMETRY_OPTIONS.cornerWindowRatio}
+                min={0.005}
+                max={0.08}
+                step={0.005}
+                onChange={(v) => updateGeometryOption('cornerWindowRatio', v)}
+              />
+              <SliderOption
+                label="Cut align tol (deg)"
+                value={geometryOptions.cutAlignToleranceDeg}
+                defaultValue={DEFAULT_GEOMETRY_OPTIONS.cutAlignToleranceDeg}
+                min={10}
+                max={80}
+                step={1}
+                onChange={(v) => updateGeometryOption('cutAlignToleranceDeg', v)}
+              />
+              <SliderOption
+                label="Max cut length (×width)"
+                value={geometryOptions.maxCutLengthFactor}
+                defaultValue={DEFAULT_GEOMETRY_OPTIONS.maxCutLengthFactor}
+                min={1}
+                max={6}
+                step={0.1}
+                onChange={(v) => updateGeometryOption('maxCutLengthFactor', v)}
+              />
+              <SliderOption
+                label="Junction compactness"
+                value={geometryOptions.junctionCompactness}
+                defaultValue={DEFAULT_GEOMETRY_OPTIONS.junctionCompactness}
+                min={0.5}
+                max={4}
+                step={0.1}
+                onChange={(v) => updateGeometryOption('junctionCompactness', v)}
+              />
+              <SliderOption
+                label="Continuation max bend (deg)"
+                value={geometryOptions.continuationMaxBendDeg}
+                defaultValue={DEFAULT_GEOMETRY_OPTIONS.continuationMaxBendDeg}
+                min={20}
+                max={120}
+                step={5}
+                onChange={(v) => updateGeometryOption('continuationMaxBendDeg', v)}
+              />
+              <SliderOption
+                label="Axis spacing (×em)"
+                value={geometryOptions.resampleSpacingRatio}
+                defaultValue={DEFAULT_GEOMETRY_OPTIONS.resampleSpacingRatio}
+                min={0.005}
+                max={0.06}
+                step={0.005}
+                onChange={(v) => updateGeometryOption('resampleSpacingRatio', v)}
+              />
+            </fieldset>
+          )}
+
           {/* Download */}
           <button
             type="button"
@@ -749,6 +889,24 @@ export function GeneratorApp() {
               {mode === 'glyph' ? 'Glyph Inspector' : 'Text Preview'}
             </button>
           ))}
+          {previewMode === 'glyph' && (
+            <div className="ml-auto flex items-center gap-1">
+              <span className="text-xs text-gray-400">Pipeline:</span>
+              {(['raster', 'geometry'] as const).map((p) => (
+                <button
+                  type="button"
+                  key={p}
+                  className={`px-2.5 py-1 text-xs rounded cursor-pointer transition-colors ${
+                    pipeline === p ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                  onClick={() => setPipeline(p)}
+                  title={p === 'geometry' ? 'Experimental geometry-based stroke extraction' : 'Rasterize + skeletonize pipeline'}
+                >
+                  {p === 'raster' ? 'Raster' : 'Geometry'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {previewMode === 'glyph' ? (
@@ -775,18 +933,31 @@ export function GeneratorApp() {
 
             {/* Stage tabs */}
             <div className="flex gap-1 px-3 py-2 border-b border-gray-200 bg-white overflow-x-auto">
-              {STAGES.map((s) => (
-                <button
-                  type="button"
-                  key={s.key}
-                  className={`px-2.5 py-1 text-xs rounded whitespace-nowrap cursor-pointer transition-colors ${
-                    s.key === activeStage ? 'bg-gray-800 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                  }`}
-                  onClick={() => setActiveStage(s.key)}
-                >
-                  {s.label}
-                </button>
-              ))}
+              {pipeline === 'raster'
+                ? STAGES.map((s) => (
+                    <button
+                      type="button"
+                      key={s.key}
+                      className={`px-2.5 py-1 text-xs rounded whitespace-nowrap cursor-pointer transition-colors ${
+                        s.key === activeStage ? 'bg-gray-800 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                      }`}
+                      onClick={() => setActiveStage(s.key)}
+                    >
+                      {s.label}
+                    </button>
+                  ))
+                : GEOMETRY_STAGES.map((s) => (
+                    <button
+                      type="button"
+                      key={s.key}
+                      className={`px-2.5 py-1 text-xs rounded whitespace-nowrap cursor-pointer transition-colors ${
+                        s.key === geometryStage ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                      }`}
+                      onClick={() => setGeometryStage(s.key)}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
             </div>
 
             {/* Canvas area */}
@@ -794,18 +965,27 @@ export function GeneratorApp() {
               <div className="flex-1 flex p-4 overflow-auto">
                 <div className="m-auto">
                   {processing && <p className="text-gray-500">Processing...</p>}
-                  {!processing && !result && fontInfo && <p className="text-gray-400">No glyph data for "{selectedChar}"</p>}
                   {!processing && !fontInfo && <p className="text-gray-400">Load a font to get started</p>}
-                  {!processing && result && <StageRenderer result={result} stage={activeStage} animTime={animTime} />}
+                  {pipeline === 'raster' ? (
+                    <>
+                      {!processing && !result && fontInfo && <p className="text-gray-400">No glyph data for "{selectedChar}"</p>}
+                      {!processing && result && <StageRenderer result={result} stage={activeStage} animTime={animTime} />}
+                    </>
+                  ) : (
+                    <>
+                      {!processing && !geoResult && fontInfo && <p className="text-gray-400">No glyph data for "{selectedChar}"</p>}
+                      {!processing && geoResult && <GeometryStageRenderer result={geoResult} stage={geometryStage} animTime={animTime} />}
+                    </>
+                  )}
                 </div>
               </div>
             </ZoomCanvas>
 
             {/* Animation controls bar (always rendered with fixed height to prevent layout shift) */}
-            <div className={`h-[44px] ${(activeStage === 'animation' || activeStage === 'final') && result ? '' : 'invisible'}`}>
-              {result && (
+            <div className={`h-[44px] ${animStageActive && animResult ? '' : 'invisible'}`}>
+              {animResult && (
                 <AnimationControls
-                  result={result}
+                  totalDuration={totalDuration}
                   time={animTime}
                   setTime={setAnimTime}
                   playing={animPlaying}
@@ -815,7 +995,7 @@ export function GeneratorApp() {
             </div>
 
             {/* Info bar */}
-            {result && (
+            {pipeline === 'raster' && result && (
               <div className="px-3 py-1.5 border-t border-gray-200 bg-white text-xs text-gray-500 flex gap-4">
                 <span>
                   Char: {result.char} (U+{result.unicode.toString(16).padStart(4, '0').toUpperCase()})
@@ -827,6 +1007,26 @@ export function GeneratorApp() {
                 <span>Polylines: {result.polylines.length}</span>
                 <span>Strokes: {result.strokes.length}</span>
                 <span>Line cap: {result.lineCap}</span>
+              </div>
+            )}
+            {pipeline === 'geometry' && geoResult && (
+              <div className="px-3 py-1.5 border-t border-gray-200 bg-white text-xs text-gray-500 flex gap-4 flex-wrap">
+                <span>
+                  Char: {geoResult.char} (U+{geoResult.unicode.toString(16).padStart(4, '0').toUpperCase()})
+                </span>
+                <span>Contours: {geoResult.contours.length}</span>
+                <span>Corners: {geoResult.corners.length}</span>
+                <span>Cuts: {geoResult.cuts.length}</span>
+                <span>
+                  Faces: {geoResult.faces.length} ({geoResult.faces.filter((f) => f.kind === 'junction').length}J)
+                </span>
+                <span>Segments: {geoResult.segments.length}</span>
+                <span>Strokes: {geoResult.strokesFontUnits.length}</span>
+                {geoResult.warnings.length > 0 && (
+                  <span className="text-amber-600" title={geoResult.warnings.join('\n')}>
+                    ⚠ {geoResult.warnings.length}
+                  </span>
+                )}
               </div>
             )}
           </>
