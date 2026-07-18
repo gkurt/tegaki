@@ -795,6 +795,23 @@ export function GeneratorApp() {
                   </button>
                 )}
               </div>
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="text-gray-600">Medial axis</span>
+                <div className="flex rounded overflow-hidden border border-gray-300">
+                  {(['chain', 'voronoi'] as const).map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      className={`px-2 py-1 text-xs cursor-pointer ${
+                        geometryOptions.medialMethod === method ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'
+                      }`}
+                      onClick={() => updateGeometryOption('medialMethod', method)}
+                    >
+                      {method === 'chain' ? 'Chain' : 'Voronoi'}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <SliderOption
                 label="Corner angle (deg)"
                 value={geometryOptions.cornerAngleThresholdDeg}

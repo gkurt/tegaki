@@ -144,7 +144,7 @@ const REVERSE_OPTION_KEYS = Object.fromEntries(Object.entries(OPTION_KEYS).map((
   keyof PipelineOptions
 >;
 
-// Geometry-pipeline option short keys (all numeric).
+// Geometry-pipeline option short keys (numeric except medialMethod).
 const GEO_OPTION_KEYS: Record<keyof GeometryOptions, string> = {
   cornerAngleThresholdDeg: 'gca',
   cornerWindowRatio: 'gcw',
@@ -153,7 +153,10 @@ const GEO_OPTION_KEYS: Record<keyof GeometryOptions, string> = {
   junctionCompactness: 'gjc',
   continuationMaxBendDeg: 'gcb',
   resampleSpacingRatio: 'grs',
+  medialMethod: 'gmm',
 };
+
+const MEDIAL_METHODS: readonly GeometryOptions['medialMethod'][] = ['chain', 'voronoi'];
 
 const REVERSE_GEO_OPTION_KEYS = Object.fromEntries(Object.entries(GEO_OPTION_KEYS).map(([k, v]) => [v, k])) as Record<
   string,
@@ -242,10 +245,15 @@ export function parseUrlState(search: string | URLSearchParams = window.location
     }
   }
 
-  // Geometry options — all numeric.
+  // Geometry options — numeric, except the enum-valued medialMethod.
   for (const [short, long] of Object.entries(REVERSE_GEO_OPTION_KEYS)) {
     if (!p.has(short)) continue;
-    const v = Number(p.get(short));
+    const raw = p.get(short)!;
+    if (long === 'medialMethod') {
+      if ((MEDIAL_METHODS as readonly string[]).includes(raw)) state.geometryOptions.medialMethod = raw as GeometryOptions['medialMethod'];
+      continue;
+    }
+    const v = Number(raw);
     if (Number.isFinite(v)) (state.geometryOptions as unknown as Record<string, number>)[long] = v;
   }
 

@@ -5,6 +5,7 @@ import { dist, signedArea } from './primitives.ts';
 import { type AxisPoint, DEFAULT_GEOMETRY_OPTIONS, type Face, resolveGeometryOptions } from './types.ts';
 
 const OPTIONS = resolveGeometryOptions(DEFAULT_GEOMETRY_OPTIONS, 1000);
+const OPTIONS_VORONOI = resolveGeometryOptions({ ...DEFAULT_GEOMETRY_OPTIONS, medialMethod: 'voronoi' }, 1000);
 
 /** Build a cut-free Face from a polygon, oriented region-on-left. */
 function blobFace(points: Point[]): Face {
@@ -212,6 +213,13 @@ describe('computeSegmentAxes — branch axes (no area dropped)', () => {
     const reaches = (target: Point) => infos.some((s) => s.axis.some((p) => dist(p, target) < 50));
     expect(reaches({ x: 400, y: 430 })).toBe(true); // arm end
     expect(reaches({ x: 130, y: 700 })).toBe(true); // stem bottom
+
+    // The Voronoi medial axis must reach both limbs too — by construction,
+    // not via the coverage safety net.
+    const medial = computeSegmentAxes(face, OPTIONS_VORONOI);
+    const reachesM = (target: Point) => medial.some((s) => s.axis.some((p) => dist(p, target) < 50));
+    expect(reachesM({ x: 400, y: 430 })).toBe(true);
+    expect(reachesM({ x: 130, y: 700 })).toBe(true);
   });
 });
 

@@ -17,6 +17,7 @@
 // diameter, measured from the outline rather than a rasterized approximation.
 
 import type { Point } from 'tegaki';
+import { medialFaceAxes } from './face-medial.ts';
 import {
   closestPointOnPolyline,
   dist,
@@ -133,7 +134,7 @@ function endDirection(axis: AxisPoint[], atStart: boolean, lookback: number): Po
   return normalize(sub(axis[endIdx]!, axis[i]!));
 }
 
-function buildEnds(axis: AxisPoint[], startCutId: number, endCutId: number, spacing: number): AxisEnd[] {
+export function buildEnds(axis: AxisPoint[], startCutId: number, endCutId: number, spacing: number): AxisEnd[] {
   const mk = (atStart: boolean, cutId: number): AxisEnd => {
     const p = atStart ? axis[0]! : axis[axis.length - 1]!;
     const lookback = Math.max(2 * spacing, p.width / 2);
@@ -144,32 +145,40 @@ function buildEnds(axis: AxisPoint[], startCutId: number, endCutId: number, spac
 
 /**
  * Compute ALL axes for one segment face: the primary axis plus one BRANCH
- * axis per leftover cap.
+ * axis per limb the primary cannot reach.
  *
- * A single path can only serve two ports, but a face can have more: a smooth
- * crotch produces no concave corner and therefore no cut, so Caveat's r has
- * one face holding both its arm and its stem's bottom leg (1 cut + 2 caps).
- * The primary axis covers cut→one cap; every other cap gets a branch —
- * paired outward from the cap along its flanking walls and trimmed where its
- * nib touches the primary path. No port of a face may go unswept.
+ * Hole-free faces use the true medial axis (`medialFaceAxes` — Voronoi of
+ * boundary samples), which reaches tapered tips and side limbs by
+ * construction; a single path can only serve two ports, so extra limbs come
+ * back as retraces (2-port faces) or branch segments. Hole faces and any
+ * face the medial graph can't handle fall back to chain pairing. The
+ * coverage-based branch pass runs last against ALL produced axes as a
+ * safety net — no area of a face may go unswept.
  */
 export function computeSegmentAxes(face: Face, options: ResolvedGeometryOptions): SegmentInfo[] {
-  const primary = computeSegmentAxisCore(face, options);
-  if (!primary) return [];
-  clampWidthsToBoundary(primary.axis, face);
+  let infos: SegmentInfo[] = [];
+  if (face.holes.length === 0 && options.medialMethod === 'voronoi') {
+    infos = medialFaceAxes(face, options) ?? [];
+  }
+  if (infos.length === 0) {
+    const primary = computeSegmentAxisCore(face, options);
+    if (!primary) return [];
+    infos = [primary];
+  }
+  for (const info of infos) clampWidthsToBoundary(info.axis, face);
+  const primary = infos[0]!;
   // Keep end metadata consistent with the (possibly lowered) axis widths.
   if (primary.ends.length === 2) {
     primary.ends[0]!.width = primary.axis[0]!.width;
     primary.ends[1]!.width = primary.axis[primary.axis.length - 1]!.width;
   }
-  const out = [primary];
   if (!primary.isLoop) {
-    for (const branch of extractBranches(face, primary, options)) {
+    for (const branch of extractBranches(face, infos, options)) {
       clampWidthsToBoundary(branch.axis, face);
-      out.push(branch);
+      infos.push(branch);
     }
   }
-  return out;
+  return infos;
 }
 
 /** The primary axis of a face (see computeSegmentAxes). */
@@ -590,13 +599,38 @@ function trunkClearance(p: Point, trunk: AxisPoint[]): { d: number; width: numbe
  * branch's nib reaches the trunk — the same pen model as unpaired-junction
  * extensions.
  */
-function extractBranches(face: Face, primary: SegmentInfo, options: ResolvedGeometryOptions): SegmentInfo[] {
+function extractBranches(face: Face, trunks: SegmentInfo[], options: ResolvedGeometryOptions): SegmentInfo[] {
   const spacing = options.resampleSpacing;
   const runs = extractRuns(face);
   const branches: SegmentInfo[] = [];
+  const primary = trunks[0]!;
   const trunk = primary.axis;
   const head = trunk[0]!;
   const tail = trunk[trunk.length - 1]!;
+
+  // Coverage is measured against ALL axes the face already produced (the
+  // medial primary plus its limb branches), so recovered limbs don't get
+  // re-detected as uncovered.
+  const trunkData = trunks.map((t) => ({
+    axis: t.axis,
+    freeStart: t.ends[0]?.cutId === -1,
+    freeEnd: t.ends[1]?.cutId === -1,
+    startBody: bodyWidthNearEnd(t.axis, false, spacing),
+    endBody: bodyWidthNearEnd(t.axis, true, spacing),
+  }));
+  const clearanceAll = (p: Point): { d: number; width: number } => {
+    let best = { d: Infinity, width: 0 };
+    for (const t of trunkData) {
+      const c = trunkClearance(p, t.axis);
+      if (c.d < best.d) best = c;
+    }
+    return best;
+  };
+  const inCapDisk = (p: Point) =>
+    trunkData.some(
+      (t) =>
+        (t.freeStart && dist(p, t.axis[0]!) < 0.75 * t.startBody) || (t.freeEnd && dist(p, t.axis[t.axis.length - 1]!) < 0.75 * t.endBody),
+    );
 
   // Wall chains: maximal boundary stretches between cut runs, or the whole
   // outline when the face has no cuts.
@@ -623,25 +657,15 @@ function extractBranches(face: Face, primary: SegmentInfo, options: ResolvedGeom
     if (n < 8) continue;
     const samples = chain.closed ? resamplePolyline(chain.points, n + 1).slice(0, n) : resamplePolyline(chain.points, n);
 
-    // A wall sample is covered when the trunk's ribbon plausibly reaches it
-    // (walls of the trunk's own stroke sit at ~width/2 from the axis), or
-    // when it sits inside a FREE trunk tip's cap disk — the corners of a
-    // flat-capped stroke end are un-inked by any round pen (the trunk's own
-    // cap, not a limb). Cap radius: ¾ of the body width near that end,
-    // measured with an adaptive window (taper + boundary clamp shrink the
-    // tip widths themselves, so walk inward while the arc stays within
-    // ~1.5× the widest width seen). Cut-side trunk ends get no cap disk:
-    // the trunk stops there because the face does, so anything beyond is
+    // A wall sample is covered when some axis's ribbon plausibly reaches it
+    // (walls of a stroke sit at ~width/2 from its axis; margin of one full
+    // local width because square-turn outer corners sit at ~0.7×w — pen-
+    // unreachable slivers), or when it sits inside a FREE tip's cap disk —
+    // the corners of a flat-capped stroke end are un-inked by any round pen
+    // (the trunk's own cap, not a limb). Cut-side ends get no cap disk: the
+    // axis stops there because the face does, so anything beyond is
     // genuinely unserved (r's bottom leg).
-    const startBody = bodyWidthNearEnd(trunk, false, spacing);
-    const endBody = bodyWidthNearEnd(trunk, true, spacing);
-    const freeStart = primary.ends[0]?.cutId === -1;
-    const freeEnd = primary.ends[1]?.cutId === -1;
-    const inCapDisk = (p: Point) => (freeStart && dist(p, head) < 0.75 * startBody) || (freeEnd && dist(p, tail) < 0.75 * endBody);
-    // Margin of one full local width: square-turn outer corners sit at
-    // ~0.7×w from the axis (pen-unreachable slivers, like flat-cap corners),
-    // while genuine limbs extend multiples of the stroke width.
-    const clearances = samples.map((p) => trunkClearance(p, trunk));
+    const clearances = samples.map((p) => clearanceAll(p));
     const uncovered = samples.map((p, i) => !inCapDisk(p) && clearances[i]!.d > clearances[i]!.width + spacing);
 
     // Cluster consecutive uncovered samples; each cluster is an unswept limb.
@@ -739,7 +763,7 @@ function extractBranches(face: Face, primary: SegmentInfo, options: ResolvedGeom
         const pt = { ...mid, width: dist(p, q) };
         axis.push(pt);
         // The branch has merged into the trunk once its nib reaches it.
-        if (axis.length >= 2 && trunkClearance(mid, trunk).d <= pt.width * 0.75) break;
+        if (axis.length >= 2 && clearanceAll(mid).d <= pt.width * 0.75) break;
       }
       if (axis.length < 2 || polylineLength(axis) < 2 * spacing) continue;
       branches.push({ faceId: face.id, axis, isLoop: false, ends: buildEnds(axis, -1, -1, spacing) });

@@ -167,6 +167,14 @@ export interface GeometryOptions {
   continuationMaxBendDeg: number;
   /** Medial-axis sample spacing as a fraction of unitsPerEm. */
   resampleSpacingRatio: number;
+  /**
+   * Axis computation for hole-free segment faces: 'chain' pairs opposite
+   * walls (fast, verified, but stops short of thin tapering parts);
+   * 'voronoi' computes the true medial axis from the Voronoi diagram of
+   * boundary samples (reaches every thin limb by construction —
+   * experimental, being iterated on visually).
+   */
+  medialMethod: 'chain' | 'voronoi';
 }
 
 export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
@@ -180,6 +188,7 @@ export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
   // E, t, f) meet at ~90°, so 75° keeps a comfortable margin both ways.
   continuationMaxBendDeg: 75,
   resampleSpacingRatio: 0.02,
+  medialMethod: 'chain',
 };
 
 /** Options resolved to absolute font units / radians for the core algorithms. */
@@ -191,6 +200,7 @@ export interface ResolvedGeometryOptions {
   junctionCompactness: number;
   continuationMinCos: number;
   resampleSpacing: number;
+  medialMethod: 'chain' | 'voronoi';
 }
 
 export function resolveGeometryOptions(options: GeometryOptions, unitsPerEm: number): ResolvedGeometryOptions {
@@ -202,6 +212,7 @@ export function resolveGeometryOptions(options: GeometryOptions, unitsPerEm: num
     junctionCompactness: options.junctionCompactness,
     continuationMinCos: Math.cos((options.continuationMaxBendDeg * Math.PI) / 180),
     resampleSpacing: options.resampleSpacingRatio * unitsPerEm,
+    medialMethod: options.medialMethod,
   };
 }
 
