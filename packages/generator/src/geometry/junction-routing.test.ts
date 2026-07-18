@@ -169,14 +169,14 @@ const crossbarSegments = (): SegmentInfo[] => [
   ),
 ];
 
-function runNode(node: JunctionNode, segments: SegmentInfo[], faces: Face[], warnings?: string[]) {
+function runNode(node: JunctionNode, segments: SegmentInfo[], faces: Face[]) {
   const faceById = new Map(faces.map((f) => [f.id, f]));
   const junctions = buildJunctions(segments, [node]);
   expect(junctions).toHaveLength(1);
   for (const j of junctions) matchContinuations(j, segments, OPTIONS);
   routeJunctionPaths(junctions, segments, faceById, OPTIONS);
-  extendUnpairedEnds(junctions, segments, faceById, OPTIONS, warnings);
-  return junctions[0]!;
+  const unswept = extendUnpairedEnds(junctions, segments, faceById, OPTIONS);
+  return { junction: junctions[0]!, unswept };
 }
 
 describe('extendUnpairedEnds', () => {
@@ -196,7 +196,7 @@ describe('extendUnpairedEnds', () => {
     ];
     const node: JunctionNode = { faceIds: [0, 1], cutIds: [0, 1, 2, 3], center: { x: 25, y: 25 } };
 
-    const junction = runNode(node, segments, [kernel, corridor()]);
+    const { junction, unswept } = runNode(node, segments, [kernel, corridor()]);
 
     // The crossbar pairs and routes through the kernel; the corridor end stays unpaired.
     expect(junction.pairings).toEqual([[0, 1]]);
@@ -212,6 +212,7 @@ describe('extendUnpairedEnds', () => {
     const last = ext![ext!.length - 1]!;
     expect(Math.hypot(last.x - 25, last.y - 0)).toBeLessThan(20);
     expect(ext!.some((p) => p.y > -150 && p.y < -50 && Math.abs(p.x - 25) < 15)).toBe(true);
+    expect(unswept).toHaveLength(0);
   });
 
   test('unpaired end into a route-covered kernel keeps the straight nib ray (T-stem into the bar)', () => {
@@ -230,7 +231,7 @@ describe('extendUnpairedEnds', () => {
     ];
     const node: JunctionNode = { faceIds: [0], cutIds: [0, 1, 2], center: { x: 25, y: 25 } };
 
-    const junction = runNode(node, segments, [kernel]);
+    const { junction, unswept } = runNode(node, segments, [kernel]);
 
     expect(junction.pairings).toEqual([[0, 1]]);
     // Straight ray: hit the top wall at 50, pull back half the width → the
@@ -240,17 +241,19 @@ describe('extendUnpairedEnds', () => {
     expect(ext!).toHaveLength(2);
     expect(ext![1]!.x).toBeCloseTo(25, 5);
     expect(ext![1]!.y).toBeCloseTo(25, 5);
+    expect(unswept).toHaveLength(0);
   });
 
-  test('a node face swept by no route and no extension raises a warning', () => {
+  test('a node face swept by no route and no extension is returned for rescue', () => {
     // Same corridor, but nothing enters it: only the crossbar's two ends
-    // exist, they pair through the kernel, and the corridor dangles.
+    // exist, they pair through the kernel, and the corridor dangles — the
+    // わ case, where every incident end is paired and the corridor between
+    // two crossings belongs to nobody. The caller must emit it standalone.
     const node: JunctionNode = { faceIds: [0, 1], cutIds: [0, 1, 2, 3], center: { x: 25, y: 25 } };
 
-    const warnings: string[] = [];
-    runNode(node, crossbarSegments(), [kernel, corridor()], warnings);
+    const { unswept } = runNode(node, crossbarSegments(), [kernel, corridor()]);
 
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('junction face 1');
+    expect(unswept).toHaveLength(1);
+    expect(unswept[0]!.id).toBe(1);
   });
 });

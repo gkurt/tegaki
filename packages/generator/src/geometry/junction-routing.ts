@@ -214,14 +214,20 @@ function routeIntoUncovered(
  *   node) — a straight ray dies on the first wall. Route through the
  *   uncovered faces along their own axes instead, exactly like a pairing
  *   route would.
+ *
+ * Returns the node faces that remain swept by NO route and NO extension —
+ * possible when every incident end is paired but the routes bypass a face
+ * (わ's corridor sits between two crossings whose ends pair among
+ * themselves). The caller must rescue those faces; silently dropping them
+ * loses glyph area.
  */
 export function extendUnpairedEnds(
   junctions: JunctionInfo[],
   segments: SegmentInfo[],
   faceById: Map<number, Face>,
   options: ResolvedGeometryOptions,
-  warnings?: string[],
-): void {
+): Face[] {
+  const unswept: Face[] = [];
   for (const junction of junctions) {
     if (junction.faceIds.length === 0) continue;
     const faces = junction.faceIds.map((id) => faceById.get(id)).filter((f): f is Face => f != null);
@@ -281,13 +287,12 @@ export function extendUnpairedEnds(
       ];
     });
 
-    if (warnings) {
-      for (let fi = 0; fi < faces.length; fi++) {
-        if (covered.has(fi) || touched.has(fi)) continue;
-        warnings.push(`junction face ${faces[fi]!.id} swept by no route or extension — area may be dropped`);
-      }
+    for (let fi = 0; fi < faces.length; fi++) {
+      if (covered.has(fi) || touched.has(fi)) continue;
+      unswept.push(faces[fi]!);
     }
   }
+  return unswept;
 }
 
 /**

@@ -166,7 +166,21 @@ function processRegion(
   const junctions = buildJunctions(segments, nodes);
   for (const junction of junctions) matchContinuations(junction, segments, resolved);
   routeJunctionPaths(junctions, segments, faceById, resolved);
-  extendUnpairedEnds(junctions, segments, faceById, resolved, warnings);
+  const unswept = extendUnpairedEnds(junctions, segments, faceById, resolved);
+  // Orphan-face rescue: a node face no route or extension sweeps happens when
+  // every incident end is paired but the routes bypass it (わ's corridor
+  // between two crossings). Its cut runs are ports like any segment face —
+  // give it its own axis and emit it as a standalone stroke rather than
+  // dropping the ink.
+  for (const face of unswept) {
+    const infos = computeSegmentAxes(face, resolved);
+    if (infos.length === 0 || infos[0]!.axis.length < 2) {
+      warnings.push(`junction face ${face.id} swept by no route or extension — area dropped`);
+      continue;
+    }
+    warnings.push(`junction face ${face.id} unreached by routes — emitted as standalone stroke`);
+    segments.push(...infos);
+  }
   const geoStrokes = assembleStrokes(segments, junctions);
   for (const gs of geoStrokes) gs.points = simplifyStroke(gs.points, simplifyEps);
 
