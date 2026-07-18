@@ -472,6 +472,52 @@ describe('medialFaceAxes — lobes and limbs', () => {
     expect(consecutiveDuplicates(infos!)).toEqual([]);
   });
 
+  test('serif bump near a bar end folds into the bar as a flick, not a stroke', () => {
+    // A Mincho uroko: a triangular pressure mark on top of a horizontal
+    // bar's free end. It is real ink (it escapes the bar's disks) but the
+    // hand draws it as the bar stroke's finishing flick — a short limb must
+    // RETRACE into the primary, only long limbs become branch strokes.
+    const P: Point[] = [
+      { x: 100, y: 380 },
+      { x: 560, y: 380 },
+      { x: 590, y: 330 },
+      { x: 620, y: 380 },
+      { x: 700, y: 380 },
+      { x: 700, y: 416 },
+      { x: 100, y: 416 },
+    ];
+    const face = buildFace(
+      P,
+      P.map((_, i) => (i === P.length - 1 ? 0 : -1)),
+    );
+    const infos = axesOf(face);
+    expect(infos).not.toBeNull();
+    expect(infos!).toHaveLength(1);
+    expect(penGap(infos!, { x: 590, y: 345 })).toBeLessThanOrEqual(12);
+  });
+
+  test('rhombic dot (Arabic-style): one dab axis, no corner tick limbs', () => {
+    // A dot's whole face is pen-scale — its medial tree has short-diagonal
+    // corner chains that escape the center disk, but drawing them as limb
+    // strokes renders spurious ticks on every diacritic dot.
+    const dot = buildFace(
+      [
+        { x: 436, y: 200 },
+        { x: 500, y: 142 },
+        { x: 564, y: 200 },
+        { x: 500, y: 258 },
+      ],
+      [-1, -1, -1, -1],
+    );
+    const infos = axesOf(dot);
+    expect(infos).not.toBeNull();
+    expect(infos!).toHaveLength(1);
+    // The dab axis spans the long diagonal, not a corner tick.
+    const axis = infos![0]!.axis;
+    const xs = axis.map((p) => p.x);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(50);
+  });
+
   test('small wall bump on a strip: no detour, no phantom branch', () => {
     // Bump depth 15 (< half-width 30) over a 100-unit window — inside the
     // pen's reach, so it must neither branch nor bend the primary off course.

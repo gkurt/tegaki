@@ -382,6 +382,31 @@ function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: n
   }
   if (primaryIds.length < 2 && ports.length !== 2) return retry;
 
+  // ── Blob faces get no limbs ─────────────────────────────────────────────
+  // A face whose medial tree barely exceeds its own pen width is a dab — an
+  // Arabic diacritic dot, a stub tip, a serif blob. The pen covers it in one
+  // pass, and its corner chains (a rhombic dot's short diagonal) would
+  // otherwise render as spurious tick strokes. Real limbed shapes measure
+  // several widths across (a lobe's climb, r's leg face), so they keep
+  // their limbs.
+  let isBlob = false;
+  {
+    let maxW = 0;
+    for (const node of nodes) if (node.alive) maxW = Math.max(maxW, node.width);
+    const seed = nodes.findIndex((n) => n.alive);
+    const first = dijkstra(nodes, [seed]);
+    let a = seed;
+    for (let i = 0; i < nodes.length; i++) {
+      if (nodes[i]!.alive && Number.isFinite(first.distTo[i]!) && first.distTo[i]! > first.distTo[a]!) a = i;
+    }
+    const second = dijkstra(nodes, [a]);
+    let diameter = 0;
+    for (let i = 0; i < nodes.length; i++) {
+      if (nodes[i]!.alive && Number.isFinite(second.distTo[i]!)) diameter = Math.max(diameter, second.distTo[i]!);
+    }
+    isBlob = diameter <= 1.5 * maxW;
+  }
+
   // ── Leftover leaves: retrace into a 2-port primary, else branch ─────────
   const onPrimary = new Set(primaryIds);
   const { distTo: dPrim, prev: pPrim } = dijkstra(nodes, primaryIds);
@@ -403,6 +428,7 @@ function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: n
   ];
   const limbs: Limb[] = [];
   for (let i = 0; i < nodes.length; i++) {
+    if (isBlob) break;
     if (!nodes[i]!.alive || onPrimary.has(i) || aliveDegree(nodes, i) !== 1) continue;
     if (!Number.isFinite(dPrim[i]!)) continue;
     const ids = walkPath(pPrim, i); // starts at a primary node
@@ -417,20 +443,26 @@ function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: n
   // means the sampling missed a (possibly curved) thin tail — refine instead.
   let maxShortfall = 0;
 
+  // Limb disposition: 2-port faces retrace EVERY limb (the stroke enters and
+  // leaves through the cuts, so even a long lobe is drawn out-and-back), and
+  // short limbs retrace regardless of ports — a Mincho uroko or a pressure
+  // tip is the parent stroke's finishing flick, not a stroke of its own.
+  // Only limbs longer than their attachment is wide become branch strokes.
+  const retraced = limbs.map((limb) => ports.length === 2 || limb.len <= 1.25 * nodes[limb.attach]!.width);
+
   const primaryAxis: AxisPoint[] = [];
   for (const id of primaryIds) {
     primaryAxis.push({ x: nodes[id]!.x, y: nodes[id]!.y, width: nodes[id]!.width });
-    if (ports.length === 2) {
-      // Retrace lobes at their attachment, capped at the attachment width so
-      // the out-and-back pass draws at the local stroke width.
-      for (const limb of limbs) {
-        if (limb.attach !== id) continue;
-        const capW = nodes[id]!.width;
-        const out = toAxis(nodes, limb.ids).map((p) => ({ ...p, width: Math.min(p.width, capW) }));
-        maxShortfall = Math.max(maxShortfall, extendFreeTip(out, false, face.polygon, spacing));
-        primaryAxis.push(...out.slice(1));
-        primaryAxis.push(...out.slice(0, -1).reverse());
-      }
+    // Retrace limbs at their attachment, capped at the attachment width so
+    // the out-and-back pass draws at the local stroke width.
+    for (let k = 0; k < limbs.length; k++) {
+      const limb = limbs[k]!;
+      if (!retraced[k] || limb.attach !== id) continue;
+      const capW = nodes[id]!.width;
+      const out = toAxis(nodes, limb.ids).map((p) => ({ ...p, width: Math.min(p.width, capW) }));
+      maxShortfall = Math.max(maxShortfall, extendFreeTip(out, false, face.polygon, spacing));
+      primaryAxis.push(...out.slice(1));
+      primaryAxis.push(...out.slice(0, -1).reverse());
     }
   }
 
@@ -444,13 +476,12 @@ function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: n
   if (ports.length === 2) primaryAxis.push({ ...ports[1]!.mid, width: ports[1]!.span });
 
   const branchAxes: AxisPoint[][] = [];
-  if (ports.length < 2) {
-    for (const limb of limbs) {
-      // Branch convention: tip first (leaf → attachment).
-      const axis = toAxis(nodes, [...limb.ids].reverse());
-      maxShortfall = Math.max(maxShortfall, extendFreeTip(axis, true, face.polygon, spacing));
-      branchAxes.push(axis);
-    }
+  for (let k = 0; k < limbs.length; k++) {
+    if (retraced[k]) continue;
+    // Branch convention: tip first (leaf → attachment).
+    const axis = toAxis(nodes, [...limbs[k]!.ids].reverse());
+    maxShortfall = Math.max(maxShortfall, extendFreeTip(axis, true, face.polygon, spacing));
+    branchAxes.push(axis);
   }
   if (!final && maxShortfall > 4 * step) return REFINE;
 
