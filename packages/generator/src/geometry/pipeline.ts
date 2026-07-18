@@ -15,7 +15,7 @@ import { buildContours, findContourOverlaps } from './contours.ts';
 import { detectCorners } from './corners.ts';
 import { generateCuts } from './cuts.ts';
 import { extendUnpairedEnds, routeJunctionPaths } from './junction-routing.ts';
-import { computeSegmentAxis } from './medial.ts';
+import { computeSegmentAxes } from './medial.ts';
 import { orderAndTimeStrokes } from './ordering.ts';
 import { classifyFaces, partitionFaces } from './partition.ts';
 import { partitionRegions } from './regions.ts';
@@ -89,10 +89,16 @@ function processRegion(
   const faceToSegment = new Map<number, number>();
   for (const face of faces) {
     if (face.kind !== 'segment') continue;
-    const info = computeSegmentAxis(face, resolved);
-    if (!info || info.axis.length < 2) continue;
+    // One face can yield several axes: the primary path plus a branch per
+    // leftover cap (r's arm + bottom leg share one face). Drops must never
+    // be silent — every face is a legitimate part of the glyph.
+    const infos = computeSegmentAxes(face, resolved);
+    if (infos.length === 0 || infos[0]!.axis.length < 2) {
+      warnings.push(`segment face ${face.id} produced no axis — area dropped`);
+      continue;
+    }
     faceToSegment.set(face.id, segments.length);
-    segments.push(info);
+    segments.push(...infos);
   }
 
   // cut → faces bordering it.

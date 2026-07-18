@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Point } from 'tegaki';
-import { clampWidthsToBoundary, computeSegmentAxis } from './medial.ts';
+import { clampWidthsToBoundary, computeSegmentAxes, computeSegmentAxis } from './medial.ts';
 import { dist, signedArea } from './primitives.ts';
 import { type AxisPoint, DEFAULT_GEOMETRY_OPTIONS, type Face, resolveGeometryOptions } from './types.ts';
 
@@ -174,6 +174,44 @@ describe('computeSegmentAxis — cut-free ribbon (no concave corners: L, U, C, S
     expect(info).not.toBeNull();
     expect(info!.axis.length).toBeGreaterThanOrEqual(2);
     for (const p of info!.axis) expect(dist(p, { x: 500, y: 500 })).toBeLessThan(55);
+  });
+});
+
+describe('computeSegmentAxes — branch axes (no area dropped)', () => {
+  test('a 1-cut face holding two limbs covers BOTH extremities', () => {
+    // r-like face: cut at the top, stem descending to (100..160, 700), and an
+    // arm branching right at (400, 400..460). The crotch between them is a
+    // polygon corner here, but faces are given — no cut separates the limbs,
+    // exactly like Caveat r's arm + bottom leg sharing one face. A single
+    // path can only reach one limb; the other must come back as a branch.
+    const P: Point[] = [
+      { x: 160, y: 100 },
+      { x: 160, y: 400 },
+      { x: 400, y: 400 },
+      { x: 400, y: 460 },
+      { x: 160, y: 460 },
+      { x: 160, y: 700 },
+      { x: 100, y: 700 },
+      { x: 100, y: 100 },
+    ];
+    const polygon = signedArea(P) >= 0 ? P : [...P].reverse();
+    const face: Face = {
+      id: 0,
+      polygon,
+      // The closing edge (last → first point, the top edge) is the cut; the
+      // closing edge stays the closing edge under reversal.
+      edgeCutIds: polygon.map((_, i) => (i === polygon.length - 1 ? 0 : -1)),
+      holes: [],
+      cutIds: [0],
+      area: Math.abs(signedArea(P)),
+      centroid: { x: 0, y: 0 },
+      kind: 'segment',
+    };
+    const infos = computeSegmentAxes(face, OPTIONS);
+    expect(infos.length).toBeGreaterThanOrEqual(2);
+    const reaches = (target: Point) => infos.some((s) => s.axis.some((p) => dist(p, target) < 50));
+    expect(reaches({ x: 400, y: 430 })).toBe(true); // arm end
+    expect(reaches({ x: 130, y: 700 })).toBe(true); // stem bottom
   });
 });
 

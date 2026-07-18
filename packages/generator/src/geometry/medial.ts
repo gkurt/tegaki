@@ -142,18 +142,39 @@ function buildEnds(axis: AxisPoint[], startCutId: number, endCutId: number, spac
   return [mk(true, startCutId), mk(false, endCutId)];
 }
 
-/** Compute the medial axis and end metadata for one segment face. */
-export function computeSegmentAxis(face: Face, options: ResolvedGeometryOptions): SegmentInfo | null {
-  const info = computeSegmentAxisCore(face, options);
-  if (info) {
-    clampWidthsToBoundary(info.axis, face);
-    // Keep end metadata consistent with the (possibly lowered) axis widths.
-    if (info.ends.length === 2) {
-      info.ends[0]!.width = info.axis[0]!.width;
-      info.ends[1]!.width = info.axis[info.axis.length - 1]!.width;
+/**
+ * Compute ALL axes for one segment face: the primary axis plus one BRANCH
+ * axis per leftover cap.
+ *
+ * A single path can only serve two ports, but a face can have more: a smooth
+ * crotch produces no concave corner and therefore no cut, so Caveat's r has
+ * one face holding both its arm and its stem's bottom leg (1 cut + 2 caps).
+ * The primary axis covers cut→one cap; every other cap gets a branch —
+ * paired outward from the cap along its flanking walls and trimmed where its
+ * nib touches the primary path. No port of a face may go unswept.
+ */
+export function computeSegmentAxes(face: Face, options: ResolvedGeometryOptions): SegmentInfo[] {
+  const primary = computeSegmentAxisCore(face, options);
+  if (!primary) return [];
+  clampWidthsToBoundary(primary.axis, face);
+  // Keep end metadata consistent with the (possibly lowered) axis widths.
+  if (primary.ends.length === 2) {
+    primary.ends[0]!.width = primary.axis[0]!.width;
+    primary.ends[1]!.width = primary.axis[primary.axis.length - 1]!.width;
+  }
+  const out = [primary];
+  if (!primary.isLoop) {
+    for (const branch of extractBranches(face, primary, options)) {
+      clampWidthsToBoundary(branch.axis, face);
+      out.push(branch);
     }
   }
-  return info;
+  return out;
+}
+
+/** The primary axis of a face (see computeSegmentAxes). */
+export function computeSegmentAxis(face: Face, options: ResolvedGeometryOptions): SegmentInfo | null {
+  return computeSegmentAxes(face, options)[0] ?? null;
 }
 
 function computeSegmentAxisCore(face: Face, options: ResolvedGeometryOptions): SegmentInfo | null {
@@ -517,6 +538,214 @@ function endCapAxis(chain: Point[], spacing: number): AxisPoint[] | null {
   // side1 runs cut→tip, side2 tip→cut: orient the axis cut-side → tip.
   if (base === side2) axis.reverse();
   return axis;
+}
+
+/**
+ * Distance from a point to the trunk axis, plus the trunk's local width at
+ * the closest approach (max of the nearest segment's endpoint widths, so a
+ * tapering tip still reports its body width).
+ */
+/**
+ * Widest axis width near one trunk end, walked inward over an adaptive
+ * window (arc ≤ ~1.5× the widest width seen, so taper and boundary clamping
+ * at the very tip don't hide the true body width).
+ */
+function bodyWidthNearEnd(trunk: AxisPoint[], fromEnd: boolean, spacing: number): number {
+  let wmax = 0;
+  let arc = 0;
+  const n = trunk.length;
+  for (let s = 0; s < n; s++) {
+    const i = fromEnd ? n - 1 - s : s;
+    wmax = Math.max(wmax, trunk[i]!.width);
+    if (s > 0) arc += dist(trunk[i]!, trunk[fromEnd ? i + 1 : i - 1]!);
+    if (arc > Math.max(1.5 * wmax, 4 * spacing)) break;
+  }
+  return wmax;
+}
+
+function trunkClearance(p: Point, trunk: AxisPoint[]): { d: number; width: number } {
+  let best = Infinity;
+  let width = 0;
+  for (let i = 1; i < trunk.length; i++) {
+    const d = distToSegment(p, trunk[i - 1]!, trunk[i]!);
+    if (d < best) {
+      best = d;
+      width = Math.max(trunk[i - 1]!.width, trunk[i]!.width);
+    }
+  }
+  return { d: best, width };
+}
+
+/**
+ * Branch axes for face area the primary axis does not reach — the "no area
+ * dropped" guarantee, driven by COVERAGE rather than shape heuristics.
+ *
+ * A face can have more ports than one path serves: Caveat's r holds its arm
+ * AND its stem's bottom leg in one 1-cut face (the crotch between them is
+ * smooth, so no concave corner ever cut them apart). Wall samples farther
+ * from the trunk than its ribbon reaches mark unswept limbs (turn-based cap
+ * detection misses soft or chain-end caps — the r's bottom tip measures only
+ * ~75°). Each uncovered cluster branches from its farthest sample: pair its
+ * two flanking walls outward from there by closest point and trim where the
+ * branch's nib reaches the trunk — the same pen model as unpaired-junction
+ * extensions.
+ */
+function extractBranches(face: Face, primary: SegmentInfo, options: ResolvedGeometryOptions): SegmentInfo[] {
+  const spacing = options.resampleSpacing;
+  const runs = extractRuns(face);
+  const branches: SegmentInfo[] = [];
+  const trunk = primary.axis;
+  const head = trunk[0]!;
+  const tail = trunk[trunk.length - 1]!;
+
+  // Wall chains: maximal boundary stretches between cut runs, or the whole
+  // outline when the face has no cuts.
+  const chains: { points: Point[]; closed: boolean }[] = [];
+  const firstCut = runs.findIndex((r) => r.cutId >= 0);
+  if (firstCut < 0) {
+    chains.push({ points: [...face.polygon, face.polygon[0]!], closed: true });
+  } else {
+    let current: Point[] = [];
+    for (let k = 1; k <= runs.length; k++) {
+      const run = runs[(firstCut + k) % runs.length]!;
+      if (run.cutId >= 0) {
+        if (current.length >= 2) chains.push({ points: current, closed: false });
+        current = [];
+      } else {
+        appendChain(current, run.points);
+      }
+    }
+    if (current.length >= 2) chains.push({ points: current, closed: false });
+  }
+
+  for (const chain of chains) {
+    const n = clampSamples(polylineLength(chain.points), spacing);
+    if (n < 8) continue;
+    const samples = chain.closed ? resamplePolyline(chain.points, n + 1).slice(0, n) : resamplePolyline(chain.points, n);
+
+    // A wall sample is covered when the trunk's ribbon plausibly reaches it
+    // (walls of the trunk's own stroke sit at ~width/2 from the axis), or
+    // when it sits inside a FREE trunk tip's cap disk — the corners of a
+    // flat-capped stroke end are un-inked by any round pen (the trunk's own
+    // cap, not a limb). Cap radius: ¾ of the body width near that end,
+    // measured with an adaptive window (taper + boundary clamp shrink the
+    // tip widths themselves, so walk inward while the arc stays within
+    // ~1.5× the widest width seen). Cut-side trunk ends get no cap disk:
+    // the trunk stops there because the face does, so anything beyond is
+    // genuinely unserved (r's bottom leg).
+    const startBody = bodyWidthNearEnd(trunk, false, spacing);
+    const endBody = bodyWidthNearEnd(trunk, true, spacing);
+    const freeStart = primary.ends[0]?.cutId === -1;
+    const freeEnd = primary.ends[1]?.cutId === -1;
+    const inCapDisk = (p: Point) => (freeStart && dist(p, head) < 0.75 * startBody) || (freeEnd && dist(p, tail) < 0.75 * endBody);
+    // Margin of one full local width: square-turn outer corners sit at
+    // ~0.7×w from the axis (pen-unreachable slivers, like flat-cap corners),
+    // while genuine limbs extend multiples of the stroke width.
+    const clearances = samples.map((p) => trunkClearance(p, trunk));
+    const uncovered = samples.map((p, i) => !inCapDisk(p) && clearances[i]!.d > clearances[i]!.width + spacing);
+
+    // Cluster consecutive uncovered samples; each cluster is an unswept limb.
+    const clusters: { from: number; to: number }[] = [];
+    let start = -1;
+    const limit = chain.closed ? n : samples.length;
+    for (let i = 0; i <= limit; i++) {
+      const on = i < limit && uncovered[i]!;
+      if (on && start < 0) start = i;
+      if (!on && start >= 0) {
+        clusters.push({ from: start, to: i - 1 });
+        start = -1;
+      }
+    }
+    // On a closed chain, merge a cluster wrapping around the seam.
+    if (chain.closed && clusters.length >= 2 && uncovered[0] && uncovered[n - 1]) {
+      const first = clusters[0]!;
+      const last = clusters.pop()!;
+      first.from = last.from - n; // negative index, resolved modulo n below
+    }
+
+    for (const cluster of clusters) {
+      // The limb's tip: the cluster's farthest sample from the trunk.
+      let k = -1;
+      let bestD = -1;
+      for (let i = cluster.from; i <= cluster.to; i++) {
+        const idx = (i + n) % n;
+        if (clearances[idx]!.d > bestD) {
+          bestD = clearances[idx]!.d;
+          k = idx;
+        }
+      }
+      if (k < 0) continue;
+
+      // The two walls flanking the tip, both starting AT the tip. On a closed
+      // outline, stop each side at the sample nearest a trunk tip so the
+      // sides don't run past the trunk's own caps.
+      let side1: Point[];
+      let side2: Point[];
+      if (chain.closed) {
+        const nearest = (target: Point) => {
+          let best = 0;
+          let d0 = Infinity;
+          for (let i = 0; i < n; i++) {
+            const d = dist(samples[i]!, target);
+            if (d < d0) {
+              d0 = d;
+              best = i;
+            }
+          }
+          return best;
+        };
+        const i0 = nearest(head);
+        const i1 = nearest(tail);
+        if (i0 === k || i1 === k) continue;
+        const walk = (from: number, to: number, step: 1 | -1): Point[] => {
+          const out: Point[] = [];
+          for (let i = from; ; i = (i + step + n) % n) {
+            out.push(samples[i]!);
+            if (i === to || out.length > n) break;
+          }
+          return out;
+        };
+        // Which trunk tip does the forward direction reach first?
+        let fwdStop = i1;
+        for (let i = k; ; i = (i + 1) % n) {
+          if (i === i0) {
+            fwdStop = i0;
+            break;
+          }
+          if (i === i1) break;
+        }
+        const bwdStop = fwdStop === i0 ? i1 : i0;
+        side1 = walk(k, bwdStop, -1);
+        side2 = walk(k, fwdStop, 1);
+      } else {
+        // The limb tip can be the chain-terminal sample (a cut endpoint deep
+        // inside the limb, like r's slanted cut): clamp inward so both
+        // flanking sides exist.
+        k = Math.min(Math.max(k, 1), samples.length - 2);
+        side1 = [...samples.slice(0, k + 1)].reverse();
+        side2 = samples.slice(k);
+      }
+      if (polylineLength(side1) < 1e-9 || polylineLength(side2) < 1e-9) continue;
+
+      const base = polylineLength(side1) >= polylineLength(side2) ? side1 : side2;
+      const other = base === side1 ? side2 : side1;
+      const bs = resamplePolyline(base, clampSamples(polylineLength(base), spacing));
+      const axis: AxisPoint[] = [];
+      for (const p of bs) {
+        const q = closestPointOnPolyline(p, other);
+        const mid = midpoint(p, q);
+        const last = axis[axis.length - 1];
+        if (last && dist(last, mid) < 1e-9) continue;
+        const pt = { ...mid, width: dist(p, q) };
+        axis.push(pt);
+        // The branch has merged into the trunk once its nib reaches it.
+        if (axis.length >= 2 && trunkClearance(mid, trunk).d <= pt.width * 0.75) break;
+      }
+      if (axis.length < 2 || polylineLength(axis) < 2 * spacing) continue;
+      branches.push({ faceId: face.id, axis, isLoop: false, ends: buildEnds(axis, -1, -1, spacing) });
+    }
+  }
+  return branches;
 }
 
 /** Split the sample cycle at indices i < j and pair the two walls by closest point. */
