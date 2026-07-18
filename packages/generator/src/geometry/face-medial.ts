@@ -382,31 +382,6 @@ function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: n
   }
   if (primaryIds.length < 2 && ports.length !== 2) return retry;
 
-  // ── Blob faces get no limbs ─────────────────────────────────────────────
-  // A face whose medial tree barely exceeds its own pen width is a dab — an
-  // Arabic diacritic dot, a stub tip, a serif blob. The pen covers it in one
-  // pass, and its corner chains (a rhombic dot's short diagonal) would
-  // otherwise render as spurious tick strokes. Real limbed shapes measure
-  // several widths across (a lobe's climb, r's leg face), so they keep
-  // their limbs.
-  let isBlob = false;
-  {
-    let maxW = 0;
-    for (const node of nodes) if (node.alive) maxW = Math.max(maxW, node.width);
-    const seed = nodes.findIndex((n) => n.alive);
-    const first = dijkstra(nodes, [seed]);
-    let a = seed;
-    for (let i = 0; i < nodes.length; i++) {
-      if (nodes[i]!.alive && Number.isFinite(first.distTo[i]!) && first.distTo[i]! > first.distTo[a]!) a = i;
-    }
-    const second = dijkstra(nodes, [a]);
-    let diameter = 0;
-    for (let i = 0; i < nodes.length; i++) {
-      if (nodes[i]!.alive && Number.isFinite(second.distTo[i]!)) diameter = Math.max(diameter, second.distTo[i]!);
-    }
-    isBlob = diameter <= 1.5 * maxW;
-  }
-
   // ── Leftover leaves: retrace into a 2-port primary, else branch ─────────
   const onPrimary = new Set(primaryIds);
   const { distTo: dPrim, prev: pPrim } = dijkstra(nodes, primaryIds);
@@ -428,7 +403,6 @@ function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: n
   ];
   const limbs: Limb[] = [];
   for (let i = 0; i < nodes.length; i++) {
-    if (isBlob) break;
     if (!nodes[i]!.alive || onPrimary.has(i) || aliveDegree(nodes, i) !== 1) continue;
     if (!Number.isFinite(dPrim[i]!)) continue;
     const ids = walkPath(pPrim, i); // starts at a primary node

@@ -496,6 +496,28 @@ describe('medialFaceAxes — lobes and limbs', () => {
     expect(penGap(infos!, { x: 590, y: 345 })).toBeLessThanOrEqual(12);
   });
 
+  test('serif on a small two-port pass-through face is still swept', () => {
+    // Shippori 永's left-sweep serif: a pen-scale 2-cut face whose tree
+    // diameter barely exceeds its width, carrying a serif limb. However
+    // small the face, escaped ink must be retraced into the through-axis —
+    // a blob-style "the dab covers it" shortcut silently drops the serif.
+    const P: Point[] = [
+      { x: 100, y: 380 },
+      { x: 130, y: 380 },
+      { x: 160, y: 335 },
+      { x: 190, y: 380 },
+      { x: 220, y: 380 },
+      { x: 220, y: 450 },
+      { x: 100, y: 450 },
+    ];
+    const tags = P.map((_, i) => (i === 4 ? 1 : i === P.length - 1 ? 0 : -1));
+    const face = buildFace(P, tags);
+    const infos = axesOf(face);
+    expect(infos).not.toBeNull();
+    expect(infos![0]!.ends.map((e) => e.cutId).sort()).toEqual([0, 1]);
+    expect(penGap(infos!, { x: 160, y: 350 })).toBeLessThanOrEqual(12);
+  });
+
   test('rhombic dot (Arabic-style): one dab axis, no corner tick limbs', () => {
     // A dot's whole face is pen-scale — its medial tree has short-diagonal
     // corner chains that escape the center disk, but drawing them as limb
