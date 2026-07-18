@@ -215,12 +215,19 @@ export function partitionFaces(contours: Contour[], cuts: Cut[], weldEps: number
     return { id, cycle, polygon, holes: [] as Point[][] };
   });
 
-  // Attach each negative (hole/exterior) cycle to the smallest positive face
-  // that contains it.
+  // Attach each negative cycle to the smallest positive face that *strictly*
+  // contains it. A genuine hole (a counter) is smaller than the face around it;
+  // the arrangement's exterior/unbounded cycle is the outer boundary traversed
+  // backwards, so its area equals (or exceeds) the outermost face's — it must
+  // never be attached as a hole. Requiring the container to be strictly larger
+  // than the hole excludes it (its first vertex lies *on* a face boundary, so
+  // the point-in-polygon test alone reports a false "inside").
   for (const hole of negative) {
+    const holeArea = -hole.area; // positive magnitude
     const probe = vertices[hole.vertexIds[0]!]!;
     let owner: (typeof candidates)[number] | null = null;
     for (const cand of candidates) {
+      if (cand.cycle.area <= holeArea + areaEps) continue;
       if (!pointInPolygon(probe, cand.polygon)) continue;
       if (!owner || cand.cycle.area < owner.cycle.area) owner = cand;
     }

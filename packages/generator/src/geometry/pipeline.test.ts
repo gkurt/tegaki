@@ -69,6 +69,11 @@ describe('geometry pipeline — primitives', () => {
     expect(r.contours.some((c) => c.isHole)).toBe(true);
     expect(r.corners.length).toBe(0);
     expect(r.cuts.length).toBe(0);
+    // Exactly one hole (the counter) attached across all faces — the
+    // arrangement's exterior/unbounded cycle must NOT be attached as a second
+    // hole (that regression filled the counter instead of the ring and gave the
+    // annulus a zero-width axis).
+    expect(r.faces.reduce((n, f) => n + f.holes.length, 0)).toBe(1);
     // One annular segment forming a closed loop.
     const loops = r.segments.filter((s) => s.isLoop);
     expect(loops.length).toBe(1);
