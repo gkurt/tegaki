@@ -1,21 +1,14 @@
 import type { TegakiEffectConfigs, TegakiMultiEffectName } from 'tegaki';
 import { DEFAULT_CHARS, DEFAULT_GEOMETRY_OPTIONS, DEFAULT_OPTIONS, type GeometryOptions, type PipelineOptions } from 'tegaki-generator';
-
-type Stage =
-  | 'outline'
-  | 'flattened'
-  | 'bitmap'
-  | 'skeleton'
-  | 'overlay'
-  | 'distance'
-  | 'traced'
-  | 'curvature'
-  | 'strokes'
-  | 'animation'
-  | 'final';
-type PreviewMode = 'glyph' | 'text';
-type Pipeline = 'raster' | 'geometry';
-type GeometryStageKey = 'contours' | 'corners' | 'cuts' | 'faces' | 'segments' | 'strokes' | 'animation';
+import {
+  EASING_PRESETS,
+  GEOMETRY_STAGES,
+  type GeometryStageKey,
+  type Pipeline,
+  type PreviewMode,
+  STAGES,
+  type Stage,
+} from './preview/constants.ts';
 
 /** All state that gets persisted to the URL */
 export type TimeMode = 'controlled' | 'uncontrolled' | 'css';
@@ -167,9 +160,22 @@ const REVERSE_GEO_OPTION_KEYS = Object.fromEntries(Object.entries(GEO_OPTION_KEY
   keyof GeometryOptions
 >;
 
-/** Read URL state from the current location search params. Returns only overrides (merged with defaults). */
-export function parseUrlState(): UrlState {
-  const p = new URLSearchParams(window.location.search);
+// Allowed values for enum-like URL params. Unknown values (stale or mistyped
+// shared URLs) fall back to the default instead of poisoning typed state.
+const STAGE_KEYS = STAGES.map((s) => s.key);
+const GEOMETRY_STAGE_KEYS = GEOMETRY_STAGES.map((s) => s.key);
+const EASING_KEYS = EASING_PRESETS.map((e) => e.key);
+const PREVIEW_MODES: readonly PreviewMode[] = ['glyph', 'text'];
+const PIPELINES: readonly Pipeline[] = ['raster', 'geometry'];
+const TIME_MODES: readonly TimeMode[] = ['controlled', 'uncontrolled', 'css'];
+
+function parseEnum<T extends string>(raw: string, allowed: readonly T[], fallback: T): T {
+  return (allowed as readonly string[]).includes(raw) ? (raw as T) : fallback;
+}
+
+/** Read URL state from the given search params (defaults to the current location). Returns only overrides (merged with defaults). */
+export function parseUrlState(search: string | URLSearchParams = window.location.search): UrlState {
+  const p = new URLSearchParams(search);
   const state: UrlState = {
     ...URL_DEFAULTS,
     options: { ...DEFAULT_OPTIONS },
@@ -179,15 +185,15 @@ export function parseUrlState(): UrlState {
   if (p.has('f')) state.fontFamily = p.get('f')!;
   if (p.has('ch')) state.chars = p.get('ch')!;
   if (p.has('g')) state.selectedChar = p.get('g')!;
-  if (p.has('s')) state.activeStage = p.get('s') as Stage;
-  if (p.has('m')) state.previewMode = p.get('m') as PreviewMode;
+  if (p.has('s')) state.activeStage = parseEnum(p.get('s')!, STAGE_KEYS, URL_DEFAULTS.activeStage);
+  if (p.has('m')) state.previewMode = parseEnum(p.get('m')!, PREVIEW_MODES, URL_DEFAULTS.previewMode);
   if (p.has('t')) state.previewText = p.get('t')!;
   if (p.has('as')) state.animSpeed = Number(p.get('as'));
   if (p.has('fs')) state.fontSizePx = Number(p.get('fs'));
   if (p.has('lh')) state.lineHeightRatio = Number(p.get('lh'));
   if (p.has('ls')) state.letterSpacingPx = Number(p.get('ls'));
   if (p.has('ol')) state.showOverlay = p.get('ol') === '1';
-  if (p.has('tm')) state.timeMode = p.get('tm') as TimeMode;
+  if (p.has('tm')) state.timeMode = parseEnum(p.get('tm')!, TIME_MODES, URL_DEFAULTS.timeMode);
   if (p.has('ct')) {
     const v = Number(p.get('ct'));
     if (Number.isFinite(v) && v >= 0) state.currentTime = v;
@@ -212,15 +218,15 @@ export function parseUrlState(): UrlState {
     state.quality = { ...state.quality, clipText: raw === '1' ? true : Number.isFinite(num) && num > 0 ? num : false };
   }
   if (p.has('sm')) state.quality = { ...state.quality, smoothing: p.get('sm') === '1' };
-  if (p.has('se')) state.strokeEasing = p.get('se')!;
-  if (p.has('ge')) state.glyphEasing = p.get('ge')!;
+  if (p.has('se')) state.strokeEasing = parseEnum(p.get('se')!, EASING_KEYS, URL_DEFAULTS.strokeEasing);
+  if (p.has('ge')) state.glyphEasing = parseEnum(p.get('ge')!, EASING_KEYS, URL_DEFAULTS.glyphEasing);
   if (p.has('dd')) state.deferDots = p.get('dd') !== '0';
   if (p.has('hb')) state.useShaper = p.get('hb') !== '0';
   if (p.has('st')) state.staggerEnabled = p.get('st') === '1';
   if (p.has('sa')) state.staggerAdvance = p.get('sa')!;
   if (p.has('sd')) state.staggerDuration = p.get('sd')!;
-  if (p.has('pl')) state.pipeline = p.get('pl') === 'geometry' ? 'geometry' : 'raster';
-  if (p.has('gs')) state.geometryStage = p.get('gs') as GeometryStageKey;
+  if (p.has('pl')) state.pipeline = parseEnum(p.get('pl')!, PIPELINES, URL_DEFAULTS.pipeline);
+  if (p.has('gs')) state.geometryStage = parseEnum(p.get('gs')!, GEOMETRY_STAGE_KEYS, URL_DEFAULTS.geometryStage);
 
   // Pipeline options — read short keys
   for (const [short, long] of Object.entries(REVERSE_OPTION_KEYS)) {
