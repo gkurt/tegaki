@@ -17,7 +17,7 @@
 // diameter, measured from the outline rather than a rasterized approximation.
 
 import type { Point } from 'tegaki';
-import { medialFaceAxes } from './face-medial.ts';
+import { medialFaceAxes, medialFaceAxesFullBoundary } from './face-medial.ts';
 import {
   closestPointOnPolyline,
   dist,
@@ -173,10 +173,23 @@ export function buildEnds(axis: AxisPoint[], startCutId: number, endCutId: numbe
  * looser width+spacing margin turns borderline cap corners into phantom
  * branches.
  */
-export function computeSegmentAxes(face: Face, options: ResolvedGeometryOptions): SegmentInfo[] {
+export function computeSegmentAxes(face: Face, options: ResolvedGeometryOptions, opts?: { fullBoundaryRescue?: boolean }): SegmentInfo[] {
   let infos: SegmentInfo[] = [];
   if (face.holes.length === 0 && options.medialMethod === 'voronoi') {
     infos = medialFaceAxes(face, options) ?? [];
+    // Wall-only sampling can fail outright on hairpin fold wedges (え/る's
+    // tip): the cuts run LENGTHWISE, so the walls are just the nose cap and
+    // the graph collapses — and every chain construction truncates the tip
+    // too (its fold axis stops at the mouth, with the raw cut span as a
+    // bogus fat width). The full-boundary medial handles them, but its cut
+    // samples put retraces next to ports and wiggle the end tangents, so the
+    // caller only permits it for faces whose ends open onto bare cuts
+    // (degree-2 merges — tangent-independent), never onto junction nodes
+    // where competitive pairing would misread the wiggle (0's crossing
+    // kernel).
+    if (infos.length === 0 && opts?.fullBoundaryRescue) {
+      infos = medialFaceAxesFullBoundary(face, options) ?? [];
+    }
   }
   const usedMedial = infos.length > 0;
   if (!usedMedial) {

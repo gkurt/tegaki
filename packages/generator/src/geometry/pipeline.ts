@@ -85,22 +85,6 @@ function processRegion(
   warnings.push(...partWarnings);
   classifyFaces(faces);
 
-  const segments: SegmentInfo[] = [];
-  const faceToSegment = new Map<number, number>();
-  for (const face of faces) {
-    if (face.kind !== 'segment') continue;
-    // One face can yield several axes: the primary path plus a branch per
-    // leftover cap (r's arm + bottom leg share one face). Drops must never
-    // be silent — every face is a legitimate part of the glyph.
-    const infos = computeSegmentAxes(face, resolved);
-    if (infos.length === 0 || infos[0]!.axis.length < 2) {
-      warnings.push(`segment face ${face.id} produced no axis — area dropped`);
-      continue;
-    }
-    faceToSegment.set(face.id, segments.length);
-    segments.push(...infos);
-  }
-
   // cut → faces bordering it.
   const cutToFaces = new Map<number, number[]>();
   for (const face of faces) {
@@ -109,6 +93,32 @@ function processRegion(
       list.push(face.id);
       cutToFaces.set(c, list);
     }
+  }
+  // Cuts opening into a junction face: segment ends there enter competitive
+  // continuation pairing, which reads end tangents.
+  const kindById = new Map(faces.map((f) => [f.id, f.kind]));
+  const junctionCuts = new Set<number>();
+  for (const [cutId, faceIds] of cutToFaces) {
+    if (faceIds.some((id) => kindById.get(id) === 'junction')) junctionCuts.add(cutId);
+  }
+
+  const segments: SegmentInfo[] = [];
+  const faceToSegment = new Map<number, number>();
+  for (const face of faces) {
+    if (face.kind !== 'segment') continue;
+    // One face can yield several axes: the primary path plus a branch per
+    // leftover cap (r's arm + bottom leg share one face). Drops must never
+    // be silent — every face is a legitimate part of the glyph.
+    // Full-boundary medial rescue is only safe when every end lands on a
+    // bare cut (degree-2 merge, tangent-independent) — see computeSegmentAxes.
+    const fullBoundaryRescue = face.cutIds.every((c) => !junctionCuts.has(c));
+    const infos = computeSegmentAxes(face, resolved, { fullBoundaryRescue });
+    if (infos.length === 0 || infos[0]!.axis.length < 2) {
+      warnings.push(`segment face ${face.id} produced no axis — area dropped`);
+      continue;
+    }
+    faceToSegment.set(face.id, segments.length);
+    segments.push(...infos);
   }
 
   const junctionFaces = faces.filter((f) => f.kind === 'junction');

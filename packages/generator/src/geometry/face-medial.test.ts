@@ -540,6 +540,43 @@ describe('medialFaceAxes — lobes and limbs', () => {
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(50);
   });
 
+  test('hairpin fold wedge (cut-dominated boundary): the pipeline still reaches the nose', () => {
+    // え/る's tip face: at a hairpin fold the two cuts run LENGTHWISE along
+    // the stroke (~370 each here) and the only wall is the rounded nose
+    // (~270). Wall-only sampling leaves a node cluster at the nose, the
+    // ports attach far away, pruning collapses the graph, and the build
+    // bails — and every chain construction truncates the tip too. The
+    // pipeline entry must detect the chain's coverage failure and rescue
+    // with the full-boundary medial: a short port→port primary across the
+    // wedge, the nose retraced as a lobe.
+    const pts: Point[] = [];
+    const tags: number[] = [];
+    const segs = 14;
+    for (let k = 0; k <= segs; k++) {
+      // Nose cap: semicircle r=85 around (200,150), from (200,235) through
+      // the apex (115,150) to (200,65).
+      const th = Math.PI / 2 + (Math.PI * k) / segs;
+      pts.push({ x: 200 + 85 * Math.cos(th), y: 150 + 85 * Math.sin(th) });
+      tags.push(k === segs ? 0 : -1); // the last cap vertex starts the upper cut
+    }
+    pts.push({ x: 560, y: 150 }); // the fold's inner notch, where both cuts meet
+    tags.push(1); // notch → cap start closes the lower cut
+    const face = buildFace(pts, tags);
+
+    const infos = computeSegmentAxes(face, OPTIONS_VORONOI, { fullBoundaryRescue: true });
+    expect(infos).toHaveLength(1); // 2 ports: the nose retraces, it never branches
+    expect(infos[0]!.ends.map((e) => e.cutId).sort()).toEqual([0, 1]);
+    // The retrace inks the nose apex and the wedge interior.
+    expect(penGap(infos, { x: 115, y: 150 })).toBeLessThanOrEqual(10);
+    expect(penGap(infos, { x: 380, y: 150 })).toBeLessThanOrEqual(10);
+    // Port endpoints carry a near-honest local width (≤ 2× the port node's
+    // inscribed size), never the 370-unit cut span.
+    const axis = infos[0]!.axis;
+    expect(axis[0]!.width).toBeLessThan(200);
+    expect(axis[axis.length - 1]!.width).toBeLessThan(200);
+    for (const p of allPoints(infos)) expect(distOutside(face, p)).toBeLessThanOrEqual(2);
+  });
+
   test('small wall bump on a strip: no detour, no phantom branch', () => {
     // Bump depth 15 (< half-width 30) over a 100-unit window — inside the
     // pen's reach, so it must neither branch nor bend the primary off course.

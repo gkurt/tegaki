@@ -36,12 +36,19 @@ interface MedialNode extends Point {
   alive: boolean;
 }
 
-/** Evenly subdivide wall edges; keep mouth corners (wall vertices adjacent to cuts). */
-function sampleWalls(face: Face, step: number): Point[] {
+/**
+ * Evenly subdivide wall edges; keep mouth corners (wall vertices adjacent to
+ * cuts). Cut edges are normally SKIPPED — they are artificial cross-sections,
+ * and sampling them makes the medial fork toward cut corners (and wiggle the
+ * port-end tangents) instead of running straight through the open mouth.
+ * `includeCuts` samples the full boundary instead — the last-resort mode for
+ * faces whose cuts ARE their shape (see medialFaceAxes).
+ */
+function sampleWalls(face: Face, step: number, includeCuts: boolean): Point[] {
   const out: Point[] = [];
   const n = face.polygon.length;
   for (let i = 0; i < n; i++) {
-    if (face.edgeCutIds[i]! >= 0) continue;
+    if (!includeCuts && face.edgeCutIds[i]! >= 0) continue;
     const a = face.polygon[i]!;
     const b = face.polygon[(i + 1) % n]!;
     const pieces = Math.max(1, Math.ceil(dist(a, b) / step));
@@ -49,7 +56,7 @@ function sampleWalls(face: Face, step: number): Point[] {
       const t = k / pieces;
       out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
     }
-    if (face.edgeCutIds[(i + 1) % n]! >= 0) out.push({ ...b });
+    if (!includeCuts && face.edgeCutIds[(i + 1) % n]! >= 0) out.push({ ...b });
   }
   return out;
 }
@@ -182,10 +189,10 @@ type Attempt = { kind: 'ok'; infos: SegmentInfo[] } | { kind: 'refine' } | { kin
 const REFINE: Attempt = { kind: 'refine' };
 const FAIL: Attempt = { kind: 'fail' };
 
-function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: number, final: boolean): Attempt {
+function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: number, final: boolean, includeCuts: boolean): Attempt {
   const spacing = options.resampleSpacing;
   const retry = final ? FAIL : REFINE;
-  const samples = sampleWalls(face, step);
+  const samples = sampleWalls(face, step, includeCuts);
   if (samples.length < 8) return retry;
 
   // ── Medial graph from the Voronoi dual ─────────────────────────────────
@@ -428,7 +435,10 @@ function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: n
   // short limbs retrace regardless of ports — a Mincho uroko or a pressure
   // tip is the parent stroke's finishing flick, not a stroke of its own.
   // Only limbs longer than their attachment is wide become branch strokes.
-  const retraced = limbs.map((limb) => ports.length === 2 || limb.len <= 1.25 * nodes[limb.attach]!.width);
+  // Full-boundary mode also retraces everything: sampled cut corners create
+  // artificial medial forks near the mouths, and promoting one to a branch
+  // invents a phantom stroke (9's tail tip grew a free-free sliver).
+  const retraced = limbs.map((limb) => includeCuts || ports.length === 2 || limb.len <= 1.25 * nodes[limb.attach]!.width);
 
   const primaryAxis: AxisPoint[] = [];
   for (const id of primaryIds) {
@@ -451,9 +461,15 @@ function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: n
   if (ports.length === 0) maxShortfall = Math.max(maxShortfall, extendFreeTip(primaryAxis, true, face.polygon, spacing));
 
   // Exact cut endpoints (the medial stops at the last node before the mouth;
-  // the stroke must reach the cross-section it continues through).
-  if (ports.length >= 1) primaryAxis.unshift({ ...ports[0]!.mid, width: ports[0]!.span });
-  if (ports.length === 2) primaryAxis.push({ ...ports[1]!.mid, width: ports[1]!.span });
+  // the stroke must reach the cross-section it continues through). Width is
+  // capped near the honest local size — a lengthwise fold cut spans far more
+  // than the stroke is wide, and the raw span would survive the boundary
+  // clamp (cuts are not walls) as a fat blob in the rendered stroke. The 2×
+  // headroom keeps transverse mouths (where the port node sits half a width
+  // inside and under-measures) at their true span.
+  const portWidth = (p: (typeof ports)[number]) => Math.min(p.span, 2 * nodes[p.node]!.width);
+  if (ports.length >= 1) primaryAxis.unshift({ ...ports[0]!.mid, width: portWidth(ports[0]!) });
+  if (ports.length === 2) primaryAxis.push({ ...ports[1]!.mid, width: portWidth(ports[1]!) });
 
   const branchAxes: AxisPoint[][] = [];
   for (let k = 0; k < limbs.length; k++) {
@@ -489,9 +505,25 @@ export function medialFaceAxes(face: Face, options: ResolvedGeometryOptions): Se
   let step = Math.max(3, options.resampleSpacing / 2);
   for (let attempt = 0; ; attempt++) {
     const final = attempt >= 2 || step <= 1.5;
-    const result = attemptMedialAxes(face, options, step, final);
+    const result = attemptMedialAxes(face, options, step, final, false);
     if (result.kind === 'ok') return result.infos;
     if (final) return null;
     step = Math.max(1.5, step / 2);
   }
+}
+
+/**
+ * Full-boundary medial rescue: like medialFaceAxes but samples CUT edges too,
+ * in one final-mode attempt. For faces whose cuts ARE their shape — a hairpin
+ * fold's cuts run LENGTHWISE along the stroke (え/る's tip wedge is two long
+ * fold cuts plus a small nose cap), so wall-only sampling leaves the graph a
+ * tiny cluster at the cap and the build bails, and the chain fallback then
+ * truncates the tip. Cut samples wiggle port-end tangents (retraces land next
+ * to ports and continuation pairing can misread the bend — Caveat 0's
+ * crossing kernel splits), so callers must invoke this ONLY when the chain
+ * fallback measurably fails to cover the face's ink.
+ */
+export function medialFaceAxesFullBoundary(face: Face, options: ResolvedGeometryOptions): SegmentInfo[] | null {
+  const result = attemptMedialAxes(face, options, Math.max(3, options.resampleSpacing / 2), true, true);
+  return result.kind === 'ok' ? result.infos : null;
 }
