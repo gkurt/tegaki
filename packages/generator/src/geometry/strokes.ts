@@ -91,6 +91,7 @@ export function buildJunctions(segments: SegmentInfo[], nodes: JunctionNode[]): 
       incident: incidences.map((i) => ({ segmentIndex: i.segmentIndex, endIndex: i.endIndex })),
       pairings: [],
       routes: [],
+      extensions: incidences.map(() => null),
     });
   }
 
@@ -174,6 +175,9 @@ export function assembleStrokes(segments: SegmentInfo[], junctions: JunctionInfo
   // junction — a routed polyline when available (oriented from this end to the
   // other), else the junction centroid as a single bridge point.
   const link = new Map<number, { other: number; route: AxisPoint[]; bridge: Point }>();
+  // Unpaired-end extensions into junction bodies, keyed by endKey and
+  // ordered from the cut midpoint inward.
+  const extensions = new Map<number, AxisPoint[]>();
   for (const junction of junctions) {
     junction.pairings.forEach(([i, j], pi) => {
       const a = junction.incident[i]!;
@@ -183,6 +187,10 @@ export function assembleStrokes(segments: SegmentInfo[], junctions: JunctionInfo
       const route = junction.routes[pi] ?? [];
       link.set(ka, { other: kb, route, bridge: junction.centroid });
       link.set(kb, { other: ka, route: [...route].reverse(), bridge: junction.centroid });
+    });
+    junction.incident.forEach((inc, ii) => {
+      const ext = junction.extensions[ii];
+      if (ext && ext.length >= 2) extensions.set(endKey(inc.segmentIndex, inc.endIndex), ext);
     });
   }
 
@@ -208,6 +216,12 @@ export function assembleStrokes(segments: SegmentInfo[], junctions: JunctionInfo
     const points: import('./types.ts').AxisPoint[] = [];
     let curSeg = startSeg;
     let entryEnd = startEnd; // the end we're entering the segment from
+    // If the starting end is an unpaired junction end, begin inside the
+    // junction (extension reversed: interior → cut midpoint).
+    const startExt = extensions.get(endKey(startSeg, startEnd));
+    if (startExt) {
+      for (let i = startExt.length - 1; i >= 0; i--) points.push({ ...startExt[i]! });
+    }
     const guard = segments.length + 1;
     let steps = 0;
     while (steps++ < guard) {
@@ -229,7 +243,19 @@ export function assembleStrokes(segments: SegmentInfo[], junctions: JunctionInfo
       const exitEnd = entryEnd === 0 ? 1 : 0;
       const outKey = endKey(curSeg, exitEnd);
       const next = link.get(outKey);
-      if (!next) break;
+      if (!next) {
+        // Unpaired junction end: continue into the junction body so the
+        // stroke covers it (T-stem into the bar, Y-arms into the crotch).
+        const ext = extensions.get(outKey);
+        if (ext) {
+          for (const p of ext) {
+            const last = points[points.length - 1];
+            if (last && dist(last, p) < 1e-6) continue;
+            points.push({ ...p });
+          }
+        }
+        break;
+      }
       if (next.route.length > 0) {
         // Follow the routed path through the junction's own geometry.
         for (const p of next.route) {

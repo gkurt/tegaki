@@ -105,6 +105,14 @@ describe('geometry pipeline — junctions', () => {
     expect(r.junctions.length).toBeGreaterThanOrEqual(1);
     // Left+right bar halves are collinear → one crossbar; stem is separate.
     expect(r.strokesFontUnits.length).toBe(2);
+    // The stem's unpaired end must EXTEND into the bar junction (the pen
+    // writes the stem into the bar) — not stop at the bar's bottom edge
+    // (y=250), which would leave the junction quad unswept by the stem.
+    const stem = r.geoStrokes.find((s) => Math.max(...s.points.map((p) => p.y)) > 800)!;
+    expect(stem).toBeDefined();
+    const stemTop = Math.min(...stem.points.map((p) => p.y));
+    expect(stemTop).toBeLessThan(240);
+    expect(stemTop).toBeGreaterThan(100);
   });
 
   test('plus (+): four concave corners → 2 crossing strokes', () => {

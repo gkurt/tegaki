@@ -129,6 +129,14 @@ export interface JunctionInfo {
    * back to bridging via `centroid`.
    */
   routes: AxisPoint[][];
+  /**
+   * Per-incident extension for UNPAIRED ends, aligned with `incident` (null
+   * when the end is paired or nothing to extend). An unpaired end must not
+   * stop at its cut — the junction area beyond it is a legitimate part of
+   * the glyph that no route may cover (a T's stem reaches into the bar, the
+   * arms of a Y fill their crotch). Ordered from the cut midpoint inward.
+   */
+  extensions: (AxisPoint[] | null)[];
 }
 
 /** A final extracted stroke before ordering/timing. */

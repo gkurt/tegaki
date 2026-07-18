@@ -12,8 +12,9 @@
 // segment faces use. The result follows the junction's actual geometry — an
 // arc junction yields an arc path.
 
+import type { Point } from 'tegaki';
 import { axisBetweenRuns, clampWidthsToBoundary, extractRuns, type WalkRun } from './medial.ts';
-import { dist, polylineLength } from './primitives.ts';
+import { dist, polylineLength, segmentIntersection } from './primitives.ts';
 import type { AxisPoint, Face, JunctionInfo, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
 
 /** Longest run of the given cut on a face walk (a boundary may touch a cut twice). */
@@ -101,6 +102,74 @@ export function routeThroughNode(faces: Face[], fromCut: number, toCut: number, 
     }
   }
   return out.length >= 2 ? out : null;
+}
+
+/**
+ * Distance from `origin` along `dir` to the junction node's boundary: wall
+ * edges and OUTGOING cuts stop the ray; cuts internal to the node (shared by
+ * two of its faces) and the entry cut are passed through.
+ */
+function rayHitDistance(origin: Point, dir: Point, faces: Face[], entryCutId: number, internalCuts: Set<number>, reach: number): number {
+  const target = { x: origin.x + dir.x * reach, y: origin.y + dir.y * reach };
+  let best = Infinity;
+  for (const face of faces) {
+    const n = face.polygon.length;
+    for (let i = 0; i < n; i++) {
+      const cutId = face.edgeCutIds[i]!;
+      if (cutId >= 0 && (cutId === entryCutId || internalCuts.has(cutId))) continue;
+      const hit = segmentIntersection(origin, target, face.polygon[i]!, face.polygon[(i + 1) % n]!);
+      if (!hit) continue;
+      const d = hit.t * reach;
+      if (d > 1e-6 && d < best) best = d;
+    }
+  }
+  return best;
+}
+
+/**
+ * Extend every UNPAIRED incident end into its junction. Without this, an
+ * unpaired end stops dead at its cut and the junction area past it is drawn
+ * by nobody — for a junction with no pairings at all, the entire face
+ * disappears from the glyph. The pen model: continue straight along the
+ * end's direction until the nib reaches the node's far boundary
+ * (hit distance − half the stroke width), the way a T's stem is written
+ * into the bar and the arms of a Y fill their crotch.
+ */
+export function extendUnpairedEnds(
+  junctions: JunctionInfo[],
+  segments: SegmentInfo[],
+  faceById: Map<number, Face>,
+  options: ResolvedGeometryOptions,
+): void {
+  for (const junction of junctions) {
+    if (junction.faceIds.length === 0) continue;
+    const faces = junction.faceIds.map((id) => faceById.get(id)).filter((f): f is Face => f != null);
+    if (faces.length === 0) continue;
+
+    const cutUses = new Map<number, number>();
+    for (const face of faces) {
+      for (const c of face.cutIds) cutUses.set(c, (cutUses.get(c) ?? 0) + 1);
+    }
+    const internalCuts = new Set([...cutUses].filter(([, uses]) => uses >= 2).map(([c]) => c));
+    const paired = new Set(junction.pairings.flat());
+    const reach = options.resampleSpacing * 200; // ~4 em — longer than any face
+
+    junction.incident.forEach((inc, ii) => {
+      if (paired.has(ii)) return;
+      const end = segments[inc.segmentIndex]!.ends[inc.endIndex]!;
+      if (end.cutId < 0) return;
+      const dir = end.direction;
+      if (Math.hypot(dir.x, dir.y) < 0.5) return;
+      const hit = rayHitDistance(end.point, dir, faces, end.cutId, internalCuts, reach);
+      if (!Number.isFinite(hit)) return;
+      const len = hit - end.width / 2;
+      if (len < options.resampleSpacing * 0.5) return;
+      junction.extensions[ii] = [
+        { ...end.point, width: end.width },
+        { x: end.point.x + dir.x * len, y: end.point.y + dir.y * len, width: end.width },
+      ];
+    });
+  }
 }
 
 /**
