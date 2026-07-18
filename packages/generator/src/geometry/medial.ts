@@ -20,6 +20,7 @@ import type { Point } from 'tegaki';
 import {
   closestPointOnPolyline,
   dist,
+  distToSegment,
   midpoint,
   normalize,
   pointAtArcLength,
@@ -143,6 +144,19 @@ function buildEnds(axis: AxisPoint[], startCutId: number, endCutId: number, spac
 
 /** Compute the medial axis and end metadata for one segment face. */
 export function computeSegmentAxis(face: Face, options: ResolvedGeometryOptions): SegmentInfo | null {
+  const info = computeSegmentAxisCore(face, options);
+  if (info) {
+    clampWidthsToBoundary(info.axis, face);
+    // Keep end metadata consistent with the (possibly lowered) axis widths.
+    if (info.ends.length === 2) {
+      info.ends[0]!.width = info.axis[0]!.width;
+      info.ends[1]!.width = info.axis[info.axis.length - 1]!.width;
+    }
+  }
+  return info;
+}
+
+function computeSegmentAxisCore(face: Face, options: ResolvedGeometryOptions): SegmentInfo | null {
   const spacing = options.resampleSpacing;
   const runs = extractRuns(face);
   const cutRuns = runs.filter((r) => r.cutId >= 0);
@@ -190,27 +204,11 @@ export function computeSegmentAxis(face: Face, options: ResolvedGeometryOptions)
 
   // ── Hole-free faces, by cut-run count ─────────────────────────────────────
   if (cutRuns.length === 0) {
-    // Isolated blob (dot, comma): fold the cycle at its farthest point pair.
-    const cycle = [...face.polygon, face.polygon[0]!];
-    const m = Math.min(48, Math.max(8, face.polygon.length));
-    const samples = resamplePolyline(cycle, m);
-    let bi = 0;
-    let bj = 0;
-    let bestD = -1;
-    for (let i = 0; i < m; i++) {
-      for (let j = i + 1; j < m; j++) {
-        const d = dist(samples[i]!, samples[j]!);
-        if (d > bestD) {
-          bestD = d;
-          bi = i;
-          bj = j;
-        }
-      }
-    }
-    const chainA = samples.slice(bi, bj + 1);
-    const chainB = [...samples.slice(bj), ...samples.slice(0, bi + 1)];
-    const axis = pairChains(chainA, chainB.reverse(), spacing);
-    if (axis.length < 2) return null;
+    // A cut-free face: either a compact dot, or — far more often — an entire
+    // glyph drawn as one smooth cap-ended ribbon (l, L, U, C, S: no concave
+    // corners anywhere, so no cuts exist to decompose it).
+    const axis = ribbonAxis(face, options);
+    if (!axis || axis.length < 2) return null;
     return { faceId: face.id, axis, isLoop: false, ends: buildEnds(axis, -1, -1, spacing) };
   }
 
@@ -363,4 +361,161 @@ function splitAtArcLength(points: Point[], target: number): { before: Point[]; a
     acc += d;
   }
   return { before: [...points], after: [points[points.length - 1]!] };
+}
+
+/** Minimum windowed convex turn (rad) for a boundary arc to count as a stroke cap. */
+const CAP_MIN_TURN = (100 * Math.PI) / 180;
+
+/**
+ * Axis for a cut-free, hole-free face — either a compact dot, or an entire
+ * glyph drawn as one smooth ribbon (l, L, U, C, S have no concave corners, so
+ * the whole outline is a single face).
+ *
+ * The pen path's tips are the outline's CAPS: short arcs where ~180° of
+ * convex turn concentrates within about a stroke width. Detect them by
+ * windowed turn concentration, split the outline at the two best tips into
+ * two walls, and pair the longer wall against the CLOSEST point on the other.
+ * Closest-point pairing keeps pairs perpendicular to the stroke even where
+ * the inner and outer walls of a bend have very different arc lengths —
+ * arc-fraction pairing skews diagonally there, over-measuring width and
+ * pulling the axis off center (the old farthest-pair fold drew Caveat's L
+ * and U as bloated blobs).
+ *
+ * When several caps qualify (an L's foot and top, plus its heel turn), every
+ * candidate tip pair is evaluated and the split with the smallest mean pair
+ * width wins — the true tip pair of a ribbon pairs parallel walls, wrong
+ * splits pair diverging ones. Outlines with no cap concentration (dots,
+ * near-circles) fall back to the farthest-pair fold.
+ */
+function ribbonAxis(face: Face, options: ResolvedGeometryOptions): AxisPoint[] | null {
+  const spacing = options.resampleSpacing;
+  const cycle = [...face.polygon, face.polygon[0]!];
+  const per = polylineLength(cycle);
+  if (per < 1e-9) return null;
+  const n = clampSamples(per, spacing);
+  const closed = resamplePolyline(cycle, n + 1);
+  const samples = closed.slice(0, n);
+  if (n < 8) return farthestPairFold(samples, spacing);
+
+  // Signed turn at each sample (positive = convex, region on the left).
+  const turns = new Float64Array(n);
+  for (let k = 0; k < n; k++) {
+    const p0 = samples[(k - 1 + n) % n]!;
+    const p1 = samples[k]!;
+    const p2 = samples[(k + 1) % n]!;
+    const v1 = sub(p1, p0);
+    const v2 = sub(p2, p1);
+    turns[k] = Math.atan2(v1.x * v2.y - v1.y * v2.x, v1.x * v2.x + v1.y * v2.y);
+  }
+
+  // Windowed concentration over ~1/16 of the perimeter.
+  const m = Math.max(2, Math.round(n / 32));
+  const windowTurn = new Float64Array(n);
+  for (let k = 0; k < n; k++) {
+    let s = 0;
+    for (let d = -m; d <= m; d++) s += turns[(k + d + n) % n]!;
+    windowTurn[k] = s;
+  }
+
+  const circDist = (a: number, b: number) => {
+    const d = Math.abs(a - b);
+    return Math.min(d, n - d);
+  };
+  const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => windowTurn[b]! - windowTurn[a]!);
+  const tips: number[] = [];
+  for (const k of order) {
+    if (windowTurn[k]! < CAP_MIN_TURN) break;
+    if (tips.some((t) => circDist(t, k) <= 2 * m + 1)) continue;
+    tips.push(k);
+    if (tips.length === 4) break;
+  }
+  if (tips.length < 2) return farthestPairFold(samples, spacing);
+
+  let best: AxisPoint[] | null = null;
+  let bestScore = Infinity;
+  for (let a = 0; a < tips.length; a++) {
+    for (let b = a + 1; b < tips.length; b++) {
+      const axis = pairSplitChains(samples, Math.min(tips[a]!, tips[b]!), Math.max(tips[a]!, tips[b]!), spacing);
+      if (!axis) continue;
+      let sum = 0;
+      for (const p of axis) sum += p.width;
+      const score = sum / axis.length;
+      if (score < bestScore) {
+        bestScore = score;
+        best = axis;
+      }
+    }
+  }
+  return best ?? farthestPairFold(samples, spacing);
+}
+
+/** Split the sample cycle at indices i < j and pair the two walls by closest point. */
+function pairSplitChains(samples: Point[], i: number, j: number, spacing: number): AxisPoint[] | null {
+  const chainA = samples.slice(i, j + 1);
+  const chainB = [...samples.slice(j), ...samples.slice(0, i + 1)];
+  const lenA = polylineLength(chainA);
+  const lenB = polylineLength(chainB);
+  if (lenA < 1e-9 || lenB < 1e-9) return null;
+  const base = lenA >= lenB ? chainA : chainB;
+  const other = lenA >= lenB ? chainB : chainA;
+  const bs = resamplePolyline(base, clampSamples(polylineLength(base), spacing));
+  const axis: AxisPoint[] = [];
+  for (const p of bs) {
+    const q = closestPointOnPolyline(p, other);
+    const mid = midpoint(p, q);
+    const last = axis[axis.length - 1];
+    if (last && dist(last, mid) < 1e-9) continue;
+    axis.push({ ...mid, width: dist(p, q) });
+  }
+  return axis.length >= 2 ? axis : null;
+}
+
+/** Legacy dot/blob axis: fold the sample cycle at its farthest point pair. */
+function farthestPairFold(samples: Point[], spacing: number): AxisPoint[] | null {
+  const m = samples.length;
+  if (m < 3) return null;
+  let bi = 0;
+  let bj = 0;
+  let bestD = -1;
+  for (let i = 0; i < m; i++) {
+    for (let j = i + 1; j < m; j++) {
+      const d = dist(samples[i]!, samples[j]!);
+      if (d > bestD) {
+        bestD = d;
+        bi = i;
+        bj = j;
+      }
+    }
+  }
+  const chainA = samples.slice(bi, bj + 1);
+  const chainB = [...samples.slice(bj), ...samples.slice(0, bi + 1)];
+  const axis = pairChains(chainA, chainB.reverse(), spacing);
+  return axis.length >= 2 ? axis : null;
+}
+
+/**
+ * Clamp each axis sample's width to twice its distance to the nearest WALL
+ * (the inscribed-disk bound). Chain pairing over-measures wherever the
+ * pairing skews along the stroke (inner/outer arc-length mismatch on bends,
+ * asymmetric strips); the local stroke width can never exceed the largest
+ * disk centered on the axis point. Cut edges are excluded — they are
+ * interior cross-sections, and axis endpoints sit exactly on them.
+ */
+export function clampWidthsToBoundary(axis: AxisPoint[], face: Face): void {
+  const n = face.polygon.length;
+  for (const p of axis) {
+    let d = Infinity;
+    for (let i = 0; i < n; i++) {
+      if (face.edgeCutIds[i]! >= 0) continue;
+      const dd = distToSegment(p, face.polygon[i]!, face.polygon[(i + 1) % n]!);
+      if (dd < d) d = dd;
+    }
+    for (const hole of face.holes) {
+      for (let i = 0; i < hole.length; i++) {
+        const dd = distToSegment(p, hole[i]!, hole[(i + 1) % hole.length]!);
+        if (dd < d) d = dd;
+      }
+    }
+    if (Number.isFinite(d)) p.width = Math.min(p.width, 2 * d);
+  }
 }

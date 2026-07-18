@@ -12,7 +12,7 @@
 // segment faces use. The result follows the junction's actual geometry — an
 // arc junction yields an arc path.
 
-import { axisBetweenRuns, extractRuns, type WalkRun } from './medial.ts';
+import { axisBetweenRuns, clampWidthsToBoundary, extractRuns, type WalkRun } from './medial.ts';
 import { dist, polylineLength } from './primitives.ts';
 import type { AxisPoint, Face, JunctionInfo, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
 
@@ -92,6 +92,7 @@ export function routeThroughNode(faces: Face[], fromCut: number, toCut: number, 
     // axisBetweenRuns orients min-index → max-index run; flip to in → out.
     let axis = axisBetweenRuns(runs, Math.min(i, j), Math.max(i, j), options);
     if (axis.length < 2) return null;
+    clampWidthsToBoundary(axis, faces[step.faceIndex]!);
     if (i > j) axis = [...axis].reverse();
     for (const p of axis) {
       const last = out[out.length - 1];
