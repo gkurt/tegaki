@@ -122,6 +122,13 @@ export interface JunctionInfo {
   incident: { segmentIndex: number; endIndex: number }[];
   /** Accepted continuation pairings between incident entries (indices into `incident`). */
   pairings: [number, number][];
+  /**
+   * Per-pairing polyline routed through the junction's faces, aligned with
+   * `pairings` and oriented from the first end to the second. Empty when no
+   * route was computed (bare cuts, degenerate axes) — assembly then falls
+   * back to bridging via `centroid`.
+   */
+  routes: AxisPoint[][];
 }
 
 /** A final extracted stroke before ordering/timing. */

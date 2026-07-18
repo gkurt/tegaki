@@ -14,6 +14,7 @@ import { computePathBBox, flattenPath } from '../processing/bezier.ts';
 import { buildContours, findContourOverlaps } from './contours.ts';
 import { detectCorners } from './corners.ts';
 import { generateCuts } from './cuts.ts';
+import { routeJunctionPaths } from './junction-routing.ts';
 import { computeSegmentAxis } from './medial.ts';
 import { orderAndTimeStrokes } from './ordering.ts';
 import { classifyFaces, partitionFaces } from './partition.ts';
@@ -158,6 +159,7 @@ function processRegion(
 
   const junctions = buildJunctions(segments, nodes);
   for (const junction of junctions) matchContinuations(junction, segments, resolved);
+  routeJunctionPaths(junctions, segments, faceById, resolved);
   const geoStrokes = assembleStrokes(segments, junctions);
   for (const gs of geoStrokes) gs.points = simplifyStroke(gs.points, simplifyEps);
 

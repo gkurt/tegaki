@@ -36,13 +36,13 @@ import type { AxisEnd, AxisPoint, Face, ResolvedGeometryOptions, SegmentInfo } f
  */
 const FOLD_WALL_RATIO = 0.25;
 
-interface WalkRun {
+export interface WalkRun {
   cutId: number; // -1 for boundary runs
   points: Point[]; // inclusive of both end vertices
 }
 
 /** Decompose the face boundary walk into alternating cut / boundary runs. */
-function extractRuns(face: Face): WalkRun[] {
+export function extractRuns(face: Face): WalkRun[] {
   const n = face.polygon.length;
   if (n === 0) return [];
 
@@ -248,19 +248,34 @@ export function computeSegmentAxis(face: Face, options: ResolvedGeometryOptions)
     return { faceId: face.id, axis, isLoop: false, ends: buildEnds(axis, runs[r1]!.cutId, -1, spacing) };
   }
 
-  // Two (or more) cut runs: the face shape decides the axis construction.
-  //
-  // - STRIP: both wall chains substantial — the face passes between its two
-  //   cuts (a bar). Pair the walls sample-by-sample.
-  // - TURN: one wall is (nearly) just the shared concave corner and the face
-  //   stays within ~a stroke width — a valley/elbow where the pen turns. Pair
-  //   the outer wall against the corner so the axis follows the turn.
-  // - LOBE: one wall degenerate but the face wanders far from its cuts — the
-  //   pen goes out and comes back (the fused middle peak of a cursive w).
-  //   Fold the wall at its arc midpoint and emit a retraced hairpin axis so
-  //   the stroke climbs the lobe and returns, entering on one cut and exiting
-  //   on the other.
+  // Two (or more) cut runs: axis between the two main runs.
   const [first, second] = r1 < r2 ? [r1, r2] : [r2, r1];
+  const axis = axisBetweenRuns(runs, first, second, options);
+  return { faceId: face.id, axis, isLoop: false, ends: buildEnds(axis, runs[first]!.cutId, runs[second]!.cutId, spacing) };
+}
+
+/**
+ * Axis between two chosen cut runs of a face walk, oriented from `runs[first]`
+ * to `runs[second]` (walk order: first < second). Any other runs between them
+ * — boundary chains and additional small cut runs alike — are treated as
+ * wall. The face shape decides the construction:
+ *
+ * - STRIP: both wall chains substantial — the face passes between its two
+ *   cuts (a bar). Pair the walls sample-by-sample.
+ * - TURN: one wall is (nearly) just the shared concave corner and the face
+ *   stays within ~a stroke width — a valley/elbow where the pen turns. Pair
+ *   the outer wall against the corner so the axis follows the turn.
+ * - LOBE: one wall degenerate but the face wanders far from its cuts — the
+ *   pen goes out and comes back (the fused middle peak of a cursive w).
+ *   Fold the wall at its arc midpoint and emit a retraced hairpin axis so
+ *   the stroke climbs the lobe and returns, entering on one cut and exiting
+ *   on the other.
+ *
+ * Shared by segment faces (their medial axis) and junction routing (the path
+ * a through-stroke takes across a junction face).
+ */
+export function axisBetweenRuns(runs: WalkRun[], first: number, second: number, options: ResolvedGeometryOptions): AxisPoint[] {
+  const spacing = options.resampleSpacing;
   const chainA: Point[] = [];
   for (let i = first + 1; i < second; i++) appendChain(chainA, runs[i]!.points);
   const chainB: Point[] = [];
@@ -319,7 +334,7 @@ export function computeSegmentAxis(face: Face, options: ResolvedGeometryOptions)
     axis.unshift({ ...endA.point, width: endA.width });
     axis.push({ ...endB.point, width: endB.width });
   }
-  return { faceId: face.id, axis, isLoop: false, ends: buildEnds(axis, runs[first]!.cutId, runs[second]!.cutId, spacing) };
+  return axis;
 }
 
 function appendChain(target: Point[], points: Point[]): void {

@@ -20,7 +20,7 @@
 
 import type { Point } from 'tegaki';
 import { dist, dot, normalize, sub } from './primitives.ts';
-import type { AxisEnd, GeoStroke, JunctionInfo, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
+import type { AxisEnd, AxisPoint, GeoStroke, JunctionInfo, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
 
 /** endKey packs (segmentIndex, endIndex) for use in maps/sets. */
 const endKey = (seg: number, end: number) => seg * 2 + end;
@@ -90,6 +90,7 @@ export function buildJunctions(segments: SegmentInfo[], nodes: JunctionNode[]): 
       centroid: center,
       incident: incidences.map((i) => ({ segmentIndex: i.segmentIndex, endIndex: i.endIndex })),
       pairings: [],
+      routes: [],
     });
   }
 
@@ -169,17 +170,20 @@ export function matchContinuations(junction: JunctionInfo, segments: SegmentInfo
  * centroids so the polyline visibly passes through each crossing.
  */
 export function assembleStrokes(segments: SegmentInfo[], junctions: JunctionInfo[]): GeoStroke[] {
-  // link: endKey -> { otherKey, bridge } (the far end it continues to + junction centroid)
-  const link = new Map<number, { other: number; bridge: Point }>();
+  // link: endKey -> the far end it continues to, plus the path through the
+  // junction — a routed polyline when available (oriented from this end to the
+  // other), else the junction centroid as a single bridge point.
+  const link = new Map<number, { other: number; route: AxisPoint[]; bridge: Point }>();
   for (const junction of junctions) {
-    for (const [i, j] of junction.pairings) {
+    junction.pairings.forEach(([i, j], pi) => {
       const a = junction.incident[i]!;
       const b = junction.incident[j]!;
       const ka = endKey(a.segmentIndex, a.endIndex);
       const kb = endKey(b.segmentIndex, b.endIndex);
-      link.set(ka, { other: kb, bridge: junction.centroid });
-      link.set(kb, { other: ka, bridge: junction.centroid });
-    }
+      const route = junction.routes[pi] ?? [];
+      link.set(ka, { other: kb, route, bridge: junction.centroid });
+      link.set(kb, { other: ka, route: [...route].reverse(), bridge: junction.centroid });
+    });
   }
 
   const strokes: GeoStroke[] = [];
@@ -226,11 +230,20 @@ export function assembleStrokes(segments: SegmentInfo[], junctions: JunctionInfo
       const outKey = endKey(curSeg, exitEnd);
       const next = link.get(outKey);
       if (!next) break;
-      // Bridge through the junction centroid.
-      const bridge = next.bridge;
-      const last = points[points.length - 1];
-      if (last && dist(last, bridge) > 1e-6) {
-        points.push({ ...bridge, width: last.width });
+      if (next.route.length > 0) {
+        // Follow the routed path through the junction's own geometry.
+        for (const p of next.route) {
+          const last = points[points.length - 1];
+          if (last && dist(last, p) < 1e-6) continue;
+          points.push({ ...p });
+        }
+      } else {
+        // No route (bare cut or degenerate): bridge through the centroid.
+        const bridge = next.bridge;
+        const last = points[points.length - 1];
+        if (last && dist(last, bridge) > 1e-6) {
+          points.push({ ...bridge, width: last.width });
+        }
       }
       const nextSeg = Math.floor(next.other / 2);
       const nextEntry = next.other % 2;
@@ -275,16 +288,31 @@ export function simplifyStroke(points: import('./types.ts').AxisPoint[], epsilon
     const a = points[lo]!;
     const b = points[hi]!;
     const ab = sub(b, a);
-    const abLen = Math.hypot(ab.x, ab.y) || 1e-9;
-    const nx = -ab.y / abLen;
-    const ny = ab.x / abLen;
+    const abLen = Math.hypot(ab.x, ab.y);
     let far = -1;
     let farD = epsilon;
-    for (let i = lo + 1; i < hi; i++) {
-      const d = Math.abs((points[i]!.x - a.x) * nx + (points[i]!.y - a.y) * ny);
-      if (d > farD) {
-        farD = d;
-        far = i;
+    if (abLen < 1e-9) {
+      // Degenerate chord: the sub-polyline returns to its start (a closed
+      // chain like a B's stem+bowl cycle, or an exact hairpin retrace). The
+      // perpendicular distance to a zero-length chord measures nothing, which
+      // used to collapse whole loops to 2 points — anchor the farthest point
+      // by radial distance instead, then recurse over real chords.
+      for (let i = lo + 1; i < hi; i++) {
+        const d = Math.hypot(points[i]!.x - a.x, points[i]!.y - a.y);
+        if (d > farD) {
+          farD = d;
+          far = i;
+        }
+      }
+    } else {
+      const nx = -ab.y / abLen;
+      const ny = ab.x / abLen;
+      for (let i = lo + 1; i < hi; i++) {
+        const d = Math.abs((points[i]!.x - a.x) * nx + (points[i]!.y - a.y) * ny);
+        if (d > farD) {
+          farD = d;
+          far = i;
+        }
       }
     }
     if (far >= 0) {
