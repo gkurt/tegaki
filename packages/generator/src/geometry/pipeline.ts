@@ -166,7 +166,7 @@ function processRegion(
   const junctions = buildJunctions(segments, nodes);
   for (const junction of junctions) matchContinuations(junction, segments, resolved);
   routeJunctionPaths(junctions, segments, faceById, resolved);
-  extendUnpairedEnds(junctions, segments, faceById, resolved);
+  extendUnpairedEnds(junctions, segments, faceById, resolved, warnings);
   const geoStrokes = assembleStrokes(segments, junctions);
   for (const gs of geoStrokes) gs.points = simplifyStroke(gs.points, simplifyEps);
 
