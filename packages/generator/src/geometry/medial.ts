@@ -120,18 +120,33 @@ function runEnd(run: WalkRun): { point: Point; width: number } {
   return { point: midpoint(a, b), width: dist(a, b) };
 }
 
-/** Direction pointing out of the axis at one of its ends (into the junction). */
+/**
+ * Direction pointing out of the axis at one of its ends (into the junction).
+ * The reference point is chosen by EUCLIDEAN distance from the end (bounded
+ * by an arc budget, keeping the farthest point seen): pacing by arc length
+ * lets a wiggly axis consume the whole lookback while staying euclidean-near
+ * the end, which turns local noise into the measured tangent — junction
+ * continuation gating then misreads cursive bends as crossings.
+ */
 function endDirection(axis: AxisPoint[], atStart: boolean, lookback: number): Point {
   if (axis.length < 2) return { x: 0, y: 0 };
   const endIdx = atStart ? 0 : axis.length - 1;
   const step = atStart ? 1 : -1;
   let i = endIdx;
   let travelled = 0;
-  while (i + step >= 0 && i + step < axis.length && travelled < lookback) {
+  let best = endIdx + step;
+  let bestD = 0;
+  while (i + step >= 0 && i + step < axis.length && travelled < 4 * lookback) {
     travelled += dist(axis[i]!, axis[i + step]!);
     i += step;
+    const d = dist(axis[endIdx]!, axis[i]!);
+    if (d > bestD) {
+      bestD = d;
+      best = i;
+    }
+    if (d >= lookback) break;
   }
-  return normalize(sub(axis[endIdx]!, axis[i]!));
+  return normalize(sub(axis[endIdx]!, axis[best]!));
 }
 
 export function buildEnds(axis: AxisPoint[], startCutId: number, endCutId: number, spacing: number): AxisEnd[] {
@@ -151,16 +166,20 @@ export function buildEnds(axis: AxisPoint[], startCutId: number, endCutId: numbe
  * boundary samples), which reaches tapered tips and side limbs by
  * construction; a single path can only serve two ports, so extra limbs come
  * back as retraces (2-port faces) or branch segments. Hole faces and any
- * face the medial graph can't handle fall back to chain pairing. The
- * coverage-based branch pass runs last against ALL produced axes as a
- * safety net — no area of a face may go unswept.
+ * face the medial graph can't handle fall back to chain pairing, where the
+ * coverage-based branch pass runs last as a safety net — no area of a face
+ * may go unswept. Medial axes skip that net: the medial tree already reaches
+ * every limb (anything it prunes sits inside the pen's disks), and the net's
+ * looser width+spacing margin turns borderline cap corners into phantom
+ * branches.
  */
 export function computeSegmentAxes(face: Face, options: ResolvedGeometryOptions): SegmentInfo[] {
   let infos: SegmentInfo[] = [];
   if (face.holes.length === 0 && options.medialMethod === 'voronoi') {
     infos = medialFaceAxes(face, options) ?? [];
   }
-  if (infos.length === 0) {
+  const usedMedial = infos.length > 0;
+  if (!usedMedial) {
     const primary = computeSegmentAxisCore(face, options);
     if (!primary) return [];
     infos = [primary];
@@ -172,7 +191,7 @@ export function computeSegmentAxes(face: Face, options: ResolvedGeometryOptions)
     primary.ends[0]!.width = primary.axis[0]!.width;
     primary.ends[1]!.width = primary.axis[primary.axis.length - 1]!.width;
   }
-  if (!primary.isLoop) {
+  if (!primary.isLoop && !usedMedial) {
     for (const branch of extractBranches(face, infos, options)) {
       clampWidthsToBoundary(branch.axis, face);
       infos.push(branch);
