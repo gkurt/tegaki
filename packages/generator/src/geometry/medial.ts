@@ -228,7 +228,8 @@ function computeSegmentAxisCore(face: Face, options: ResolvedGeometryOptions): S
   }
 
   if (r2 < 0) {
-    // Single cut run: end cap. Fold the wall chain at its arc midpoint.
+    // Single cut run: end cap — the wall runs from one side of the cut around
+    // the stroke tip and back.
     const chain: Point[] = [];
     for (let k = 1; k < runs.length; k++) {
       const run = runs[(r1 + k) % runs.length]!;
@@ -238,9 +239,8 @@ function computeSegmentAxisCore(face: Face, options: ResolvedGeometryOptions): S
     if (polylineLength(chain) < 1e-9) {
       return null;
     }
-    const total = polylineLength(chain);
-    const half = splitAtArcLength(chain, total / 2);
-    const axis = pairChains(half.before, half.after.reverse(), spacing);
+    const axis = endCapAxis(chain, spacing);
+    if (!axis) return null;
     axis.unshift({ ...end.point, width: end.width });
     if (axis.length < 2) return null;
     return { faceId: face.id, axis, isLoop: false, ends: buildEnds(axis, runs[r1]!.cutId, -1, spacing) };
@@ -447,6 +447,76 @@ function ribbonAxis(face: Face, options: ResolvedGeometryOptions): AxisPoint[] |
     }
   }
   return best ?? farthestPairFold(samples, spacing);
+}
+
+/**
+ * Axis for an end-cap wall chain (a 1-cut face): from the cut side to the
+ * stroke TIP. The tip is where convex turn concentrates on the chain — NOT
+ * the arc midpoint: on asymmetric caps (a curled flourish like r's arm, whose
+ * outer wall is much longer than its inner wall) the arc midpoint sits far
+ * from the real tip, truncating the stroke and skewing the pairing. Fold at
+ * the detected tip and pair the two sides by closest point; chains with no
+ * cap concentration keep the arc-midpoint fold.
+ *
+ * The returned axis runs cut-side → tip (the caller prepends the exact cut
+ * midpoint).
+ */
+function endCapAxis(chain: Point[], spacing: number): AxisPoint[] | null {
+  const total = polylineLength(chain);
+  const n = clampSamples(total, spacing);
+  const samples = resamplePolyline(chain, n);
+
+  let tip = -1;
+  if (n >= 8) {
+    // Windowed convex-turn concentration at interior samples.
+    const turns = new Float64Array(n);
+    for (let k = 1; k < n - 1; k++) {
+      const v1 = sub(samples[k]!, samples[k - 1]!);
+      const v2 = sub(samples[k + 1]!, samples[k]!);
+      turns[k] = Math.atan2(v1.x * v2.y - v1.y * v2.x, v1.x * v2.x + v1.y * v2.y);
+    }
+    const m = Math.max(2, Math.round(n / 32));
+    let bestTurn = CAP_MIN_TURN;
+    for (let k = 1; k < n - 1; k++) {
+      let s = 0;
+      for (let d = -m; d <= m; d++) {
+        const idx = k + d;
+        if (idx >= 1 && idx <= n - 2) s += turns[idx]!;
+      }
+      if (s > bestTurn) {
+        bestTurn = s;
+        tip = k;
+      }
+    }
+  }
+
+  if (tip <= 0 || tip >= n - 1) {
+    // No cap concentration: fold at the arc midpoint (symmetric caps, blobs).
+    const half = splitAtArcLength(chain, total / 2);
+    const axis = pairChains(half.before, half.after.reverse(), spacing);
+    return axis.length >= 2 ? axis : null;
+  }
+
+  const side1 = samples.slice(0, tip + 1);
+  const side2 = samples.slice(tip);
+  const len1 = polylineLength(side1);
+  const len2 = polylineLength(side2);
+  if (len1 < 1e-9 || len2 < 1e-9) return null;
+  const base = len1 >= len2 ? side1 : side2;
+  const other = len1 >= len2 ? side2 : side1;
+  const bs = resamplePolyline(base, clampSamples(polylineLength(base), spacing));
+  const axis: AxisPoint[] = [];
+  for (const p of bs) {
+    const q = closestPointOnPolyline(p, other);
+    const mid = midpoint(p, q);
+    const last = axis[axis.length - 1];
+    if (last && dist(last, mid) < 1e-9) continue;
+    axis.push({ ...mid, width: dist(p, q) });
+  }
+  if (axis.length < 2) return null;
+  // side1 runs cut→tip, side2 tip→cut: orient the axis cut-side → tip.
+  if (base === side2) axis.reverse();
+  return axis;
 }
 
 /** Split the sample cycle at indices i < j and pair the two walls by closest point. */

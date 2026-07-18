@@ -167,7 +167,10 @@ export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
   cutAlignToleranceDeg: 40,
   maxCutLengthFactor: 3,
   junctionCompactness: 1.5,
-  continuationMaxBendDeg: 60,
+  // Cursive strokes legitimately bend 60–75° flowing through a junction (the
+  // bowl→tail of q, the spine→loop of 6); crossings that must NOT merge (T,
+  // E, t, f) meet at ~90°, so 75° keeps a comfortable margin both ways.
+  continuationMaxBendDeg: 75,
   resampleSpacingRatio: 0.02,
 };
 

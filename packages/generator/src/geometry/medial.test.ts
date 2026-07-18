@@ -124,6 +124,45 @@ describe('computeSegmentAxis — cut-free ribbon (no concave corners: L, U, C, S
     expect(Math.max(...info!.axis.map((p) => p.width))).toBeLessThanOrEqual(75);
   });
 
+  test('1-cut end cap folds at the detected tip, not the arc midpoint', () => {
+    // Half-arc ribbon (center (400,400), centerline radius 270, half-width
+    // 30) from the top cap around the left to the bottom cap; the TOP cap is
+    // the cut. The outer wall (942) is much longer than the inner (754), so
+    // an arc-midpoint fold lands ~60 units short of the real tip — the bug
+    // that truncated r's curled arm. The tip must land at the bottom cap.
+    const C = { x: 400, y: 400 };
+    const K = 32;
+    const arc = (radius: number, from: number, to: number): Point[] =>
+      Array.from({ length: K + 1 }, (_, i) => {
+        const a = from + ((to - from) * i) / K;
+        return { x: C.x + radius * Math.cos(a), y: C.y + radius * Math.sin(a) };
+      });
+    const outer = arc(300, -Math.PI / 2, (-3 * Math.PI) / 2); // (400,100) → left → (400,700)
+    const inner = arc(240, (-3 * Math.PI) / 2, -Math.PI / 2); // (400,640) → left → (400,160)
+    const raw = [...outer, ...inner];
+    // Region-on-left orientation; the closing edge (last → first point, the
+    // top cap) stays the closing edge under reversal.
+    const polygon = signedArea(raw) >= 0 ? raw : [...raw].reverse();
+    const face: Face = {
+      id: 0,
+      polygon,
+      edgeCutIds: polygon.map((_, i) => (i === polygon.length - 1 ? 0 : -1)),
+      holes: [],
+      cutIds: [0],
+      area: Math.abs(signedArea(raw)),
+      centroid: { x: 0, y: 0 },
+      kind: 'segment',
+    };
+    const info = computeSegmentAxis(face, OPTIONS);
+    expect(info).not.toBeNull();
+    expect(info!.ends[0]!.cutId).toBe(0);
+    expect(info!.ends[1]!.cutId).toBe(-1);
+    // Starts at the cut midpoint, ends at the bottom cap center.
+    expect(dist(info!.axis[0]!, { x: 400, y: 130 })).toBeLessThan(10);
+    expect(dist(info!.axis[info!.axis.length - 1]!, { x: 400, y: 670 })).toBeLessThan(30);
+    expect(Math.max(...info!.axis.map((p) => p.width))).toBeLessThanOrEqual(75);
+  });
+
   test('a dot (no cap concentration) still folds at the farthest pair', () => {
     const dot = blobFace(
       Array.from({ length: 16 }, (_, i) => {
