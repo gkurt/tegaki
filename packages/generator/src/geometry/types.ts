@@ -142,7 +142,11 @@ export interface GeometryOptions {
   cutAlignToleranceDeg: number;
   /** Max cut length as a multiple of the corner's local width estimate. */
   maxCutLengthFactor: number;
-  /** 2-cut faces are junctions when cut-midpoint distance ≤ this × max cut length. */
+  /**
+   * Fold-shaped 2-cut faces (both cuts converging at a shared corner) become
+   * retraced LOBES when they extend beyond this × max cut span from the
+   * corner; closer ones are rounded TURNS. See computeSegmentAxis.
+   */
   junctionCompactness: number;
   /** Max bend (degrees) for two segments to merge into one stroke across a junction. */
   continuationMaxBendDeg: number;

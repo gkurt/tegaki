@@ -17,7 +17,7 @@
 
 import type { Point } from 'tegaki';
 import { add, dist, midpoint, pointInPolygon, pointInRegion, polygonCentroid, scale, signedArea, sub } from './primitives.ts';
-import type { Contour, Cut, Face, ResolvedGeometryOptions } from './types.ts';
+import type { Contour, Cut, Face } from './types.ts';
 
 interface HalfEdge {
   from: number;
@@ -288,26 +288,16 @@ function interiorProbe(polygon: Point[]): Point | null {
 /**
  * Classify faces as stroke segments vs cross-section junctions.
  *
- * - 0–1 cuts: always a segment (stroke body or end cap).
- * - ≥3 cuts: always a junction (e.g. the quad where a T's stem meets its bar).
- * - exactly 2 cuts: junction only when compact — the two cross-sections sit
- *   within ~a stroke width of each other (an L's corner square), as opposed to
- *   the two far-apart ends of an H's crossbar.
+ * A junction is where three or more cross-sections meet (the quad where a T's
+ * stem meets its bar, the center of an X). Faces with ≤2 cuts are ALWAYS
+ * segments — even compact ones (elbows, valley turns, lobes): the medial stage
+ * routes their axis through the actual local shape (strip / turn / retraced
+ * lobe). Classifying compact 2-cut faces as junctions instead collapsed whole
+ * glyph areas into single centroid-bridged nodes — a cursive 'w' lost both
+ * valleys and its middle peak to one jagged bridge.
  */
-export function classifyFaces(faces: Face[], cuts: Cut[], options: ResolvedGeometryOptions): void {
+export function classifyFaces(faces: Face[]): void {
   for (const face of faces) {
-    if (face.cutIds.length >= 3) {
-      face.kind = 'junction';
-      continue;
-    }
-    if (face.cutIds.length === 2) {
-      const [c1, c2] = face.cutIds as [number, number];
-      const m1 = midpoint(cuts[c1]!.a.point, cuts[c1]!.b.point);
-      const m2 = midpoint(cuts[c2]!.a.point, cuts[c2]!.b.point);
-      const maxLen = Math.max(cuts[c1]!.length, cuts[c2]!.length);
-      face.kind = dist(m1, m2) <= options.junctionCompactness * maxLen ? 'junction' : 'segment';
-      continue;
-    }
-    face.kind = 'segment';
+    face.kind = face.cutIds.length >= 3 ? 'junction' : 'segment';
   }
 }

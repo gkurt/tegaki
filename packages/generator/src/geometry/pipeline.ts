@@ -82,7 +82,7 @@ function processRegion(
 
   const { faces, warnings: partWarnings } = partitionFaces(contours, cuts, weldEps);
   warnings.push(...partWarnings);
-  classifyFaces(faces, cuts, resolved);
+  classifyFaces(faces);
 
   const segments: SegmentInfo[] = [];
   const faceToSegment = new Map<number, number>();

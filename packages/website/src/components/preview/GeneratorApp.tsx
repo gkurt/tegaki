@@ -832,7 +832,7 @@ export function GeneratorApp() {
                 onChange={(v) => updateGeometryOption('maxCutLengthFactor', v)}
               />
               <SliderOption
-                label="Junction compactness"
+                label="Lobe extent (×cut span)"
                 value={geometryOptions.junctionCompactness}
                 defaultValue={DEFAULT_GEOMETRY_OPTIONS.junctionCompactness}
                 min={0.5}

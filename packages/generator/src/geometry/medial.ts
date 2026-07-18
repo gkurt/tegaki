@@ -17,8 +17,24 @@
 // diameter, measured from the outline rather than a rasterized approximation.
 
 import type { Point } from 'tegaki';
-import { closestPointOnPolyline, dist, midpoint, normalize, polylineLength, resamplePolyline, sub } from './primitives.ts';
+import {
+  closestPointOnPolyline,
+  dist,
+  midpoint,
+  normalize,
+  pointAtArcLength,
+  polylineLength,
+  resamplePolyline,
+  sub,
+} from './primitives.ts';
 import type { AxisEnd, AxisPoint, Face, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
+
+/**
+ * A 2-cut face is "fold-shaped" (turn or lobe, rather than a strip) when its
+ * shorter wall is this small relative to the longer one — i.e. the two cuts
+ * (nearly) meet at a shared concave corner instead of sitting at opposite ends.
+ */
+const FOLD_WALL_RATIO = 0.25;
 
 interface WalkRun {
   cutId: number; // -1 for boundary runs
@@ -232,7 +248,18 @@ export function computeSegmentAxis(face: Face, options: ResolvedGeometryOptions)
     return { faceId: face.id, axis, isLoop: false, ends: buildEnds(axis, runs[r1]!.cutId, -1, spacing) };
   }
 
-  // Two (or more) cut runs: pair the wall chains between the two main runs.
+  // Two (or more) cut runs: the face shape decides the axis construction.
+  //
+  // - STRIP: both wall chains substantial — the face passes between its two
+  //   cuts (a bar). Pair the walls sample-by-sample.
+  // - TURN: one wall is (nearly) just the shared concave corner and the face
+  //   stays within ~a stroke width — a valley/elbow where the pen turns. Pair
+  //   the outer wall against the corner so the axis follows the turn.
+  // - LOBE: one wall degenerate but the face wanders far from its cuts — the
+  //   pen goes out and comes back (the fused middle peak of a cursive w).
+  //   Fold the wall at its arc midpoint and emit a retraced hairpin axis so
+  //   the stroke climbs the lobe and returns, entering on one cut and exiting
+  //   on the other.
   const [first, second] = r1 < r2 ? [r1, r2] : [r2, r1];
   const chainA: Point[] = [];
   for (let i = first + 1; i < second; i++) appendChain(chainA, runs[i]!.points);
@@ -241,16 +268,54 @@ export function computeSegmentAxis(face: Face, options: ResolvedGeometryOptions)
 
   const endA = runEnd(runs[first]!);
   const endB = runEnd(runs[second]!);
+  const lenA = polylineLength(chainA);
+  const lenB = polylineLength(chainB);
+  const shortLen = Math.min(lenA, lenB);
+  const longLen = Math.max(lenA, lenB);
 
   let axis: AxisPoint[];
-  if (polylineLength(chainA) < 1e-9 || polylineLength(chainB) < 1e-9) {
+  if (longLen < 1e-9) {
+    // Both walls degenerate (two cuts back to back): straight 2-point axis.
     axis = [
       { ...endA.point, width: endA.width },
       { ...endB.point, width: endB.width },
     ];
+  } else if (shortLen < FOLD_WALL_RATIO * longLen) {
+    // Fold family (turn or lobe). Orient the long wall to run first→second —
+    // chainA already does; chainB runs second→first, so reverse it.
+    const longChain = lenA >= lenB ? chainA : [...chainB].reverse();
+    // The fold base: the arc midpoint of the short wall, or (when the two cut
+    // runs are adjacent) the corner vertex they share.
+    const shortChain = lenA >= lenB ? chainB : chainA;
+    const base =
+      shortLen > 1e-9 ? pointAtArcLength(shortChain, shortLen / 2) : lenA >= lenB ? runs[first]!.points[0]! : runs[second]!.points[0]!;
+
+    const maxCutLen = Math.max(endA.width, endB.width, 1e-9);
+    const n = clampSamples(longLen, spacing);
+    const samples = resamplePolyline(longChain, n);
+    let extent = 0;
+    for (const p of samples) extent = Math.max(extent, dist(p, base));
+
+    if (extent <= options.junctionCompactness * maxCutLen) {
+      // TURN: midway between the outer wall and the inner corner.
+      axis = samples.map((p) => ({ ...midpoint(p, base), width: dist(p, base) }));
+      axis.unshift({ ...endA.point, width: endA.width });
+      axis.push({ ...endB.point, width: endB.width });
+    } else {
+      // LOBE: fold at the arc midpoint, pair the halves, retrace. Widths on
+      // each pass are the fused fold width capped at that pass's cut span.
+      const half = splitAtArcLength(longChain, longLen / 2);
+      const foldAxis = pairChains(half.before, half.after.reverse(), spacing);
+      const up = foldAxis.map((p) => ({ x: p.x, y: p.y, width: Math.min(p.width, endA.width) }));
+      const down = [...foldAxis]
+        .reverse()
+        .slice(1)
+        .map((p) => ({ x: p.x, y: p.y, width: Math.min(p.width, endB.width) }));
+      axis = [{ ...endA.point, width: endA.width }, ...up, ...down, { ...endB.point, width: endB.width }];
+    }
   } else {
-    // chainA runs first→second, chainB runs second→first; reverse B to align.
-    axis = pairChains(chainA, chainB.reverse(), spacing);
+    // STRIP: chainA runs first→second, chainB runs second→first; reverse B to align.
+    axis = pairChains(chainA, [...chainB].reverse(), spacing);
     axis.unshift({ ...endA.point, width: endA.width });
     axis.push({ ...endB.point, width: endB.width });
   }

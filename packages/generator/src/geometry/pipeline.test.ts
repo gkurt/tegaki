@@ -142,7 +142,33 @@ describe('geometry pipeline — junctions', () => {
     ];
     const r = run('L', commandsFromPolygons(outline));
     expect(r.corners.length).toBe(1);
-    // Whatever the merge decision, it must yield at least one drawable stroke.
-    expect(r.strokesFontUnits.length).toBeGreaterThanOrEqual(1);
+    // The elbow is a compact 2-cut TURN face — a segment, not a junction — so
+    // arm → elbow → foot chain into exactly one pen stroke.
+    expect(r.faces.every((f) => f.kind === 'segment')).toBe(true);
+    expect(r.strokesFontUnits.length).toBe(1);
+  });
+
+  test('arch (∩): elongated 2-cut faces are segments, whole arch is one stroke', () => {
+    // Legs x 100–200 / x 400–500 (y 300–900), top bar y 100–300. The two
+    // concave corners at the gap bottom carve the top bar out as a 2-cut face.
+    // Regression: the 2-cut compactness heuristic classified such faces as
+    // junctions, collapsing them into centroid bridges (the cursive-w failure).
+    const outline: Point[] = [
+      { x: 100, y: 900 },
+      { x: 100, y: 100 },
+      { x: 500, y: 100 },
+      { x: 500, y: 900 },
+      { x: 400, y: 900 },
+      { x: 400, y: 300 },
+      { x: 200, y: 300 },
+      { x: 200, y: 900 },
+    ];
+    const r = run('n', commandsFromPolygons(outline));
+    expect(r.corners.length).toBe(2);
+    expect(r.faces.every((f) => f.kind === 'segment')).toBe(true);
+    expect(r.strokesFontUnits.length).toBe(1);
+    // The stroke must travel through the top bar, not shortcut across the gap.
+    const minY = Math.min(...r.geoStrokes.flatMap((s) => s.points.map((p) => p.y)));
+    expect(minY).toBeLessThan(260);
   });
 });
