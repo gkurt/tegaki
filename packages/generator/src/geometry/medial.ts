@@ -343,6 +343,83 @@ export function axisBetweenRuns(runs: WalkRun[], first: number, second: number, 
 
   const endA = runEnd(runs[first]!);
   const endB = runEnd(runs[second]!);
+
+  // SLIT RING: a cut id repeated among the wall-treated runs marks a slit —
+  // the face is a loop strip crossing itself (す's loop): the partition's cut
+  // failed to split it (a slit does not disconnect a disk), so the ring's two
+  // parallel walls sit concatenated on ONE side of the walk, joined through
+  // the slit's two edges. The fold construction below would split them at
+  // the arc midpoint — off the true wall boundary — and the rotational drift
+  // collapses the axis onto the counter. Split AT the slit instead and pair
+  // the wall chunks directly for the ring. The opposite side's wall flanks
+  // the entry/exit corridor (paired against the ring walls by closest point,
+  // covering the crossing bulge), and the ring is spliced into the corridor
+  // at the crossing: the pen runs in, circles the loop once, and runs out.
+  const slitRing = (side: WalkRun[]): AxisPoint[] | null => {
+    const counts = new Map<number, number>();
+    for (const r of side) if (r.cutId >= 0) counts.set(r.cutId, (counts.get(r.cutId) ?? 0) + 1);
+    const slitId = [...counts].find(([, c]) => c >= 2)?.[0];
+    if (slitId == null) return null;
+    const chunks: Point[][] = [[]];
+    for (const r of side) {
+      if (r.cutId === slitId) {
+        if (chunks[chunks.length - 1]!.length > 0) chunks.push([]);
+      } else {
+        appendChain(chunks[chunks.length - 1]!, r.points);
+      }
+    }
+    const walls = chunks.filter((c) => polylineLength(c) > 1e-9);
+    if (walls.length < 2) return null;
+    // Pair by CLOSEST POINT, not arc fraction: the first chunk can carry an
+    // exit-funnel stretch and the second an entry stretch on top of the ring
+    // proper, and fraction pairing rotationally shifts the match — the axis
+    // pinches to near-zero widths and misses the ring's far bulges.
+    return pairChainToHoles(walls[0]!, [walls[walls.length - 1]!], spacing);
+  };
+  const ringWalls = (side: WalkRun[]): Point[][] => side.filter((r) => r.cutId < 0).map((r) => r.points);
+  const sideA: WalkRun[] = [];
+  for (let i = first + 1; i < second; i++) sideA.push(runs[i]!);
+  const sideB: WalkRun[] = [];
+  for (let i = second + 1; i < first + runs.length; i++) sideB.push(runs[i % runs.length]!);
+
+  let ring = slitRing(sideA);
+  let corridorSide = sideB; // walk order second → first
+  let corridorReversed = true; // reorient to first → second
+  if (!ring) {
+    const fromB = slitRing(sideB);
+    if (fromB) {
+      ring = [...fromB].reverse(); // side B runs second → first
+      corridorSide = sideA;
+      corridorReversed = false;
+    }
+  }
+  if (ring) {
+    const ringSide = corridorSide === sideB ? sideA : sideB;
+    const corridorChain: Point[] = [];
+    for (const r of corridorSide) if (r.cutId < 0) appendChain(corridorChain, r.points);
+    let corridor: AxisPoint[] = [];
+    if (polylineLength(corridorChain) > 1e-9) {
+      corridor = pairChainToHoles(corridorChain, ringWalls(ringSide), spacing);
+      if (corridorReversed) corridor.reverse();
+    }
+    // Splice the ring into the corridor where the corridor passes the
+    // crossing (both ring ends sit there).
+    const crossing = midpoint(ring[0]!, ring[ring.length - 1]!);
+    let splice = corridor.length;
+    let bestD = Infinity;
+    for (let k = 0; k < corridor.length; k++) {
+      const d = dist(corridor[k]!, crossing);
+      if (d < bestD) {
+        bestD = d;
+        splice = k + 1;
+      }
+    }
+    const axis = [...corridor.slice(0, splice), ...ring, ...corridor.slice(splice)];
+    axis.unshift({ ...endA.point, width: endA.width });
+    axis.push({ ...endB.point, width: endB.width });
+    return axis;
+  }
+
   const lenA = polylineLength(chainA);
   const lenB = polylineLength(chainB);
   const shortLen = Math.min(lenA, lenB);
@@ -394,6 +471,39 @@ export function axisBetweenRuns(runs: WalkRun[], first: number, second: number, 
     axis.unshift({ ...endA.point, width: endA.width });
     axis.push({ ...endB.point, width: endB.width });
   }
+  return axis;
+}
+
+/**
+ * Axis from `runs[from]` to `runs[to]` across a RING face (a face with
+ * holes), oriented from → to. axisBetweenRuns is hole-blind: pairing the two
+ * outer wall chains against each other across the counter collapses the axis
+ * onto a small circle hugging the hole (す's loop), leaving the ring
+ * unswept. The pen's real path wraps the hole — take the LONGER wall chain
+ * between the runs (the way around the ring) and pair it against the hole
+ * boundary, exactly like segment ring faces do.
+ */
+export function axisBetweenRunsAroundHole(
+  runs: WalkRun[],
+  from: number,
+  to: number,
+  holes: Point[][],
+  options: ResolvedGeometryOptions,
+): AxisPoint[] {
+  const n = runs.length;
+  const chainA: Point[] = []; // walk order from → to
+  for (let k = (from + 1) % n; k !== to; k = (k + 1) % n) appendChain(chainA, runs[k]!.points);
+  const chainB: Point[] = []; // walk order to → from; reversed to run from → to
+  for (let k = (to + 1) % n; k !== from; k = (k + 1) % n) appendChain(chainB, runs[k]!.points);
+  chainB.reverse();
+  const chain = polylineLength(chainA) >= polylineLength(chainB) ? chainA : chainB;
+  if (polylineLength(chain) < 1e-9) return [];
+
+  const axis = pairChainToHoles(chain, holes, options.resampleSpacing);
+  const endA = runEnd(runs[from]!);
+  const endB = runEnd(runs[to]!);
+  axis.unshift({ ...endA.point, width: endA.width });
+  axis.push({ ...endB.point, width: endB.width });
   return axis;
 }
 

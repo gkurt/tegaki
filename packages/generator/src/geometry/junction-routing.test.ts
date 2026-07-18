@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Point } from 'tegaki';
 import { extendUnpairedEnds, routeJunctionPaths, routeThroughNode } from './junction-routing.ts';
+import { axisBetweenRuns, type WalkRun } from './medial.ts';
 import { signedArea } from './primitives.ts';
 import { buildJunctions, type JunctionNode, matchContinuations } from './strokes.ts';
 import { DEFAULT_GEOMETRY_OPTIONS, type Face, resolveGeometryOptions, type SegmentInfo } from './types.ts';
@@ -62,6 +63,71 @@ describe('routeThroughNode', () => {
 
   test('returns null when the cuts are not on any face', () => {
     expect(routeThroughNode([elbowFace()], 5, 1, OPTIONS)).toBeNull();
+  });
+});
+
+// ── Slit-ring routes (loop strips that cross themselves, す) ────────────────
+
+describe('axisBetweenRuns — slit ring', () => {
+  test('the axis follows the ring centerline, not a collapse onto the counter', () => {
+    // A loop face whose closing cut failed to split it (a slit does not
+    // disconnect a disk): the ring's outer and counter walls sit
+    // concatenated on one side of the walk, joined through the slit's two
+    // edges. The arc-midpoint fold pairs them misaligned — widths collapse
+    // toward 0 and the axis hugs the counter (す's loop). The slit split
+    // must pair the walls directly: centerline at radius ~77.5, width ~45.
+    const outer: Point[] = [];
+    for (let deg = 10; deg <= 350; deg += 10) {
+      outer.push({ x: 100 * Math.cos((deg * Math.PI) / 180), y: 100 * Math.sin((deg * Math.PI) / 180) });
+    }
+    const inner: Point[] = [];
+    for (let deg = 350; deg >= 10; deg -= 10) {
+      inner.push({ x: 55 * Math.cos((deg * Math.PI) / 180), y: 55 * Math.sin((deg * Math.PI) / 180) });
+    }
+    const runs: WalkRun[] = [
+      {
+        cutId: -1,
+        points: [
+          { x: 150, y: 25 },
+          { x: 155, y: 0 },
+          { x: 150, y: -25 },
+        ],
+      }, // corridor east wall
+      {
+        cutId: 0,
+        points: [
+          { x: 150, y: -25 },
+          { x: 97, y: -17 },
+        ],
+      }, // exit mouth
+      { cutId: -1, points: outer },
+      { cutId: 9, points: [outer[outer.length - 1]!, inner[0]!] }, // slit
+      { cutId: -1, points: inner },
+      { cutId: 9, points: [inner[inner.length - 1]!, outer[0]!] }, // slit again
+      {
+        cutId: 1,
+        points: [
+          { x: 97, y: 17 },
+          { x: 150, y: 25 },
+        ],
+      }, // entry mouth
+    ];
+
+    const axis = axisBetweenRuns(runs, 1, 6, OPTIONS);
+    expect(axis.length).toBeGreaterThan(30);
+    let visitsAntipode = false;
+    for (const p of axis) {
+      const r = Math.hypot(p.x, p.y);
+      if (r < 120) {
+        // Ring region: the axis must ride the band between the walls, at
+        // ring width — never pinch to the near-zero fold artifact.
+        expect(r).toBeGreaterThan(58);
+        expect(r).toBeLessThan(97);
+        expect(p.width).toBeGreaterThan(25);
+      }
+      if (Math.hypot(p.x + 77.5, p.y) < 25) visitsAntipode = true;
+    }
+    expect(visitsAntipode).toBe(true);
   });
 });
 

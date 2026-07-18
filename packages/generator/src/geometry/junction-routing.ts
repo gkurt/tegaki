@@ -13,7 +13,7 @@
 // arc junction yields an arc path.
 
 import type { Point } from 'tegaki';
-import { axisBetweenRuns, clampWidthsToBoundary, extractRuns, type WalkRun } from './medial.ts';
+import { axisBetweenRuns, axisBetweenRunsAroundHole, clampWidthsToBoundary, extractRuns, type WalkRun } from './medial.ts';
 import { dist, midpoint, polylineLength, segmentIntersection } from './primitives.ts';
 import type { AxisPoint, Face, JunctionInfo, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
 
@@ -79,15 +79,25 @@ function findFacePath(faces: Face[], fromCut: number, toCut: number): PathStep[]
 function chainAxisAlongPath(faces: Face[], path: PathStep[], options: ResolvedGeometryOptions): AxisPoint[] | null {
   const out: AxisPoint[] = [];
   for (const step of path) {
-    const runs = extractRuns(faces[step.faceIndex]!);
+    const face = faces[step.faceIndex]!;
+    const runs = extractRuns(face);
     const i = longestRunIndex(runs, step.inCut);
     const j = longestRunIndex(runs, step.outCut);
     if (i < 0 || j < 0 || i === j) return null;
-    // axisBetweenRuns orients min-index → max-index run; flip to in → out.
-    let axis = axisBetweenRuns(runs, Math.min(i, j), Math.max(i, j), options);
-    if (axis.length < 2) return null;
-    clampWidthsToBoundary(axis, faces[step.faceIndex]!);
-    if (i > j) axis = [...axis].reverse();
+    let axis: AxisPoint[];
+    if (face.holes.length > 0) {
+      // Ring face (a loop crossing itself, like す's): the pen wraps the
+      // hole; wall-vs-wall pairing would collapse onto the counter.
+      axis = axisBetweenRunsAroundHole(runs, i, j, face.holes, options);
+      if (axis.length < 2) return null;
+      clampWidthsToBoundary(axis, face);
+    } else {
+      // axisBetweenRuns orients min-index → max-index run; flip to in → out.
+      axis = axisBetweenRuns(runs, Math.min(i, j), Math.max(i, j), options);
+      if (axis.length < 2) return null;
+      clampWidthsToBoundary(axis, face);
+      if (i > j) axis = [...axis].reverse();
+    }
     for (const p of axis) {
       const last = out[out.length - 1];
       if (last && dist(last, p) < 1e-6) continue;
