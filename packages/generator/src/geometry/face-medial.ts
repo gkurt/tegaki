@@ -310,7 +310,13 @@ function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: n
         best = i;
       }
     }
-    if (best < 0 || bestD > span + 4 * step) return retry;
+    // The sanity bound on port attachment must NOT scale with the sample
+    // step: refinement would then make acceptance stricter, and a face that
+    // legitimately keeps its nodes far from a slanted cut's midpoint (て's
+    // crossing face — the wedge along the cut is sample-free) bails on the
+    // final attempt only. Scale by spacing (face geometry), matching the
+    // base-step behavior.
+    if (best < 0 || bestD > span + 2 * spacing) return retry;
     ports.push({ node: best, cutId: run.cutId, mid, span });
   }
   const portIds = new Set(ports.map((p) => p.node));
