@@ -44,6 +44,16 @@ function outlinePaths(result: GeometryPipelineResult, u: number, fill = 'rgba(0,
     .join('\n');
 }
 
+/** Faint dashed cut lines so the partition stays legible under axes/strokes. */
+function partitionEdges(result: GeometryPipelineResult, u: number): string {
+  return result.cuts
+    .map(
+      (cut) =>
+        `  <line x1="${cut.a.point.x.toFixed(2)}" y1="${cut.a.point.y.toFixed(2)}" x2="${cut.b.point.x.toFixed(2)}" y2="${cut.b.point.y.toFixed(2)}" stroke="#555" stroke-width="${(u * 0.7).toFixed(2)}" stroke-dasharray="${(u * 2.5).toFixed(2)} ${(u * 2.5).toFixed(2)}" opacity="0.35"/>`,
+    )
+    .join('\n');
+}
+
 export function renderGeometryStage(result: GeometryPipelineResult, stage: GeometryStage): string {
   switch (stage) {
     case 'contours':
@@ -123,7 +133,7 @@ function renderFaces(result: GeometryPipelineResult): string {
 
 function renderSegments(result: GeometryPipelineResult): string {
   const vb = viewBox(result);
-  const parts = [outlinePaths(result, vb.u)];
+  const parts = [outlinePaths(result, vb.u), partitionEdges(result, vb.u)];
   result.segments.forEach((seg, i) => {
     const color = STROKE_COLORS[i % STROKE_COLORS.length]!;
     // Width ribbon: faint thick stroke sized by mean width, plus crisp centerline.
@@ -145,7 +155,7 @@ function renderSegments(result: GeometryPipelineResult): string {
 
 function renderStrokes(result: GeometryPipelineResult): string {
   const vb = viewBox(result);
-  const parts = [outlinePaths(result, vb.u, 'rgba(0,0,0,0.03)')];
+  const parts = [outlinePaths(result, vb.u, 'rgba(0,0,0,0.03)'), partitionEdges(result, vb.u)];
   result.strokesFontUnits.forEach((stroke, i) => {
     const color = STROKE_COLORS[i % STROKE_COLORS.length]!;
     const meanW = stroke.points.reduce((s, p) => s + p.width, 0) / stroke.points.length;

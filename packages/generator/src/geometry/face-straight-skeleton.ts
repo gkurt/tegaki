@@ -35,9 +35,9 @@
 // should pay for until the method is actually selected.
 
 import type { Point } from 'tegaki';
-import { type MedialNode, segmentAxesFromMedialGraph } from './face-medial.ts';
+import { anchoredAxisFromMedialGraph, type InkDisk, type MedialNode, segmentAxesFromMedialGraph } from './face-medial.ts';
 import { distToSegment, signedArea } from './primitives.ts';
-import type { Face, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
+import type { AxisPoint, Face, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
 
 /** Structural mirror of the package's Skeleton/SkeletonBuilder (type-only, keeps the import lazy). */
 interface Skeleton {
@@ -150,4 +150,36 @@ export function straightSkeletonFaceAxes(face: Face, options: ResolvedGeometryOp
   }
   if (!skeleton) return null;
   return segmentAxesFromMedialGraph(face, options, graphFromSkeleton(skeleton, face));
+}
+
+/**
+ * Recompute a FINAL stroke's axis on its fully merged region — segment
+ * chains plus the junction faces the stroke traverses — anchored at the
+ * stroke's existing endpoints. The per-face/per-chain pipeline stitches
+ * axes and routes at junction cut mouths, which is where the exact skeleton
+ * still picked up zigzags (a T's bar jogged across the kernel, its stem
+ * started with a Z-kink); skeletonizing the whole region gives the pen one
+ * coherent centerline. `otherInk` carries the other strokes' pen disks so
+ * limbs into shared junction territory are suppressed. Returns null on any
+ * build failure — callers keep the assembled axis.
+ */
+export function straightSkeletonStrokeAxis(
+  region: Face,
+  options: ResolvedGeometryOptions,
+  start: AxisPoint,
+  end: AxisPoint,
+  otherInk: InkDisk[],
+): AxisPoint[] | null {
+  if (!builder) {
+    throw new Error("medialMethod 'straight-skeleton' requires `await initStraightSkeleton()` before processing glyphs");
+  }
+  const rings = [toRing(region.polygon, true), ...region.holes.map((h) => toRing(h, false))];
+  let skeleton: Skeleton | null;
+  try {
+    skeleton = builder.buildFromPolygon(rings);
+  } catch {
+    return null;
+  }
+  if (!skeleton) return null;
+  return anchoredAxisFromMedialGraph(region, options, graphFromSkeleton(skeleton, region), [start, end], otherInk);
 }

@@ -14,8 +14,9 @@ import { computePathBBox, flattenPath } from '../processing/bezier.ts';
 import { buildContours, findContourOverlaps } from './contours.ts';
 import { detectCorners } from './corners.ts';
 import { generateCuts } from './cuts.ts';
+import type { InkDisk } from './face-medial.ts';
 import { mergeSegmentFaces } from './face-merge.ts';
-import { straightSkeletonFaceAxes } from './face-straight-skeleton.ts';
+import { straightSkeletonFaceAxes, straightSkeletonStrokeAxis } from './face-straight-skeleton.ts';
 import { extendUnpairedEnds, routeJunctionPaths } from './junction-routing.ts';
 import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { orderAndTimeStrokes } from './ordering.ts';
@@ -59,6 +60,56 @@ class DSU {
   union(a: number, b: number): void {
     this.parent[this.find(a)] = this.find(b);
   }
+}
+
+/**
+ * Rebuild each junction-touching stroke's axis from the straight skeleton of
+ * its fully merged region: the member faces of its segments plus the faces of
+ * every junction it is incident to. Junction faces are SHARED territory —
+ * each crossing stroke merges them into its own region and re-skeletonizes;
+ * limbs whose ink the other strokes already sweep are suppressed inside
+ * `straightSkeletonStrokeAxis`. Stroke identity (count, grouping, endpoints)
+ * is fixed by assembly; only the geometry between the endpoints improves.
+ * Any failure (loop chains, holed junction faces, wasm rejection, anchor
+ * mismatch) keeps the assembled axis.
+ */
+function refineStrokesThroughJunctions(
+  geoStrokes: GeometryPipelineResult['geoStrokes'],
+  junctions: GeometryPipelineResult['junctions'],
+  segmentMemberFaces: Map<number, number[]>,
+  faceById: Map<number, Face>,
+  resolved: ReturnType<typeof resolveGeometryOptions>,
+): void {
+  // Suppression refs come from the ORIGINAL assembled axes — symmetric and
+  // order-independent, unlike comparing against already-refined neighbours.
+  const originals = geoStrokes.map((gs) => gs.points);
+  const strokeOfSegment = new Map<number, number>();
+  geoStrokes.forEach((gs, k) => {
+    for (const si of gs.segmentIndices) strokeOfSegment.set(si, k);
+  });
+
+  geoStrokes.forEach((gs, k) => {
+    if (gs.isLoop || gs.points.length < 2) return;
+    const faceIds = new Set<number>();
+    for (const si of gs.segmentIndices) for (const fid of segmentMemberFaces.get(si) ?? []) faceIds.add(fid);
+    let touchesJunction = false;
+    for (const junction of junctions) {
+      if (junction.faceIds.length === 0) continue; // bare-cut node — no area of its own
+      if (!junction.incident.some((inc) => strokeOfSegment.get(inc.segmentIndex) === k)) continue;
+      touchesJunction = true;
+      for (const fid of junction.faceIds) faceIds.add(fid);
+    }
+    if (!touchesJunction || faceIds.size < 2) return;
+    const merged = mergeSegmentFaces([...faceIds].map((id) => faceById.get(id)!));
+    if (!merged) return;
+    const otherInk: InkDisk[] = [];
+    originals.forEach((pts, o) => {
+      if (o === k) return;
+      for (const p of pts) otherInk.push({ x: p.x, y: p.y, radius: p.width / 2 });
+    });
+    const axis = straightSkeletonStrokeAxis(merged, resolved, gs.points[0]!, gs.points[gs.points.length - 1]!, otherInk);
+    if (axis) gs.points = axis;
+  });
 }
 
 /** Per-region intermediates (region-local cut / face / segment indices). */
@@ -107,6 +158,10 @@ function processRegion(
 
   const segments: SegmentInfo[] = [];
   const faceToSegment = new Map<number, number>();
+  // Which faces each segment's axis came from (merged chains span several) —
+  // the final-stroke refinement below rebuilds a stroke's skeleton from the
+  // union of its segments' faces plus its junction faces.
+  const segmentMemberFaces = new Map<number, number[]>();
 
   // Straight-skeleton method: merge chains of segment faces connected by
   // bare cuts and skeletonize the stroke's REAL shape. A bare cut always
@@ -163,6 +218,7 @@ function processRegion(
       for (const [cutId, members] of bareCuts) {
         if (members.every((id) => groupIds.has(id))) mergedCuts.add(cutId);
       }
+      for (let k = 0; k < infos.length; k++) segmentMemberFaces.set(segments.length + k, [...groupIds]);
       segments.push(...infos);
     }
   }
@@ -181,6 +237,7 @@ function processRegion(
       continue;
     }
     faceToSegment.set(face.id, segments.length);
+    for (let k = 0; k < infos.length; k++) segmentMemberFaces.set(segments.length + k, [face.id]);
     segments.push(...infos);
   }
 
@@ -254,9 +311,18 @@ function processRegion(
       continue;
     }
     warnings.push(`junction face ${face.id} unreached by routes — emitted as standalone stroke`);
+    for (let k = 0; k < infos.length; k++) segmentMemberFaces.set(segments.length + k, [face.id]);
     segments.push(...infos);
   }
   const geoStrokes = assembleStrokes(segments, junctions);
+  // Final-stroke refinement: rebuild each junction-touching stroke's axis
+  // from the straight skeleton of its FULLY merged region (segment faces +
+  // junction faces), so the pen gets one coherent centerline instead of
+  // per-face axes stitched to junction routes at the kernel mouths (a T's
+  // bar jogged across the kernel, its stem started with a Z-kink).
+  if (resolved.medialMethod === 'straight-skeleton') {
+    refineStrokesThroughJunctions(geoStrokes, junctions, segmentMemberFaces, faceById, resolved);
+  }
   for (const gs of geoStrokes) gs.points = simplifyStroke(gs.points, simplifyEps);
 
   return { cuts, faces, segments, junctions, corners, geoStrokes, warnings };

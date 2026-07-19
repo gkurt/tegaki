@@ -658,3 +658,118 @@ export function segmentAxesFromMedialGraph(face: Face, options: ResolvedGeometry
   const result = processMedialGraph(face, options, nodes, [], Math.max(3, options.resampleSpacing / 2), true, false, true);
   return result.kind === 'ok' ? result.infos : null;
 }
+
+/** A pen disk another stroke already sweeps (for limb suppression). */
+export interface InkDisk {
+  x: number;
+  y: number;
+  radius: number;
+}
+
+/**
+ * Anchored axis extraction for a FINAL stroke recomputed on its fully merged
+ * region (segment chains + the junction faces the stroke traverses). The
+ * primary path runs between the graph nodes nearest the stroke's existing
+ * endpoints — the stroke's identity (count, grouping, endpoints) is already
+ * decided by assembly and must not change — and surviving limbs are retraced
+ * in place. A limb whose ink `otherInk` (the OTHER strokes' pen disks)
+ * already covers is suppressed: junction kernels are shared territory, and
+ * the crossing stroke's corridor must not be double-drawn. Exact-graph
+ * semantics throughout (deferred one-pass prune, uncapped retrace widths).
+ */
+export function anchoredAxisFromMedialGraph(
+  face: Face,
+  options: ResolvedGeometryOptions,
+  nodes: MedialNode[],
+  anchors: [AxisPoint, AxisPoint],
+  otherInk: InkDisk[],
+): AxisPoint[] | null {
+  const spacing = options.resampleSpacing;
+  const step = Math.max(3, spacing / 2);
+  if (nodes.length < 2) return null;
+
+  // Anchor nodes are the stroke's endpoints inside the region — protected
+  // from pruning. A far-off anchor means the region does not actually
+  // contain this stroke's end (bookkeeping mismatch) — bail.
+  const anchorNode = anchors.map((a) => {
+    let best = -1;
+    let bestD = Infinity;
+    for (let i = 0; i < nodes.length; i++) {
+      const d = dist(nodes[i]!, a);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return bestD <= Math.max(a.width, 4 * spacing) ? best : -1;
+  }) as [number, number];
+  if (anchorNode[0] < 0 || anchorNode[1] < 0) return null;
+  const protectedIds = new Set(anchorNode);
+
+  // Deferred one-pass prune: wisps below the noise floor, plus leaf chains
+  // whose ink the other strokes already sweep.
+  {
+    const kills: number[][] = [];
+    for (let i = 0; i < nodes.length; i++) {
+      if (!nodes[i]!.alive || protectedIds.has(i) || aliveDegree(nodes, i) !== 1) continue;
+      const chain = [i];
+      let len = 0;
+      let cur = i;
+      let from = -1;
+      for (;;) {
+        const next = nodes[cur]!.adj.filter((o) => nodes[o]!.alive && o !== from);
+        if (next.length !== 1) break;
+        from = cur;
+        cur = next[0]!;
+        len += dist(nodes[from]!, nodes[cur]!);
+        if (aliveDegree(nodes, cur) >= 3 || protectedIds.has(cur)) break;
+        chain.push(cur);
+      }
+      const attach = { x: nodes[cur]!.x, y: nodes[cur]!.y, radius: nodes[cur]!.width / 2 };
+      if (len <= 2 * step || !chainEscapes(nodes, chain, [attach, ...otherInk], spacing)) kills.push(chain);
+    }
+    for (const chain of kills) {
+      for (const id of chain) if (!protectedIds.has(id)) nodes[id]!.alive = false;
+    }
+  }
+
+  const { distTo, prev } = dijkstra(nodes, [anchorNode[0]]);
+  if (!Number.isFinite(distTo[anchorNode[1]]!)) return null;
+  const primaryIds = walkPath(prev, anchorNode[1]);
+
+  // Leftover limbs retrace at their attachment — the stroke count is fixed
+  // at this stage, so nothing may branch. Limbs the primary's own pen or the
+  // other strokes already cover add nothing.
+  const onPrimary = new Set(primaryIds);
+  const { distTo: dPrim, prev: pPrim } = dijkstra(nodes, primaryIds);
+  const coverRefs = [...primaryIds.map((id) => ({ x: nodes[id]!.x, y: nodes[id]!.y, radius: nodes[id]!.width / 2 })), ...otherInk];
+  interface Limb {
+    attach: number;
+    ids: number[];
+  }
+  const limbs: Limb[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    if (!nodes[i]!.alive || onPrimary.has(i) || aliveDegree(nodes, i) !== 1) continue;
+    if (!Number.isFinite(dPrim[i]!)) continue;
+    const ids = walkPath(pPrim, i);
+    if (ids.length < 2) continue;
+    if (dPrim[i]! < Math.max(2 * step, spacing)) continue;
+    if (!chainEscapes(nodes, ids.slice(1), coverRefs, spacing)) continue;
+    limbs.push({ attach: ids[0]!, ids });
+  }
+
+  const axis: AxisPoint[] = [{ x: anchors[0].x, y: anchors[0].y, width: anchors[0].width }];
+  for (const id of primaryIds) {
+    axis.push({ x: nodes[id]!.x, y: nodes[id]!.y, width: nodes[id]!.width });
+    for (const limb of limbs) {
+      if (limb.attach !== id) continue;
+      const out = toAxis(nodes, limb.ids);
+      extendFreeTip(out, false, face.polygon, spacing);
+      axis.push(...out.slice(1));
+      axis.push(...out.slice(0, -1).reverse());
+    }
+  }
+  axis.push({ x: anchors[1].x, y: anchors[1].y, width: anchors[1].width });
+  const deduped = dedupe(axis);
+  return deduped.length >= 2 ? deduped : null;
+}

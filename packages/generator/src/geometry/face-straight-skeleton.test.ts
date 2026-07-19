@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { Point } from 'tegaki';
-import { initStraightSkeleton, straightSkeletonFaceAxes } from './face-straight-skeleton.ts';
+import { initStraightSkeleton, straightSkeletonFaceAxes, straightSkeletonStrokeAxis } from './face-straight-skeleton.ts';
 import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { dist, signedArea } from './primitives.ts';
 import { type AxisPoint, DEFAULT_GEOMETRY_OPTIONS, type Face, resolveGeometryOptions, type SegmentInfo } from './types.ts';
@@ -147,6 +147,36 @@ describe('straightSkeletonFaceAxes', () => {
     expect(straightSkeletonFaceAxes(face, OPTIONS)).toBeNull();
     const fallback = computeSegmentAxes(face, OPTIONS);
     expect(fallback.length).toBeGreaterThan(0);
+  });
+
+  test('stroke axis through a merged T junction runs straight, stem limb suppressed by other ink', () => {
+    // The T's bar region MERGED with the kernel: one 600×80 rectangle whose
+    // bottom edge carries the stem-mouth cut in the middle. The old per-face
+    // pipeline stitched bar-left + route-through-kernel + bar-right and
+    // jogged at the mouths; the merged skeleton must run straight through.
+    const face = buildFace(
+      [
+        { x: 0, y: 0 },
+        { x: 600, y: 0 },
+        { x: 600, y: 80 },
+        { x: 340, y: 80 },
+        { x: 260, y: 80 },
+        { x: 0, y: 80 },
+      ],
+      [-1, -1, -1, 9, -1, -1],
+    );
+    // The stem stroke's pen already sweeps below the mouth and into it.
+    const stemInk = Array.from({ length: 8 }, (_, i) => ({ x: 300, y: 80 + i * 30, radius: 45 }));
+    const axis = straightSkeletonStrokeAxis(face, OPTIONS, { x: 5, y: 40, width: 78 }, { x: 595, y: 40, width: 78 }, stemInk);
+    expect(axis).not.toBeNull();
+    // Straight-ish: every point near the centerline, no jog into the mouth.
+    for (const p of axis!) {
+      expect(Math.abs(p.y - 40)).toBeLessThan(6);
+    }
+    // Monotone in x — a zigzag or a retraced limb into the stem would double back.
+    for (let i = 1; i < axis!.length; i++) {
+      expect(axis![i]!.x).toBeGreaterThanOrEqual(axis![i - 1]!.x - 1e-6);
+    }
   });
 
   test('tapered ribbon: widths follow the taper', () => {
