@@ -62,10 +62,12 @@ describe('mergeSegmentFaces', () => {
     expect(signedArea(merged!.polygon)).toBeGreaterThan(0);
   });
 
-  test('a loop chain (two faces sharing TWO cuts) closes into an annulus — declined', () => {
+  test('a loop chain (two faces sharing TWO cuts) closes into an annulus with the counter as a hole', () => {
     // Two U-halves of a square ring (outer 0..300, hole 100..200), joined by
-    // cuts 7 and 8 across the legs at y=150. Their union has a hole, whose
-    // straight-skeleton spine would be a cycle — the merge must decline.
+    // cuts 7 and 8 across the legs at y=150. Their union is an annulus: one
+    // outer ring plus the counter as a hole (all-wall), area conserved —
+    // the loop walk in the straight-skeleton path draws it as one closed
+    // stroke (0's stem+bowl).
     const bottom = buildFace(
       0,
       [
@@ -94,7 +96,19 @@ describe('mergeSegmentFaces', () => {
       ],
       [8, -1, -1, -1, 7, -1, -1, -1],
     );
-    expect(mergeSegmentFaces([bottom, top])).toBeNull();
+    const merged = mergeSegmentFaces([bottom, top]);
+    expect(merged).not.toBeNull();
+    expect(merged!.holes.length).toBe(1);
+    expect(merged!.cutIds).toEqual([]); // both cuts internal — cancelled
+    expect(signedArea(merged!.polygon)).toBeGreaterThan(0);
+    // Area conserved: outer (300×300) minus counter (100×100) = the two U-halves.
+    expect(merged!.area).toBeCloseTo(300 * 300 - 100 * 100, 4);
+    // The hole is the counter (cut endpoints may remain as collinear vertices).
+    const hole = merged!.holes[0]!;
+    expect(Math.min(...hole.map((p) => p.x))).toBe(100);
+    expect(Math.max(...hole.map((p) => p.x))).toBe(200);
+    expect(Math.min(...hole.map((p) => p.y))).toBe(100);
+    expect(Math.max(...hole.map((p) => p.y))).toBe(200);
   });
 
   test('disconnected faces (nothing shared) are declined', () => {

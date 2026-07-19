@@ -177,7 +177,11 @@ export function buildEnds(axis: AxisPoint[], startCutId: number, endCutId: numbe
  */
 export function computeSegmentAxes(face: Face, options: ResolvedGeometryOptions, opts?: { fullBoundaryRescue?: boolean }): SegmentInfo[] {
   let infos: SegmentInfo[] = [];
-  if (face.holes.length === 0 && (options.medialMethod === 'voronoi' || options.medialMethod === 'straight-skeleton')) {
+  // The straight skeleton also serves HOLED faces (O's annulus — the wasm
+  // build takes holes natively and the cycle walk in loopAxesFromMedialGraph
+  // extracts the ring); the sampled Voronoi build stays hole-free-only.
+  const medialApplies = options.medialMethod === 'straight-skeleton' ? true : options.medialMethod === 'voronoi' && face.holes.length === 0;
+  if (medialApplies) {
     infos = (options.medialMethod === 'straight-skeleton' ? straightSkeletonFaceAxes(face, options) : medialFaceAxes(face, options)) ?? [];
     // Wall-only sampling can fail outright on hairpin fold wedges (え/る's
     // tip): the cuts run LENGTHWISE, so the walls are just the nose cap and
@@ -189,7 +193,7 @@ export function computeSegmentAxes(face: Face, options: ResolvedGeometryOptions,
     // (degree-2 merges — tangent-independent), never onto junction nodes
     // where competitive pairing would misread the wiggle (0's crossing
     // kernel).
-    if (infos.length === 0 && opts?.fullBoundaryRescue) {
+    if (infos.length === 0 && opts?.fullBoundaryRescue && face.holes.length === 0) {
       infos = medialFaceAxesFullBoundary(face, options) ?? [];
     }
   }

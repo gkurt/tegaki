@@ -170,8 +170,11 @@ function processRegion(
   // picked up artifacts (off-center wall-cut bisector vertices, port-tangent
   // wiggle). Merged faces keep only their junction cuts as ports; the
   // internal bare cuts stop existing, so no bare-cut node is built for them.
-  // Any group the merge or the skeleton can't handle (loop chains closing
-  // into an annulus, wasm rejection) falls back to per-face processing.
+  // Loop chains close into an annulus — a merged face WITH holes — whose
+  // cycle spine the loop walk in straightSkeletonFaceAxes extracts as one
+  // closed (or tail-exiting) stroke. Any group the merge or the skeleton
+  // can't handle (pinched unions, wasm rejection, holed faces that still
+  // carry junction ports) falls back to per-face processing.
   const mergedFaceIds = new Set<number>();
   const mergedCuts = new Set<number>();
   if (resolved.medialMethod === 'straight-skeleton') {

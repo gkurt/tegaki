@@ -142,7 +142,7 @@ function rayToBoundary(origin: Point, dir: Point, polygon: Point[]): number {
  * when a straight extension would have to bridge a long (possibly curved)
  * tail.
  */
-function extendFreeTip(axis: AxisPoint[], atStart: boolean, polygon: Point[], lookback: number): number {
+function extendFreeTip(axis: AxisPoint[], atStart: boolean, polygon: Point[], lookback: number, holes: Point[][] = []): number {
   if (axis.length < 2) return 0;
   const endIdx = atStart ? 0 : axis.length - 1;
   const inward = atStart ? 1 : -1;
@@ -155,7 +155,11 @@ function extendFreeTip(axis: AxisPoint[], atStart: boolean, polygon: Point[], lo
   }
   const dir = normalize(sub(end, axis[i]!));
   if (dir.x === 0 && dir.y === 0) return 0;
-  const hit = rayToBoundary(end, dir, polygon);
+  // Hole boundaries stop the ray too — on an annulus, ignoring the counter
+  // let a tip extension sail clean across it and "hit" the far side of the
+  // outer ring (Caveat 0 drew a 380-unit chord through its counter).
+  let hit = rayToBoundary(end, dir, polygon);
+  for (const hole of holes) hit = Math.min(hit, rayToBoundary(end, dir, hole));
   if (!Number.isFinite(hit)) return 0;
   const ext = hit - end.width / 2;
   if (ext <= 1e-6) return 0;
@@ -524,7 +528,7 @@ function processMedialGraph(
       if (!retraced[k] || limb.attach !== id) continue;
       const capW = exactWidths ? Infinity : nodes[id]!.width;
       const out = toAxis(nodes, limb.ids).map((p) => ({ ...p, width: Math.min(p.width, capW) }));
-      maxShortfall = Math.max(maxShortfall, extendFreeTip(out, false, face.polygon, spacing));
+      maxShortfall = Math.max(maxShortfall, extendFreeTip(out, false, face.polygon, spacing, face.holes));
       primaryAxis.push(...out.slice(1));
       primaryAxis.push(...out.slice(0, -1).reverse());
     }
@@ -659,6 +663,145 @@ export function segmentAxesFromMedialGraph(face: Face, options: ResolvedGeometry
   return result.kind === 'ok' ? result.infos : null;
 }
 
+/**
+ * Peel alive leaves to the graph's 2-core and, when that core is a single
+ * simple cycle, return it in walk order. 'none' = the graph is a tree;
+ * 'reject' = the core exists but is not one simple cycle (theta graphs,
+ * figure-8 skeletons, disconnected extra loops) — cycle-aware callers must
+ * bail rather than guess.
+ */
+function findSingleCycle(nodes: MedialNode[]): { kind: 'none' } | { kind: 'reject' } | { kind: 'cycle'; ring: number[] } {
+  const deg = nodes.map((_, i) => (nodes[i]!.alive ? aliveDegree(nodes, i) : 0));
+  const inCore = nodes.map((n) => n.alive);
+  const queue: number[] = [];
+  for (let i = 0; i < nodes.length; i++) if (inCore[i] && deg[i]! <= 1) queue.push(i);
+  while (queue.length > 0) {
+    const i = queue.pop()!;
+    if (!inCore[i]) continue;
+    inCore[i] = false;
+    for (const o of nodes[i]!.adj) {
+      if (!inCore[o] || !nodes[o]!.alive) continue;
+      deg[o]!--;
+      if (deg[o]! <= 1) queue.push(o);
+    }
+  }
+  const core: number[] = [];
+  for (let i = 0; i < nodes.length; i++) if (inCore[i]) core.push(i);
+  if (core.length === 0) return { kind: 'none' };
+  if (core.length < 3) return { kind: 'reject' };
+  for (const id of core) if (deg[id] !== 2) return { kind: 'reject' };
+  const ring: number[] = [core[0]!];
+  let prevId = -1;
+  for (;;) {
+    const cur = ring[ring.length - 1]!;
+    const next = nodes[cur]!.adj.find((o) => inCore[o] && o !== prevId);
+    if (next === undefined || ring.length > core.length) return { kind: 'reject' };
+    if (next === ring[0]) break;
+    prevId = cur;
+    ring.push(next);
+  }
+  if (ring.length !== core.length) return { kind: 'reject' }; // disconnected extra cycle
+  return { kind: 'cycle', ring };
+}
+
+/**
+ * Axis extraction for a LOOPING region — a face with holes (O's annulus, a
+ * merged stem+bowl of 0, a's bowl+tail). The skeleton spine of an annulus is
+ * a CYCLE, which the tree machinery (port/diameter primary + limb walks)
+ * cannot represent: a shortest-path primary covers one arc and silently
+ * drops the other. Instead: prune wisps, peel leaves to the 2-core, and
+ * require a single simple cycle — that cycle is the ring axis. Limbs that
+ * survive the prune hang off the ring: the LONGEST becomes the exit (an `a`
+ * draws its bowl and leaves along the tail), the rest retrace in place.
+ * Multi-cycle cores (figure-8 skeletons like 8) return null — per-face chain
+ * processing handles those.
+ */
+export function loopAxesFromMedialGraph(face: Face, options: ResolvedGeometryOptions, nodes: MedialNode[]): SegmentInfo[] | null {
+  const spacing = options.resampleSpacing;
+  const step = Math.max(3, spacing / 2);
+  if (nodes.length < 3) return null;
+
+  // Wisp prune — leaf chains below the noise floor or inside their attach disk.
+  {
+    const kills: number[][] = [];
+    for (let i = 0; i < nodes.length; i++) {
+      if (!nodes[i]!.alive || aliveDegree(nodes, i) !== 1) continue;
+      const chain = [i];
+      let len = 0;
+      let cur = i;
+      let from = -1;
+      for (;;) {
+        const next = nodes[cur]!.adj.filter((o) => nodes[o]!.alive && o !== from);
+        if (next.length !== 1) break;
+        from = cur;
+        cur = next[0]!;
+        len += dist(nodes[from]!, nodes[cur]!);
+        if (aliveDegree(nodes, cur) >= 3) break;
+        chain.push(cur);
+      }
+      const attach = { x: nodes[cur]!.x, y: nodes[cur]!.y, radius: nodes[cur]!.width / 2 };
+      if (len <= 2 * step || !chainEscapes(nodes, chain, [attach], spacing)) kills.push(chain);
+    }
+    for (const chain of kills) for (const id of chain) nodes[id]!.alive = false;
+  }
+
+  const cycle = findSingleCycle(nodes);
+  if (cycle.kind !== 'cycle') return null;
+  const ring = cycle.ring;
+  const inCore = new Set(ring);
+
+  // Limbs off the ring (already wisp-pruned — everything left is real ink).
+  const { distTo, prev } = dijkstra(nodes, ring);
+  interface Limb {
+    attach: number;
+    ids: number[];
+    len: number;
+  }
+  const limbs: Limb[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    if (!nodes[i]!.alive || inCore.has(i) || aliveDegree(nodes, i) !== 1) continue;
+    if (!Number.isFinite(distTo[i]!)) continue;
+    const ids = walkPath(prev, i);
+    if (ids.length < 2) continue;
+    limbs.push({ attach: ids[0]!, ids, len: distTo[i]! });
+  }
+
+  // Pure ring: closed loop axis (O, 0).
+  if (limbs.length === 0) {
+    const axis = dedupe(toAxis(nodes, ring));
+    if (axis.length < 3) return null;
+    axis.push({ ...axis[0]! });
+    return [{ faceId: face.id, axis, isLoop: true, ends: [] }];
+  }
+
+  // Ring + limbs: start at the longest limb's attachment, circle the ring,
+  // then leave along that limb; other limbs retrace where they attach.
+  limbs.sort((a, b) => b.len - a.len);
+  const exit = limbs[0]!;
+  const startIdx = ring.indexOf(exit.attach);
+  if (startIdx < 0) return null;
+  const ordered = [...ring.slice(startIdx), ...ring.slice(0, startIdx), exit.attach];
+  const axis: AxisPoint[] = [];
+  for (let k = 0; k < ordered.length; k++) {
+    const id = ordered[k]!;
+    axis.push({ x: nodes[id]!.x, y: nodes[id]!.y, width: nodes[id]!.width });
+    const isFinal = k === ordered.length - 1;
+    for (let li = 1; li < limbs.length; li++) {
+      if (limbs[li]!.attach !== id || (isFinal && ordered.length > 1)) continue;
+      const out = toAxis(nodes, limbs[li]!.ids);
+      extendFreeTip(out, false, face.polygon, spacing, face.holes);
+      axis.push(...out.slice(1));
+      axis.push(...out.slice(0, -1).reverse());
+    }
+  }
+  const tail = toAxis(nodes, exit.ids);
+  extendFreeTip(tail, false, face.polygon, spacing, face.holes);
+  axis.push(...tail.slice(1));
+  const deduped = dedupe(axis);
+  if (deduped.length < 3) return null;
+  return [{ faceId: face.id, axis: deduped, isLoop: false, ends: buildEnds(deduped, -1, -1, spacing) }];
+}
+
 /** A pen disk another stroke already sweeps (for limb suppression). */
 export interface InkDisk {
   x: number;
@@ -733,6 +876,67 @@ export function anchoredAxisFromMedialGraph(
     }
   }
 
+  // ── Cyclic regions (a loop closed through a junction: a, e, 6, 0) ───────
+  // A shortest-path primary on a cycle takes one arc and silently drops the
+  // other. Instead: reach the ring from each anchor along its limb, then walk
+  // the FULL ring once — entering at the start anchor's attachment, around,
+  // and on to the end anchor's attachment via the short arc (the natural pen
+  // overlap where a bowl closes) before leaving along the exit limb.
+  const cycle = findSingleCycle(nodes);
+  if (cycle.kind === 'reject') return null;
+  if (cycle.kind === 'cycle') {
+    const ring = cycle.ring;
+    const n = ring.length;
+    const { distTo: dCore, prev: pCore } = dijkstra(nodes, ring);
+    if (!Number.isFinite(dCore[anchorNode[0]]!) || !Number.isFinite(dCore[anchorNode[1]]!)) return null;
+    const limbIn = walkPath(pCore, anchorNode[0]); // attach0 … anchor0
+    const limbOut = walkPath(pCore, anchorNode[1]); // attach1 … anchor1
+    const i0 = ring.indexOf(limbIn[0]!);
+    const i1 = ring.indexOf(limbOut[0]!);
+    if (i0 < 0 || i1 < 0) return null;
+    // Walk the whole ring in the direction that flows straight into the
+    // short arc toward the exit attachment — no reversal at the seam.
+    const fwd = (i1 - i0 + n) % n;
+    const dir = fwd <= n - fwd ? 1 : -1;
+    const shortSteps = dir === 1 ? fwd : (n - fwd) % n;
+    const pathIds: number[] = [...limbIn].reverse();
+    for (let k = 1; k <= n + shortSteps; k++) pathIds.push(ring[(((i0 + dir * k) % n) + n) % n]!);
+    pathIds.push(...limbOut.slice(1));
+
+    // Retrace leftover limbs (not covered by this path or the other strokes)
+    // at their ring attachment, on the first pass.
+    const onPath = new Set(pathIds);
+    const coverRefs = [...pathIds.map((id) => ({ x: nodes[id]!.x, y: nodes[id]!.y, radius: nodes[id]!.width / 2 })), ...otherInk];
+    const retraces = new Map<number, number[][]>();
+    for (let i = 0; i < nodes.length; i++) {
+      if (!nodes[i]!.alive || onPath.has(i) || aliveDegree(nodes, i) !== 1) continue;
+      if (!Number.isFinite(dCore[i]!)) continue;
+      const ids = walkPath(pCore, i);
+      if (ids.length < 2 || dCore[i]! < Math.max(2 * step, spacing)) continue;
+      if (!chainEscapes(nodes, ids.slice(1), coverRefs, spacing)) continue;
+      const list = retraces.get(ids[0]!) ?? [];
+      list.push(ids);
+      retraces.set(ids[0]!, list);
+    }
+    const axis: AxisPoint[] = [{ x: anchors[0].x, y: anchors[0].y, width: anchors[0].width }];
+    const emitted = new Set<number>();
+    for (const id of pathIds) {
+      axis.push({ x: nodes[id]!.x, y: nodes[id]!.y, width: nodes[id]!.width });
+      const attached = retraces.get(id);
+      if (!attached || emitted.has(id)) continue;
+      emitted.add(id);
+      for (const ids of attached) {
+        const out = toAxis(nodes, ids);
+        extendFreeTip(out, false, face.polygon, spacing, face.holes);
+        axis.push(...out.slice(1));
+        axis.push(...out.slice(0, -1).reverse());
+      }
+    }
+    axis.push({ x: anchors[1].x, y: anchors[1].y, width: anchors[1].width });
+    const dedupedRing = dedupe(axis);
+    return dedupedRing.length >= 2 ? dedupedRing : null;
+  }
+
   const { distTo, prev } = dijkstra(nodes, [anchorNode[0]]);
   if (!Number.isFinite(distTo[anchorNode[1]]!)) return null;
   const primaryIds = walkPath(prev, anchorNode[1]);
@@ -764,7 +968,7 @@ export function anchoredAxisFromMedialGraph(
     for (const limb of limbs) {
       if (limb.attach !== id) continue;
       const out = toAxis(nodes, limb.ids);
-      extendFreeTip(out, false, face.polygon, spacing);
+      extendFreeTip(out, false, face.polygon, spacing, face.holes);
       axis.push(...out.slice(1));
       axis.push(...out.slice(0, -1).reverse());
     }

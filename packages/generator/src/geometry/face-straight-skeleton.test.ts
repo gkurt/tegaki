@@ -179,6 +179,95 @@ describe('straightSkeletonFaceAxes', () => {
     }
   });
 
+  test('annulus face: the skeleton cycle becomes one closed loop axis', () => {
+    // Square ring: outer 0..300, counter 100..200 — corridor width 100. The
+    // skeleton spine is a cycle; the loop walk must return it as a single
+    // CLOSED axis riding the corridor midline all the way around.
+    const face = buildFace(
+      [
+        { x: 0, y: 0 },
+        { x: 300, y: 0 },
+        { x: 300, y: 300 },
+        { x: 0, y: 300 },
+      ],
+      [-1, -1, -1, -1],
+    );
+    face.holes = [
+      [
+        { x: 100, y: 100 },
+        { x: 200, y: 100 },
+        { x: 200, y: 200 },
+        { x: 100, y: 200 },
+      ],
+    ];
+    const infos = straightSkeletonFaceAxes(face, OPTIONS);
+    expect(infos).not.toBeNull();
+    expect(infos!.length).toBe(1);
+    const { axis, isLoop } = infos![0]!;
+    expect(isLoop).toBe(true);
+    const first = axis[0]!;
+    const last = axis[axis.length - 1]!;
+    expect(Math.hypot(first.x - last.x, first.y - last.y)).toBeLessThan(1e-6);
+    // The ring visits all four sides of the corridor.
+    const xs = axis.map((p) => p.x);
+    const ys = axis.map((p) => p.y);
+    expect(Math.min(...xs)).toBeLessThan(100);
+    expect(Math.max(...xs)).toBeGreaterThan(200);
+    expect(Math.min(...ys)).toBeLessThan(100);
+    expect(Math.max(...ys)).toBeGreaterThan(200);
+    // Widths are the corridor's inscribed diameter (100), not the raw
+    // skeleton time near corner diagonals.
+    for (const p of axis) {
+      expect(p.width).toBeGreaterThan(60);
+      expect(p.width).toBeLessThanOrEqual(101);
+    }
+  });
+
+  test('anchored stroke over a loop-with-tail region walks the FULL ring before exiting', () => {
+    // An `a`/`0`-class region: square ring plus a tail hanging off the
+    // bottom-right. A shortest-path primary between the anchors would cut
+    // across one arc and drop the rest of the bowl — the cycle walk must
+    // visit all four corridor sides, then leave along the tail.
+    const face = buildFace(
+      [
+        { x: 0, y: 0 },
+        { x: 300, y: 0 },
+        { x: 300, y: 300 },
+        { x: 260, y: 300 },
+        { x: 260, y: 420 },
+        { x: 200, y: 420 },
+        { x: 200, y: 300 },
+        { x: 0, y: 300 },
+      ],
+      [-1, -1, -1, -1, -1, -1, -1, -1],
+    );
+    face.holes = [
+      [
+        { x: 100, y: 100 },
+        { x: 200, y: 100 },
+        { x: 200, y: 200 },
+        { x: 100, y: 200 },
+      ],
+    ];
+    const axis = straightSkeletonStrokeAxis(face, OPTIONS, { x: 250, y: 250, width: 100 }, { x: 230, y: 410, width: 50 }, []);
+    expect(axis).not.toBeNull();
+    const xs = axis!.map((p) => p.x);
+    const ys = axis!.map((p) => p.y);
+    expect(Math.min(...xs)).toBeLessThan(100); // left corridor visited
+    expect(Math.min(...ys)).toBeLessThan(100); // top corridor visited
+    const last = axis![axis!.length - 1]!;
+    expect(last.y).toBeGreaterThan(400); // exits at the tail tip
+    // No segment may cross the counter — tip extensions must stop at hole
+    // boundaries (Caveat 0 once drew a 380-unit chord through its counter).
+    for (let i = 1; i < axis!.length; i++) {
+      const a = axis![i - 1]!;
+      const b = axis![i]!;
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const inHole = mid.x > 100 && mid.x < 200 && mid.y > 100 && mid.y < 200;
+      expect(inHole).toBe(false);
+    }
+  });
+
   test('tapered ribbon: widths follow the taper', () => {
     // 300-long wedge from width 80 down to width 20, cut at the wide end.
     const face = buildFace(

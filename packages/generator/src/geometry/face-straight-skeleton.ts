@@ -35,8 +35,14 @@
 // should pay for until the method is actually selected.
 
 import type { Point } from 'tegaki';
-import { anchoredAxisFromMedialGraph, type InkDisk, type MedialNode, segmentAxesFromMedialGraph } from './face-medial.ts';
-import { distToSegment, signedArea } from './primitives.ts';
+import {
+  anchoredAxisFromMedialGraph,
+  type InkDisk,
+  loopAxesFromMedialGraph,
+  type MedialNode,
+  segmentAxesFromMedialGraph,
+} from './face-medial.ts';
+import { dist, distToSegment, pointInPolygon, signedArea } from './primitives.ts';
 import type { AxisPoint, Face, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
 
 /** Structural mirror of the package's Skeleton/SkeletonBuilder (type-only, keeps the import lazy). */
@@ -116,24 +122,47 @@ function graphFromSkeleton(skeleton: Skeleton, face: Face): MedialNode[] {
       if (face.edgeCutIds[i]! >= 0) continue;
       wall = Math.min(wall, distToSegment(node, face.polygon[i]!, face.polygon[(i + 1) % n]!));
     }
+    // Hole boundaries are walls too (an annulus node's width is bounded by
+    // the counter, not just the outer ring).
+    for (const hole of face.holes) {
+      for (let i = 0; i < hole.length; i++) {
+        wall = Math.min(wall, distToSegment(node, hole[i]!, hole[(i + 1) % hole.length]!));
+      }
+    }
     if (Number.isFinite(wall)) node.width = 2 * wall;
   }
+  // Every true skeleton edge lies INSIDE its region. Borderline inputs
+  // (near-degenerate holed regions from merged loop chains) can make CGAL
+  // emit garbage edges that chord straight across a hole — user-spotted on
+  // Caveat 0, whose ring retraced a 380-unit chord through the counter.
+  // Reject any edge whose midpoint is not inside the region.
+  const insideRegion = (p: Point): boolean => {
+    let odd = pointInPolygon(p, face.polygon);
+    for (const hole of face.holes) if (pointInPolygon(p, hole)) odd = !odd;
+    return odd;
+  };
   for (const poly of polygons) {
     for (let k = 0; k < poly.length; k++) {
       const a = nodeOfVertex[poly[k]!]!;
       const b = nodeOfVertex[poly[(k + 1) % poly.length]!]!;
       if (a < 0 || b < 0 || a === b) continue;
-      if (!nodes[a]!.adj.includes(b)) {
-        nodes[a]!.adj.push(b);
-        nodes[b]!.adj.push(a);
-      }
+      if (nodes[a]!.adj.includes(b)) continue;
+      const na = nodes[a]!;
+      const nb = nodes[b]!;
+      if (dist(na, nb) > 1e-9 && !insideRegion({ x: (na.x + nb.x) / 2, y: (na.y + nb.y) / 2 })) continue;
+      na.adj.push(b);
+      nb.adj.push(a);
     }
   }
   return nodes;
 }
 
 /**
- * Straight-skeleton axes for a hole-free segment face. Returns null when the
+ * Straight-skeleton axes for a segment face. Hole-free faces walk the
+ * skeleton as a tree (ports, limbs, branches); holed faces walk its CYCLE
+ * (O's annulus, a merged stem+bowl) via `loopAxesFromMedialGraph` — but only
+ * when the face has no cut ports, since the loop walk has no port concept
+ * (holed faces WITH cuts stay on the chain lobe path). Returns null when the
  * build fails (degenerate/slit polygon, wasm abort) or the graph machinery
  * rejects the spine — callers fall back to chain pairing.
  */
@@ -141,6 +170,7 @@ export function straightSkeletonFaceAxes(face: Face, options: ResolvedGeometryOp
   if (!builder) {
     throw new Error("medialMethod 'straight-skeleton' requires `await initStraightSkeleton()` before processing glyphs");
   }
+  if (face.holes.length > 0 && face.cutIds.length > 0) return null;
   const rings = [toRing(face.polygon, true), ...face.holes.map((h) => toRing(h, false))];
   let skeleton: Skeleton | null;
   try {
@@ -149,7 +179,8 @@ export function straightSkeletonFaceAxes(face: Face, options: ResolvedGeometryOp
     return null;
   }
   if (!skeleton) return null;
-  return segmentAxesFromMedialGraph(face, options, graphFromSkeleton(skeleton, face));
+  const nodes = graphFromSkeleton(skeleton, face);
+  return face.holes.length > 0 ? loopAxesFromMedialGraph(face, options, nodes) : segmentAxesFromMedialGraph(face, options, nodes);
 }
 
 /**
