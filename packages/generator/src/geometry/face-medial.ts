@@ -215,7 +215,6 @@ const REFINE: Attempt = { kind: 'refine' };
 const FAIL: Attempt = { kind: 'fail' };
 
 function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: number, final: boolean, includeCuts: boolean): Attempt {
-  const spacing = options.resampleSpacing;
   const retry = final ? FAIL : REFINE;
   const samples = sampleWalls(face, step, includeCuts);
   if (samples.length < 8) return retry;
@@ -387,8 +386,18 @@ function processMedialGraph(
   // pen coverage (chainEscapes), NOT arc length vs attach width: a genuinely
   // inked short limb off a thick crotch (r's bottom leg) has a small arc yet
   // carries pen-sized disks well outside the disk.
+  //
+  // Exact graphs prune in ONE deferred pass: every leaf chain there is real
+  // geometry, and the iterative cascade erodes a tapering tip one
+  // sub-threshold bite at a time (r's stem tip lost 16 units to three
+  // consecutive prunes, each individually under the noise floor, and the
+  // straight tip ray from the fat surviving leaf could not follow the curve
+  // back down). A single pass bounds the total loss to one threshold.
+  // Sampled graphs keep the cascade — removing an outer spur exposes more
+  // spur noise, not more shape.
   for (let changed = true; changed; ) {
     changed = false;
+    const deferredKills: number[][] = [];
     for (let i = 0; i < nodes.length; i++) {
       if (!nodes[i]!.alive || portIds.has(i) || aliveDegree(nodes, i) !== 1) continue;
       // Walk the chain from this leaf to its first junction/port.
@@ -407,9 +416,17 @@ function processMedialGraph(
       }
       const attach = { x: nodes[cur]!.x, y: nodes[cur]!.y, radius: nodes[cur]!.width / 2 };
       if (len <= 2 * step || !chainEscapes(nodes, chain, [attach], spacing)) {
-        for (const id of chain) nodes[id]!.alive = false;
-        changed = true;
+        if (exactWidths) {
+          deferredKills.push(chain);
+        } else {
+          for (const id of chain) nodes[id]!.alive = false;
+          changed = true;
+        }
       }
+    }
+    if (exactWidths) {
+      for (const chain of deferredKills) for (const id of chain) nodes[id]!.alive = false;
+      break;
     }
   }
   const alive = nodes.filter((n) => n.alive).length;

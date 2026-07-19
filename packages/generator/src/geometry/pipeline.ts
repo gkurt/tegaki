@@ -14,14 +14,17 @@ import { computePathBBox, flattenPath } from '../processing/bezier.ts';
 import { buildContours, findContourOverlaps } from './contours.ts';
 import { detectCorners } from './corners.ts';
 import { generateCuts } from './cuts.ts';
+import { mergeSegmentFaces } from './face-merge.ts';
+import { straightSkeletonFaceAxes } from './face-straight-skeleton.ts';
 import { extendUnpairedEnds, routeJunctionPaths } from './junction-routing.ts';
-import { computeSegmentAxes } from './medial.ts';
+import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { orderAndTimeStrokes } from './ordering.ts';
 import { classifyFaces, partitionFaces } from './partition.ts';
 import { partitionRegions } from './regions.ts';
 import { assembleStrokes, buildJunctions, type JunctionNode, matchContinuations, simplifyStroke } from './strokes.ts';
 import {
   DEFAULT_GEOMETRY_OPTIONS,
+  type Face,
   type GeometryOptions,
   type GeometryPipelineResult,
   resolveGeometryOptions,
@@ -104,8 +107,68 @@ function processRegion(
 
   const segments: SegmentInfo[] = [];
   const faceToSegment = new Map<number, number>();
+
+  // Straight-skeleton method: merge chains of segment faces connected by
+  // bare cuts and skeletonize the stroke's REAL shape. A bare cut always
+  // becomes a degree-2 merge in assembly anyway, but per-face processing
+  // stitches axes at those mouths — the one place the exact skeleton still
+  // picked up artifacts (off-center wall-cut bisector vertices, port-tangent
+  // wiggle). Merged faces keep only their junction cuts as ports; the
+  // internal bare cuts stop existing, so no bare-cut node is built for them.
+  // Any group the merge or the skeleton can't handle (loop chains closing
+  // into an annulus, wasm rejection) falls back to per-face processing.
+  const mergedFaceIds = new Set<number>();
+  const mergedCuts = new Set<number>();
+  if (resolved.medialMethod === 'straight-skeleton') {
+    const segFaces = faces.filter((f) => f.kind === 'segment');
+    const segIndexById = new Map(segFaces.map((f, i) => [f.id, i]));
+    const segDsu = new DSU(segFaces.length);
+    const bareCuts: [number, number[]][] = [];
+    for (const [cutId, faceIds] of cutToFaces) {
+      if (junctionCuts.has(cutId)) continue;
+      const members = [...new Set(faceIds)].filter((id) => segIndexById.has(id));
+      if (members.length < 2) continue;
+      bareCuts.push([cutId, members]);
+      for (let i = 1; i < members.length; i++) segDsu.union(segIndexById.get(members[0]!)!, segIndexById.get(members[i]!)!);
+    }
+    const groups = new Map<number, Face[]>();
+    for (const face of segFaces) {
+      const root = segDsu.find(segIndexById.get(face.id)!);
+      const list = groups.get(root) ?? [];
+      list.push(face);
+      groups.set(root, list);
+    }
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      const merged = mergeSegmentFaces(group);
+      if (!merged) continue;
+      // Accept ONLY a genuine straight-skeleton result. computeSegmentAxes
+      // would silently fall back to CHAIN on the merged face, and chain on a
+      // big merged ribbon resurrects exactly the failures the per-face path
+      // already solved (る's hairpin tip truncates without its full-boundary
+      // rescue) — per-face processing is the honest fallback.
+      const infos = straightSkeletonFaceAxes(merged, resolved);
+      if (!infos || infos.length === 0 || infos[0]!.axis.length < 2) continue;
+      for (const info of infos) clampWidthsToBoundary(info.axis, merged);
+      const primary = infos[0]!;
+      if (primary.ends.length === 2) {
+        primary.ends[0]!.width = primary.axis[0]!.width;
+        primary.ends[1]!.width = primary.axis[primary.axis.length - 1]!.width;
+      }
+      const groupIds = new Set(group.map((f) => f.id));
+      for (const id of groupIds) {
+        mergedFaceIds.add(id);
+        faceToSegment.set(id, segments.length);
+      }
+      for (const [cutId, members] of bareCuts) {
+        if (members.every((id) => groupIds.has(id))) mergedCuts.add(cutId);
+      }
+      segments.push(...infos);
+    }
+  }
+
   for (const face of faces) {
-    if (face.kind !== 'segment') continue;
+    if (face.kind !== 'segment' || mergedFaceIds.has(face.id)) continue;
     // One face can yield several axes: the primary path plus a branch per
     // leftover cap (r's arm + bottom leg share one face). Drops must never
     // be silent — every face is a legitimate part of the glyph.
@@ -160,9 +223,11 @@ function processRegion(
     nodes.push({ faceIds, cutIds: [...cutIds], center: { x: cx / count, y: cy / count } });
   }
 
-  // Bare cuts: a cut separating two segment faces directly (no junction face).
+  // Bare cuts: a cut separating two segment faces directly (no junction
+  // face). Cuts internal to a merged face no longer exist as boundaries —
+  // the merged segment simply flows through them.
   for (const [cutId, faceIds] of cutToFaces) {
-    if (cutInJunctionNode.has(cutId)) continue;
+    if (cutInJunctionNode.has(cutId) || mergedCuts.has(cutId)) continue;
     const segFaces = faceIds.filter((id) => faceToSegment.has(id));
     if (segFaces.length < 2) continue;
     const cut = cuts[cutId]!;
