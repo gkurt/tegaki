@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Point } from 'tegaki';
-import { medialFaceAxes } from './face-medial.ts';
+import { chainEscapes, medialFaceAxes } from './face-medial.ts';
 import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { add, closestPointOnPolyline, dist, normalize, pointInPolygon, resamplePolyline, scale, signedArea, sub } from './primitives.ts';
 import { type AxisPoint, DEFAULT_GEOMETRY_OPTIONS, type Face, resolveGeometryOptions, type SegmentInfo } from './types.ts';
@@ -663,6 +663,137 @@ describe('medialFaceAxes — robustness and degenerate input', () => {
     const a = medialFaceAxes(taperFace(), OPTIONS);
     const b = medialFaceAxes(taperFace(), OPTIONS);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+});
+
+describe('chainEscapes — ink poke, not center clearance', () => {
+  const mkNodes = (pts: { x: number; y: number; width: number }[]) => pts.map((p) => ({ ...p, adj: [], alive: true }));
+
+  test('a fat node whose center sits inside the attach disk still counts when its disk pokes out (Caveat G cap)', () => {
+    // Real numbers from Caveat G's top hook: the cap curls back toward the
+    // body, so the curl node at dist 24.2 from the attach (radius 29.5) has
+    // its CENTER inside the disk — but its own pen (w44) inks 16.7 units
+    // beyond it, all the way to the nose. Center-clearance pruned the whole
+    // curl and left the nose bare outline.
+    const refs = [{ x: 543, y: -610, radius: 29.5 }];
+    const nodes = mkNodes([{ x: 553, y: -588, width: 44 }]);
+    expect(chainEscapes(nodes, [0], refs, 20)).toBe(true);
+  });
+
+  test('the same position with a sub-visible width stays rejected', () => {
+    const refs = [{ x: 543, y: -610, radius: 29.5 }];
+    const nodes = mkNodes([{ x: 553, y: -588, width: 8 }]);
+    expect(chainEscapes(nodes, [0], refs, 20)).toBe(false);
+  });
+
+  test('a thin wisp barely clear of the disk stays rejected', () => {
+    // Old rule accepted clear > 0 when clear > spacing/2 regardless of the
+    // node's own ink; the poke rule requires the ink itself to be visible.
+    const refs = [{ x: 0, y: 0, radius: 30 }];
+    const nodes = mkNodes([{ x: 36, y: 0, width: 4 }]);
+    expect(chainEscapes(nodes, [0], refs, 20)).toBe(false);
+  });
+});
+
+describe('medialFaceAxes — sparse-wall degeneracies (real glyph crops)', () => {
+  test('tight back-curling cap stays covered (Caveat G shape class)', () => {
+    // Cropped from Caveat G's top hook: the cap curls back TOWARD the fat
+    // body. The full-glyph failure (the pruning cascade eating the curl)
+    // needs the whole spine's attach regime and is pinned by the
+    // chainEscapes tests above; this crop pins the shape class end to end.
+    const P: Point[] = [
+      { x: 340, y: -643 },
+      { x: 351, y: -653 },
+      { x: 361, y: -659 },
+      { x: 369, y: -663 },
+      { x: 380, y: -667 },
+      { x: 394, y: -671 },
+      { x: 410, y: -675 },
+      { x: 427, y: -678 },
+      { x: 445, y: -679 },
+      { x: 463, y: -677 },
+      { x: 481, y: -674 },
+      { x: 506, y: -666 },
+      { x: 530, y: -657 },
+      { x: 540, y: -652 },
+      { x: 548, y: -648 },
+      { x: 555, y: -644 },
+      { x: 559, y: -640 },
+      { x: 567, y: -629 },
+      { x: 574, y: -620 },
+      { x: 578, y: -610 },
+      { x: 580, y: -599 },
+      { x: 580, y: -595 },
+      { x: 579, y: -590 },
+      { x: 577, y: -585 },
+      { x: 575, y: -580 },
+      { x: 567, y: -570 },
+      { x: 559, y: -563 },
+      { x: 554, y: -561 },
+      { x: 549, y: -562 },
+      { x: 545, y: -564 },
+      { x: 540, y: -568 },
+      { x: 533, y: -577 },
+      { x: 527, y: -585 },
+      { x: 520, y: -591 },
+      { x: 513, y: -596 },
+      { x: 499, y: -603 },
+      { x: 483, y: -611 },
+      { x: 477, y: -614 },
+      { x: 470, y: -616 },
+      { x: 462, y: -618 },
+      { x: 453, y: -619 },
+      { x: 434, y: -618 },
+      { x: 414, y: -614 },
+      { x: 404, y: -611 },
+      { x: 395, y: -607 },
+      { x: 387, y: -603 },
+      { x: 379, y: -597 },
+      { x: 374, y: -592 },
+      { x: 368, y: -586 },
+    ];
+    const tags = P.map((_, i) => (i === P.length - 1 ? 0 : -1)); // closing edge = the mouth cut
+    const infos = axesOf(buildFace(P, tags));
+    expect(infos).not.toBeNull();
+    // The nose of the curl and the inner curl wall must both be inked.
+    expect(penGap(infos!, { x: 576, y: -597 })).toBeLessThanOrEqual(12);
+    expect(penGap(infos!, { x: 560, y: -577 })).toBeLessThanOrEqual(12);
+  });
+
+  test('one-sided lens face: no wall opposes the path, so voronoi yields to the chain turn axis (Caveat S)', () => {
+    // Cropped from Caveat S's lower transition face: a single convex outer
+    // arc plus two cuts converging at a shared corner. Wall-only Voronoi has
+    // nothing across the stroke — its circumcenters zigzagged ±25 units with
+    // widths up to 96 in a ~70-wide corridor. The jitter gate must reject it
+    // (repeated sharp reversals on a 2-port path) and fall back to the chain
+    // strip/turn/lobe axis.
+    const P: Point[] = [
+      { x: 447, y: -122 },
+      { x: 456, y: -107 },
+      { x: 464, y: -90 },
+      { x: 468, y: -72 },
+      { x: 470, y: -56 },
+      { x: 469, y: -41 },
+      { x: 466, y: -27 },
+      { x: 462, y: -19 },
+      { x: 456, y: -11 },
+      { x: 450, y: -2 },
+      { x: 442, y: 6 },
+      { x: 433, y: 13 }, // → cut 1 down to the shared corner
+      { x: 414, y: -71 }, // → cut 0 back to the arc start
+    ];
+    const tags = P.map((_, i) => (i === 11 ? 1 : i === 12 ? 0 : -1));
+    const infos = computeSegmentAxes(buildFace(P, tags), OPTIONS_VORONOI);
+    expect(infos.length).toBeGreaterThanOrEqual(1);
+    const axis = infos[0]!.axis;
+    let sharpTurns = 0;
+    for (let i = 1; i + 1 < axis.length; i++) {
+      const ab = normalize(sub(axis[i]!, axis[i - 1]!));
+      const bc = normalize(sub(axis[i + 1]!, axis[i]!));
+      if (ab.x * bc.x + ab.y * bc.y < Math.SQRT1_2) sharpTurns++;
+    }
+    expect(sharpTurns).toBeLessThanOrEqual(2);
+    for (const p of axis) expect(p.width).toBeLessThanOrEqual(80);
   });
 });
 

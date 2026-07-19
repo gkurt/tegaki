@@ -167,19 +167,44 @@ function extendFreeTip(axis: AxisPoint[], atStart: boolean, polygon: Point[], lo
 
 /**
  * True when a leaf chain sweeps real ink beyond the reference disks: some
- * node escapes every reference disk AND is either pen-visible in its own
- * width or clearly outside. "No area dropped" wins over stroke-count purity
- * here: a genuine limb can hug a fat attachment closely (r's bottom leg
- * escapes its crotch disk by barely half a spacing), so the threshold stays
- * low and only sub-visible wisps — noise spurs and thin flat-cap corner
- * slivers no round pen could ink — are rejected.
+ * node's PEN DISK pokes visibly past every reference disk. The poke is
+ * `dist + width/2 − ref.radius` — the node's own radius counts, because a
+ * fat node whose CENTER sits inside the attach disk still inks far beyond
+ * it (G's cap curls tightly, so every curl node's center lies within the
+ * body disk while their disks reach the nose; center-clearance judged the
+ * whole curl worthless and the cascade pruned the cap). "No area dropped"
+ * wins over stroke-count purity: the threshold stays at half a spacing so
+ * only sub-visible wisps — noise spurs and thin flat-cap corner slivers no
+ * round pen could ink — are rejected.
  */
-function chainEscapes(nodes: MedialNode[], chain: number[], refs: { x: number; y: number; radius: number }[], spacing: number): boolean {
+export function chainEscapes(
+  nodes: MedialNode[],
+  chain: number[],
+  refs: { x: number; y: number; radius: number }[],
+  spacing: number,
+): boolean {
   for (const id of chain) {
     const node = nodes[id]!;
-    let clear = Infinity;
-    for (const ref of refs) clear = Math.min(clear, dist(node, ref) - ref.radius);
-    if (clear > 0 && (node.width > 0.5 * spacing || clear > 0.5 * spacing)) return true;
+    let poke = Infinity;
+    for (const ref of refs) poke = Math.min(poke, dist(node, ref) + node.width / 2 - ref.radius);
+    if (poke > 0.5 * spacing) return true;
+  }
+  return false;
+}
+
+/** True when the pen sweeping every axis inks `p` to within `allowance`. */
+function coveredByAxes(p: Point, axes: AxisPoint[][], allowance: number): boolean {
+  for (const axis of axes) {
+    for (let i = 1; i < axis.length; i++) {
+      const a = axis[i - 1]!;
+      const b = axis[i]!;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const l2 = dx * dx + dy * dy;
+      const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
+      const w = a.width + (b.width - a.width) * t;
+      if (Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t)) - w / 2 <= allowance) return true;
+    }
   }
   return false;
 }
@@ -490,6 +515,50 @@ function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: n
     const axis = dedupe(raw);
     if (axis.length < 2) continue;
     infos.push({ faceId: face.id, axis, isLoop: false, ends: buildEnds(axis, -1, -1, spacing) });
+  }
+
+  // ── Quality gates (refine-only): the graph exists, but is it honest? ────
+  // ── Quality gates: the graph exists, but is it honest? ──────────────────
+  // Sparse-sample jitter: a ported path is a corridor centerline and locally
+  // smooth — dense sampling gives per-step turns of a few degrees, and even
+  // a genuine corner face bends sharply once or twice. REPEATED sharp
+  // reversals are Voronoi zigzag from wall samples that don't oppose the
+  // path: S's small half-cut corridor face wobbled ±25 units with ~7
+  // reversals, and 字's wing lens (one long cut under a single wall arc)
+  // zigzagged 171 units inside a 94×38 face — its garbage port tangent
+  // luckily merged with the cover stroke, and any change to it split the
+  // glyph. Tortuosity is the wrong measure (S's own spine face runs 1.56×
+  // its chord legitimately); 0-port primaries are exempt — a blob's tree
+  // diameter turns sharply at skeleton junctions by construction. Retraces
+  // live outside primaryIds, so out-and-back lobes don't count. On the
+  // final wall-only attempt this FAILS to the chain fallback (whose
+  // strip/turn/lobe/end-cap axes handle exactly these small mostly-cut
+  // faces); full-boundary rescue keeps its result — its caller has already
+  // proven the chain fallback drops ink.
+  if (!includeCuts && ports.length >= 1) {
+    let sharpTurns = 0;
+    for (let i = 1; i + 1 < primaryIds.length; i++) {
+      const a = nodes[primaryIds[i - 1]!]!;
+      const b = nodes[primaryIds[i]!]!;
+      const c = nodes[primaryIds[i + 1]!]!;
+      const ab = normalize(sub(b, a));
+      const bc = normalize(sub(c, b));
+      if (ab.x * bc.x + ab.y * bc.y < Math.SQRT1_2) sharpTurns++;
+    }
+    if (sharpTurns >= 3) return retry;
+  }
+  if (!final) {
+    // Pen coverage: a wall sample the produced axes cannot ink marks a thin
+    // (usually CURVED) tail the graph missed — a straight tip extension
+    // cannot follow a curling cap (G's top hook bends away from the exit
+    // ray, which dies on the inner wall long before the apex). Only denser
+    // sampling puts medial nodes inside the tail. The final attempt accepts
+    // best effort, so a mouth corner a bogus over-long cut leaves genuinely
+    // unreachable costs extra attempts, never a failure.
+    const axes = infos.map((s) => s.axis);
+    for (const s of samples) {
+      if (!coveredByAxes(s, axes, 0.5 * spacing)) return REFINE;
+    }
   }
   return { kind: 'ok', infos };
 }
