@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { PathCommand, Point } from 'tegaki';
 import type { GeometryPipelineInput } from './pipeline.ts';
 import { runGeometryPipeline } from './pipeline.ts';
+import { DEFAULT_GEOMETRY_OPTIONS } from './types.ts';
 
 const UPM = 1000;
 
@@ -47,6 +48,15 @@ const circle = (cx: number, cy: number, radius: number, sides = 48): Point[] =>
     const a = (i / sides) * Math.PI * 2;
     return { x: cx + radius * Math.cos(a), y: cy + radius * Math.sin(a) };
   });
+
+describe('geometry pipeline — defaults', () => {
+  test('the default medial method is the true (voronoi) medial axis', () => {
+    // The chain approximation loses whole limbs on descender/loop faces
+    // (Caveat r's descender, Klee One そ/ゆ/れ/わ) — the default must be the
+    // method that reaches every thin limb by construction.
+    expect(DEFAULT_GEOMETRY_OPTIONS.medialMethod).toBe('voronoi');
+  });
+});
 
 describe('geometry pipeline — primitives', () => {
   test('vertical bar: no concave corners, single stroke', () => {

@@ -168,11 +168,11 @@ export interface GeometryOptions {
   /** Medial-axis sample spacing as a fraction of unitsPerEm. */
   resampleSpacingRatio: number;
   /**
-   * Axis computation for hole-free segment faces: 'chain' pairs opposite
-   * walls (fast, verified, but stops short of thin tapering parts);
-   * 'voronoi' computes the true medial axis from the Voronoi diagram of
-   * boundary samples (reaches every thin limb by construction —
-   * experimental, being iterated on visually).
+   * Axis computation for hole-free segment faces: 'voronoi' computes the
+   * true medial axis from the Voronoi diagram of boundary samples (reaches
+   * every thin limb by construction); 'chain' pairs opposite walls (faster
+   * approximation, but stops short of thin tapering parts and drops limbs
+   * on descender/loop faces — kept as a debugging comparison).
    */
   medialMethod: 'chain' | 'voronoi';
 }
@@ -188,7 +188,9 @@ export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
   // E, t, f) meet at ~90°, so 75° keeps a comfortable margin both ways.
   continuationMaxBendDeg: 75,
   resampleSpacingRatio: 0.02,
-  medialMethod: 'chain',
+  // The chain approximation loses whole limbs on descender/loop faces
+  // (Caveat r, Klee One そ/ゆ/れ/わ); the true medial axis covers them.
+  medialMethod: 'voronoi',
 };
 
 /** Options resolved to absolute font units / radians for the core algorithms. */
