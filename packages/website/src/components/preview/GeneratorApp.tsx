@@ -10,6 +10,7 @@ import {
   extractTegakiBundle,
   type GeometryOptions,
   type GeometryPipelineResult,
+  initStraightSkeleton,
   type ParsedFontInfo,
   type PipelineOptions,
   type PipelineResult,
@@ -238,13 +239,21 @@ export function GeneratorApp() {
       return;
     }
     setProcessing(true);
-    const id = setTimeout(() => {
+    let cancelled = false;
+    const id = setTimeout(async () => {
+      // The straight-skeleton method needs its wasm module loaded once before
+      // the (synchronous) pipeline can use it.
+      if (geometryOptions.medialMethod === 'straight-skeleton') await initStraightSkeleton();
+      if (cancelled) return;
       const res = processGlyphGeometry(fontInfo, selectedChar, geometryOptions, options.bezierTolerance);
       if (res) geoResultsCache.current.set(cacheKey, res);
       setGeoResult(res);
       setProcessing(false);
     }, 10);
-    return () => clearTimeout(id);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
   }, [pipeline, previewMode, fontInfo, selectedChar, geometryOptions, options.bezierTolerance]);
 
   // The result whose strokes drive the animation controls / loop for the active pipeline.
@@ -798,7 +807,7 @@ export function GeneratorApp() {
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="text-gray-600">Medial axis</span>
                 <div className="flex rounded overflow-hidden border border-gray-300">
-                  {(['chain', 'voronoi'] as const).map((method) => (
+                  {(['chain', 'voronoi', 'straight-skeleton'] as const).map((method) => (
                     <button
                       key={method}
                       type="button"
@@ -807,7 +816,7 @@ export function GeneratorApp() {
                       }`}
                       onClick={() => updateGeometryOption('medialMethod', method)}
                     >
-                      {method === 'chain' ? 'Chain' : 'Voronoi'}
+                      {method === 'chain' ? 'Chain' : method === 'voronoi' ? 'Voronoi' : 'Skeleton'}
                     </button>
                   ))}
                 </div>

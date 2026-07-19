@@ -17,6 +17,7 @@ export {
 export { DEFAULT_CHARS, EXAMPLE_FONTS, type SkeletonMethod } from './constants.ts';
 export { createHbShaper, type HbShaper, type ShapedGlyph } from './font/hb-shaper.ts';
 export { enumerateFontChars } from './font/parse.ts';
+export { initStraightSkeleton, isStraightSkeletonReady } from './geometry/face-straight-skeleton.ts';
 export type { GeometryPipelineInput } from './geometry/pipeline.ts';
 export {
   type AxisEnd,

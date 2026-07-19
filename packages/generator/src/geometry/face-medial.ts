@@ -30,7 +30,7 @@ import { buildEnds, extractRuns } from './medial.ts';
 import { cross, dist, distToSegment, midpoint, normalize, pointInPolygon, polylineLength, sub } from './primitives.ts';
 import type { AxisPoint, Face, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
 
-interface MedialNode extends Point {
+export interface MedialNode extends Point {
   width: number;
   adj: number[];
   alive: boolean;
@@ -256,7 +256,35 @@ function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: n
       nodes[b]!.adj.push(a);
     }
   }
-  if (nodes.length < 4) return retry;
+  return processMedialGraph(face, options, nodes, samples, step, final, includeCuts);
+}
+
+/**
+ * Shared graph→axes machinery: connectivity, port attachment, ink-coverage
+ * pruning, primary/limb extraction, and the quality gates. Works on any
+ * medial-like node graph — Voronoi circumcenters (attemptMedialAxes) or an
+ * exact straight-skeleton spine (segmentAxesFromMedialGraph). `samples` are
+ * wall points for the coverage gate; pass [] when `final` (the gate is
+ * refine-only). `exactWidths` marks graphs whose node widths are trustworthy
+ * inscribed diameters at every node (no sampling noise) — the retrace width
+ * cap is skipped for them.
+ */
+function processMedialGraph(
+  face: Face,
+  options: ResolvedGeometryOptions,
+  nodes: MedialNode[],
+  samples: Point[],
+  step: number,
+  final: boolean,
+  includeCuts: boolean,
+  exactWidths = false,
+): Attempt {
+  const spacing = options.resampleSpacing;
+  const retry = final ? FAIL : REFINE;
+  // Fewer than 4 Voronoi circumcenters means the sampling was too coarse for
+  // the face — but an EXACT graph that small is simply a complete skeleton of
+  // a simple shape (a rectangle's spine is exactly 2 vertices).
+  if (nodes.length < (exactWidths ? 2 : 4)) return retry;
 
   // Circumcircles are empty of SAMPLES, not of the continuous boundary —
   // near the open cut mouth a disk spills through the sample-free gap and
@@ -469,11 +497,15 @@ function attemptMedialAxes(face: Face, options: ResolvedGeometryOptions, step: n
   for (const id of primaryIds) {
     primaryAxis.push({ x: nodes[id]!.x, y: nodes[id]!.y, width: nodes[id]!.width });
     // Retrace limbs at their attachment, capped at the attachment width so
-    // the out-and-back pass draws at the local stroke width.
+    // the out-and-back pass draws at the local stroke width. Exact graphs
+    // skip the cap: their widths are honest everywhere, and the attach node
+    // of a straight-skeleton fork can sit OFF-CENTER near a cut mouth (a
+    // wall-cut bisector vertex) — れ's w46 stem drew at w27 when the cap
+    // propagated that one thin node down the whole limb.
     for (let k = 0; k < limbs.length; k++) {
       const limb = limbs[k]!;
       if (!retraced[k] || limb.attach !== id) continue;
-      const capW = nodes[id]!.width;
+      const capW = exactWidths ? Infinity : nodes[id]!.width;
       const out = toAxis(nodes, limb.ids).map((p) => ({ ...p, width: Math.min(p.width, capW) }));
       maxShortfall = Math.max(maxShortfall, extendFreeTip(out, false, face.polygon, spacing));
       primaryAxis.push(...out.slice(1));
@@ -594,5 +626,18 @@ export function medialFaceAxes(face: Face, options: ResolvedGeometryOptions): Se
  */
 export function medialFaceAxesFullBoundary(face: Face, options: ResolvedGeometryOptions): SegmentInfo[] | null {
   const result = attemptMedialAxes(face, options, Math.max(3, options.resampleSpacing / 2), true, true);
+  return result.kind === 'ok' ? result.infos : null;
+}
+
+/**
+ * Axes from an externally built EXACT medial-like graph (the straight-skeleton
+ * spine): one attempt, final semantics — the graph is not sampled, so denser
+ * sampling cannot improve it; split components are bridged and best effort is
+ * accepted. The jitter gate still fails dishonest ported primaries to the
+ * chain fallback. Returns null when the graph is too small or rejected
+ * (callers fall back to chain pairing).
+ */
+export function segmentAxesFromMedialGraph(face: Face, options: ResolvedGeometryOptions, nodes: MedialNode[]): SegmentInfo[] | null {
+  const result = processMedialGraph(face, options, nodes, [], Math.max(3, options.resampleSpacing / 2), true, false, true);
   return result.kind === 'ok' ? result.infos : null;
 }

@@ -18,6 +18,7 @@
 
 import type { Point } from 'tegaki';
 import { medialFaceAxes, medialFaceAxesFullBoundary } from './face-medial.ts';
+import { straightSkeletonFaceAxes } from './face-straight-skeleton.ts';
 import {
   closestPointOnPolyline,
   dist,
@@ -163,7 +164,8 @@ export function buildEnds(axis: AxisPoint[], startCutId: number, endCutId: numbe
  * axis per limb the primary cannot reach.
  *
  * Hole-free faces use the true medial axis (`medialFaceAxes` — Voronoi of
- * boundary samples), which reaches tapered tips and side limbs by
+ * boundary samples) or the exact straight skeleton (`straightSkeletonFaceAxes`)
+ * per `options.medialMethod`; both reach tapered tips and side limbs by
  * construction; a single path can only serve two ports, so extra limbs come
  * back as retraces (2-port faces) or branch segments. Hole faces and any
  * face the medial graph can't handle fall back to chain pairing, where the
@@ -175,8 +177,8 @@ export function buildEnds(axis: AxisPoint[], startCutId: number, endCutId: numbe
  */
 export function computeSegmentAxes(face: Face, options: ResolvedGeometryOptions, opts?: { fullBoundaryRescue?: boolean }): SegmentInfo[] {
   let infos: SegmentInfo[] = [];
-  if (face.holes.length === 0 && options.medialMethod === 'voronoi') {
-    infos = medialFaceAxes(face, options) ?? [];
+  if (face.holes.length === 0 && (options.medialMethod === 'voronoi' || options.medialMethod === 'straight-skeleton')) {
+    infos = (options.medialMethod === 'straight-skeleton' ? straightSkeletonFaceAxes(face, options) : medialFaceAxes(face, options)) ?? [];
     // Wall-only sampling can fail outright on hairpin fold wedges (え/る's
     // tip): the cuts run LENGTHWISE, so the walls are just the nose cap and
     // the graph collapses — and every chain construction truncates the tip

@@ -156,7 +156,7 @@ const GEO_OPTION_KEYS: Record<keyof GeometryOptions, string> = {
   medialMethod: 'gmm',
 };
 
-const MEDIAL_METHODS: readonly GeometryOptions['medialMethod'][] = ['chain', 'voronoi'];
+const MEDIAL_METHODS: readonly GeometryOptions['medialMethod'][] = ['chain', 'voronoi', 'straight-skeleton'];
 
 const REVERSE_GEO_OPTION_KEYS = Object.fromEntries(Object.entries(GEO_OPTION_KEYS).map(([k, v]) => [v, k])) as Record<
   string,

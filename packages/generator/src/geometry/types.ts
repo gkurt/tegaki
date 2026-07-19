@@ -170,11 +170,14 @@ export interface GeometryOptions {
   /**
    * Axis computation for hole-free segment faces: 'voronoi' computes the
    * true medial axis from the Voronoi diagram of boundary samples (reaches
-   * every thin limb by construction); 'chain' pairs opposite walls (faster
-   * approximation, but stops short of thin tapering parts and drops limbs
-   * on descender/loop faces — kept as a debugging comparison).
+   * every thin limb by construction); 'straight-skeleton' computes the exact
+   * CGAL straight skeleton of the face polygon (no sampling artifacts, but
+   * ~100× slower and requires `await initStraightSkeleton()` first); 'chain'
+   * pairs opposite walls (faster approximation, but stops short of thin
+   * tapering parts and drops limbs on descender/loop faces — kept as a
+   * debugging comparison).
    */
-  medialMethod: 'chain' | 'voronoi';
+  medialMethod: 'chain' | 'voronoi' | 'straight-skeleton';
 }
 
 export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
@@ -202,7 +205,7 @@ export interface ResolvedGeometryOptions {
   junctionCompactness: number;
   continuationMinCos: number;
   resampleSpacing: number;
-  medialMethod: 'chain' | 'voronoi';
+  medialMethod: 'chain' | 'voronoi' | 'straight-skeleton';
 }
 
 export function resolveGeometryOptions(options: GeometryOptions, unitsPerEm: number): ResolvedGeometryOptions {
