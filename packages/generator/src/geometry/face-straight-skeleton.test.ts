@@ -268,6 +268,75 @@ describe('straightSkeletonFaceAxes', () => {
     }
   });
 
+  test("quarter-integer lattice bar tip builds instead of exploding CGAL (Caveat '#' face8)", () => {
+    // Verbatim crop from Caveat '#' (Fontsource build): a perfectly simple
+    // 49-vertex diagonal bar tip whose grid-aligned coordinates produced
+    // exactly-degenerate CGAL events — the wasm ground for ~3s while its
+    // memory climbed toward 3 GB, then threw (the browser froze). The
+    // deterministic input jitter must make this build succeed, fast.
+    const P: Point[] = [
+      { x: 509.0, y: -440.0 },
+      { x: 516.25, y: -457.75 },
+      { x: 524.0, y: -477.0 },
+      { x: 540.25, y: -518.875 },
+      { x: 557.0, y: -562.5 },
+      { x: 573.5, y: -605.875 },
+      { x: 589.0, y: -647.0 },
+      { x: 596.125, y: -666.125 },
+      { x: 602.5, y: -683.5 },
+      { x: 608.125, y: -699.125 },
+      { x: 613.0, y: -713.0 },
+      { x: 616.9375, y: -724.625 },
+      { x: 619.75, y: -733.5 },
+      { x: 621.4375, y: -739.625 },
+      { x: 622.0, y: -743.0 },
+      { x: 623.0, y: -750.0 },
+      { x: 626.0, y: -755.0 },
+      { x: 631.0, y: -758.0 },
+      { x: 638.0, y: -759.0 },
+      { x: 641.375, y: -761.5 },
+      { x: 645.5, y: -763.0 },
+      { x: 654.0, y: -764.0 },
+      { x: 670.0, y: -748.0 },
+      { x: 676.375, y: -740.5 },
+      { x: 679.5, y: -732.0 },
+      { x: 680.625, y: -722.25 },
+      { x: 681.0, y: -711.0 },
+      { x: 680.25, y: -698.75 },
+      { x: 678.0, y: -688.0 },
+      { x: 676.125, y: -682.4375 },
+      { x: 673.5, y: -675.75 },
+      { x: 670.125, y: -667.9375 },
+      { x: 666.0, y: -659.0 },
+      { x: 660.875, y: -648.1875 },
+      { x: 654.5, y: -634.75 },
+      { x: 646.875, y: -618.6875 },
+      { x: 638.0, y: -600.0 },
+      { x: 636.125, y: -595.25 },
+      { x: 633.5, y: -589.0 },
+      { x: 630.125, y: -581.25 },
+      { x: 626.0, y: -572.0 },
+      { x: 616.625, y: -550.75 },
+      { x: 606.5, y: -527.0 },
+      { x: 596.125, y: -502.5 },
+      { x: 586.0, y: -479.0 },
+      { x: 580.8125, y: -467.9375 },
+      { x: 576.25, y: -457.75 },
+      { x: 572.3125, y: -448.4375 },
+      { x: 569.0, y: -440.0 },
+    ];
+    const face = buildFace(
+      P,
+      P.map((_, i) => (i === P.length - 1 ? 2 : -1)),
+    );
+    const t0 = performance.now();
+    const infos = straightSkeletonFaceAxes(face, OPTIONS);
+    expect(performance.now() - t0).toBeLessThan(2000);
+    expect(infos).not.toBeNull();
+    expect(infos!.length).toBeGreaterThanOrEqual(1);
+    expect(infos![0]!.axis.length).toBeGreaterThanOrEqual(2);
+  });
+
   test('tapered ribbon: widths follow the taper', () => {
     // 300-long wedge from width 80 down to width 20, cut at the wide end.
     const face = buildFace(

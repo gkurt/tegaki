@@ -57,6 +57,10 @@ interface Builder {
 let builder: Builder | null = null;
 let initPromise: Promise<void> | null = null;
 
+// Per-build timing to stderr (GEO_SS_DEBUG=1) — guarded so the check itself
+// is safe in the browser, where `process` does not exist.
+const SS_DEBUG = typeof process !== 'undefined' && !!process.env?.GEO_SS_DEBUG;
+
 /**
  * One-time async initialization: loads the wasm package and its module. Must
  * be awaited before any glyph is processed with `medialMethod:
@@ -79,9 +83,29 @@ export function isStraightSkeletonReady(): boolean {
   return builder !== null;
 }
 
+/**
+ * Deterministic sub-visual jitter (±0.01 font units ≈ 10⁻⁵ em) hashed from
+ * the coordinate value itself. Font outlines live on a quarter-integer
+ * lattice, which hands CGAL EXACTLY collinear points and parallel edges;
+ * this port's handling of the resulting simultaneous events can grind for
+ * seconds while wasm memory climbs to gigabytes before aborting (Caveat '#'
+ * froze the browser: two bar-tip faces and a merged stroke region all threw
+ * after ~3s each). Breaking the exact ties makes every one of those builds
+ * succeed in ~40ms — and identical coordinates jitter identically, so ring
+ * closure and shared vertices stay consistent.
+ */
+function jitterCoord(x: number, y: number): [number, number] {
+  const AMP = 0.01;
+  let h = Math.imul((x * 8191) ^ (y * 131071), 2654435761) >>> 0;
+  const jx = ((h & 0xffff) / 0xffff - 0.5) * 2 * AMP;
+  h = Math.imul(h ^ (h >>> 13), 2246822519) >>> 0;
+  const jy = ((h & 0xffff) / 0xffff - 0.5) * 2 * AMP;
+  return [x + jx, y + jy];
+}
+
 /** Closed ring in the orientation CGAL requires (outer CCW, holes CW). */
 function toRing(points: Point[], ccw: boolean): number[][] {
-  const ring = points.map((p) => [p.x, p.y]);
+  const ring = points.map((p) => jitterCoord(p.x, p.y) as number[]);
   if (signedArea(points) > 0 !== ccw) ring.reverse();
   ring.push([...ring[0]!]);
   return ring;
@@ -172,11 +196,17 @@ export function straightSkeletonFaceAxes(face: Face, options: ResolvedGeometryOp
   }
   if (face.holes.length > 0 && face.cutIds.length > 0) return null;
   const rings = [toRing(face.polygon, true), ...face.holes.map((h) => toRing(h, false))];
+  const t0 = SS_DEBUG ? performance.now() : 0;
   let skeleton: Skeleton | null;
   try {
     skeleton = builder.buildFromPolygon(rings);
   } catch {
     return null;
+  }
+  if (SS_DEBUG) {
+    console.error(
+      `[ss] faceAxes face${face.id} v=${face.polygon.length} holes=${face.holes.length} ${(performance.now() - t0).toFixed(0)}ms`,
+    );
   }
   if (!skeleton) return null;
   const nodes = graphFromSkeleton(skeleton, face);
@@ -205,11 +235,17 @@ export function straightSkeletonStrokeAxis(
     throw new Error("medialMethod 'straight-skeleton' requires `await initStraightSkeleton()` before processing glyphs");
   }
   const rings = [toRing(region.polygon, true), ...region.holes.map((h) => toRing(h, false))];
+  const t0 = SS_DEBUG ? performance.now() : 0;
   let skeleton: Skeleton | null;
   try {
     skeleton = builder.buildFromPolygon(rings);
   } catch {
     return null;
+  }
+  if (SS_DEBUG) {
+    console.error(
+      `[ss] strokeAxis region${region.id} v=${region.polygon.length} holes=${region.holes.length} ${(performance.now() - t0).toFixed(0)}ms ok=${skeleton !== null}`,
+    );
   }
   if (!skeleton) return null;
   return anchoredAxisFromMedialGraph(region, options, graphFromSkeleton(skeleton, region), [start, end], otherInk);
