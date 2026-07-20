@@ -5,7 +5,8 @@
       "name": "website",
       "runtimeExecutable": "bun",
       "runtimeArgs": ["--filter", "@tegaki/website", "dev"],
-      "port": 4321
+      "port": 4321,
+      "autoPort": true
     }
   ]
 }

@@ -80,6 +80,10 @@ export default defineConfig({
   devToolbar: {
     enabled: false,
   },
+  // Astro doesn't read PORT on its own; honoring it lets tooling (e.g. the
+  // Claude Code preview harness with autoPort) assign a free port when 4321
+  // is taken. Unset PORT keeps the normal 4321 default.
+  server: process.env.PORT ? { port: Number(process.env.PORT) } : {},
   vite: {
     plugins: [tailwindcss() as any],
     resolve: {
