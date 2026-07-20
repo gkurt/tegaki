@@ -1,6 +1,6 @@
 // Stage G5c — straight-skeleton medial graph for segment faces.
 //
-// The straight skeleton (CGAL via the `straight-skeleton` wasm package) is
+// The straight skeleton (CGAL via the `@matthewjacobson/str8` wasm package) is
 // computed EXACTLY from the face polygon — no boundary sampling, so none of
 // the Voronoi failure modes exist: no refinement loop, no sample-step jitter,
 // no sample-free cut mouths. Every skeleton vertex carries its inset `time`
@@ -21,18 +21,33 @@
 //   wall samples on time-based widths). Node widths are therefore recomputed
 //   as 2 × distance-to-nearest-WALL, the same semantics the wall-only
 //   Voronoi build measures by construction.
-// - CGAL ABORTS the wasm runtime on invalid input (bad orientation,
-//   non-weakly-simple rings such as slit faces). Aborts are recoverable —
-//   the next build on valid input succeeds — so build failures of any kind
-//   simply return null and the caller falls back to chain pairing.
+// - The build simply returns null on degenerate/failed input (str8 never
+//   aborts the wasm runtime: bad orientation is normalized, and CGAL failures
+//   surface as null rather than a memory blowup) — the caller then falls back
+//   to chain pairing. Rings that touch at a shared vertex (a merged loop
+//   chain's counter meeting its outer at a pinch) make str8 THROW; the
+//   try/catch turns that into the same null → chain fallback.
 // - ~100× slower than the sampled Voronoi build (CGAL's exact arithmetic
 //   under wasm; roughly quadratic in vertex count).
 //
-// The wasm module is inlined base64 (no fetch), but compiled with
-// ENVIRONMENT=web: it only ever CHECKS for `window`/`importScripts`, so a
-// minimal `window` alias makes it run under Bun/Node as well. The package is
-// imported LAZILY inside initStraightSkeleton() — a ~1 MB bundle nothing
-// should pay for until the method is actually selected.
+// `@matthewjacobson/str8` is a from-scratch rebuild of the original
+// `straight-skeleton` package by the person who diagnosed its degeneracy bugs
+// (StrandedKitty/straight-skeleton #18/#19/#20): it ingests doubles (no
+// float32 truncation), drops near-collinear vertices, normalizes winding, and
+// carries an automatic EPICK→EPECK exact-kernel fallback. Font outlines live
+// on a quarter-integer lattice that fed the old port EXACTLY-degenerate
+// wavefront events — it ground for seconds toward gigabytes of wasm memory
+// before aborting (Caveat '#' froze the browser), which the old wrapper only
+// dodged with deterministic input jitter. str8 resolves those exactly, so no
+// jitter is needed. `forceExact` skips the doomed fast pass up front: on the
+// systematically-degenerate '#' bar tip the fast attempt burns ~490ms before
+// falling back, while going straight to the exact kernel is ~70ms; simple
+// faces build in ~1ms either way, so exact-first is a net win for font work.
+//
+// The module ships its wasm inlined base64 (no fetch) and detects Node/Bun on
+// its own — no `window` alias needed. It is imported LAZILY inside
+// initStraightSkeleton() so nothing pays for the ~1.8 MB bundle until the
+// method is actually selected.
 
 import type { Point } from 'tegaki';
 import {
@@ -42,20 +57,32 @@ import {
   type MedialNode,
   segmentAxesFromMedialGraph,
 } from './face-medial.ts';
-import { dist, distToSegment, pointInPolygon, signedArea } from './primitives.ts';
+import { dist, distToSegment, pointInPolygon } from './primitives.ts';
 import type { AxisPoint, Face, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
 
-/** Structural mirror of the package's Skeleton/SkeletonBuilder (type-only, keeps the import lazy). */
+/** Structural mirror of the package's API (type-only, keeps the import lazy). */
 interface Skeleton {
-  vertices: [number, number, number][];
-  polygons: number[][];
+  /** Flat `[x, y, time, ...]` triples; `time` is the wavefront distance. */
+  vertices: Float32Array;
+  /** One entry per skeleton face: vertex indices into `vertices`. */
+  faces: number[][];
 }
-interface Builder {
-  buildFromPolygon(rings: number[][][]): Skeleton | null;
+interface Str8 {
+  init(): Promise<void>;
+  buildFromPolygon(rings: [number, number][][], options?: { forceExact?: boolean }): Skeleton | null;
 }
 
-let builder: Builder | null = null;
+let str8: Str8 | null = null;
 let initPromise: Promise<void> | null = null;
+
+// Let str8 try its fast inexact kernel (EPICK) first and only fall back to the
+// exact kernel (EPECK) on failure. The old float32 port implied font faces
+// were "systematically degenerate", but str8's double-precision fast kernel
+// actually SUCCEEDS on the vast majority of them (most glyph faces build in
+// 20–320ms — faster than the old package), and only genuinely-degenerate faces
+// (the '#' bar tips + merged region) pay the fast-then-exact cost. Forcing
+// exact up front instead made EVERY face ~2.5–3× slower for no coverage gain.
+const FORCE_EXACT = false;
 
 // Per-build timing to stderr (GEO_SS_DEBUG=1) — guarded so the check itself
 // is safe in the browser, where `process` does not exist.
@@ -69,62 +96,43 @@ const SS_DEBUG = typeof process !== 'undefined' && !!process.env?.GEO_SS_DEBUG;
  */
 export function initStraightSkeleton(): Promise<void> {
   initPromise ??= (async () => {
-    if (typeof window === 'undefined') {
-      (globalThis as { window?: unknown }).window = globalThis;
-    }
-    const { SkeletonBuilder } = await import('straight-skeleton');
-    await SkeletonBuilder.init();
-    builder = SkeletonBuilder as unknown as Builder;
+    const mod = (await import('@matthewjacobson/str8')) as unknown as Str8;
+    await mod.init();
+    str8 = mod;
   })();
   return initPromise;
 }
 
 export function isStraightSkeletonReady(): boolean {
-  return builder !== null;
+  return str8 !== null;
 }
 
 /**
- * Deterministic sub-visual jitter (±0.01 font units ≈ 10⁻⁵ em) hashed from
- * the coordinate value itself. Font outlines live on a quarter-integer
- * lattice, which hands CGAL EXACTLY collinear points and parallel edges;
- * this port's handling of the resulting simultaneous events can grind for
- * seconds while wasm memory climbs to gigabytes before aborting (Caveat '#'
- * froze the browser: two bar-tip faces and a merged stroke region all threw
- * after ~3s each). Breaking the exact ties makes every one of those builds
- * succeed in ~40ms — and identical coordinates jitter identically, so ring
- * closure and shared vertices stay consistent.
+ * Ring as a list of `[x, y]` points. str8 accepts either winding (it forces
+ * the outer ring CCW and holes CW itself) and open-or-closed rings, so no
+ * reorientation or explicit closure is required.
  */
-function jitterCoord(x: number, y: number): [number, number] {
-  const AMP = 0.01;
-  let h = Math.imul((x * 8191) ^ (y * 131071), 2654435761) >>> 0;
-  const jx = ((h & 0xffff) / 0xffff - 0.5) * 2 * AMP;
-  h = Math.imul(h ^ (h >>> 13), 2246822519) >>> 0;
-  const jy = ((h & 0xffff) / 0xffff - 0.5) * 2 * AMP;
-  return [x + jx, y + jy];
-}
-
-/** Closed ring in the orientation CGAL requires (outer CCW, holes CW). */
-function toRing(points: Point[], ccw: boolean): number[][] {
-  const ring = points.map((p) => jitterCoord(p.x, p.y) as number[]);
-  if (signedArea(points) > 0 !== ccw) ring.reverse();
-  ring.push([...ring[0]!]);
-  return ring;
+function toRing(points: Point[]): [number, number][] {
+  return points.map((p) => [p.x, p.y]);
 }
 
 /**
  * Merge skeleton vertices into MedialNodes and connect interior (time > 0)
- * neighbours. Each result polygon is the roof face of one input edge; its
+ * neighbours. Each result face is the roof face of one input edge; its
  * consecutive vertex pairs are skeleton edges. Degenerate events can emit
  * distinct vertices at one coordinate — merge them like the Voronoi build
  * merges co-circular circumcenters, or degree-based pruning miscounts.
  */
 function graphFromSkeleton(skeleton: Skeleton, face: Face): MedialNode[] {
-  const { vertices, polygons } = skeleton;
+  const { vertices, faces: skeletonFaces } = skeleton;
+  const vertexCount = (vertices.length / 3) | 0;
   const nodes: MedialNode[] = [];
   const byCoord = new Map<string, number>();
-  const nodeOfVertex = new Int32Array(vertices.length).fill(-1);
-  for (let i = 0; i < vertices.length; i++) {
-    const [x, y, time] = vertices[i]!;
+  const nodeOfVertex = new Int32Array(vertexCount).fill(-1);
+  for (let i = 0; i < vertexCount; i++) {
+    const x = vertices[i * 3]!;
+    const y = vertices[i * 3 + 1]!;
+    const time = vertices[i * 3 + 2]!;
     if (time <= 1e-9) continue;
     const key = `${Math.round(x * 256)}:${Math.round(y * 256)}`;
     let id = byCoord.get(key);
@@ -165,7 +173,7 @@ function graphFromSkeleton(skeleton: Skeleton, face: Face): MedialNode[] {
     for (const hole of face.holes) if (pointInPolygon(p, hole)) odd = !odd;
     return odd;
   };
-  for (const poly of polygons) {
+  for (const poly of skeletonFaces) {
     for (let k = 0; k < poly.length; k++) {
       const a = nodeOfVertex[poly[k]!]!;
       const b = nodeOfVertex[poly[(k + 1) % poly.length]!]!;
@@ -191,15 +199,15 @@ function graphFromSkeleton(skeleton: Skeleton, face: Face): MedialNode[] {
  * rejects the spine — callers fall back to chain pairing.
  */
 export function straightSkeletonFaceAxes(face: Face, options: ResolvedGeometryOptions): SegmentInfo[] | null {
-  if (!builder) {
+  if (!str8) {
     throw new Error("medialMethod 'straight-skeleton' requires `await initStraightSkeleton()` before processing glyphs");
   }
   if (face.holes.length > 0 && face.cutIds.length > 0) return null;
-  const rings = [toRing(face.polygon, true), ...face.holes.map((h) => toRing(h, false))];
+  const rings = [toRing(face.polygon), ...face.holes.map((h) => toRing(h))];
   const t0 = SS_DEBUG ? performance.now() : 0;
   let skeleton: Skeleton | null;
   try {
-    skeleton = builder.buildFromPolygon(rings);
+    skeleton = str8.buildFromPolygon(rings, { forceExact: FORCE_EXACT });
   } catch {
     return null;
   }
@@ -231,14 +239,14 @@ export function straightSkeletonStrokeAxis(
   end: AxisPoint,
   otherInk: InkDisk[],
 ): AxisPoint[] | null {
-  if (!builder) {
+  if (!str8) {
     throw new Error("medialMethod 'straight-skeleton' requires `await initStraightSkeleton()` before processing glyphs");
   }
-  const rings = [toRing(region.polygon, true), ...region.holes.map((h) => toRing(h, false))];
+  const rings = [toRing(region.polygon), ...region.holes.map((h) => toRing(h))];
   const t0 = SS_DEBUG ? performance.now() : 0;
   let skeleton: Skeleton | null;
   try {
-    skeleton = builder.buildFromPolygon(rings);
+    skeleton = str8.buildFromPolygon(rings, { forceExact: FORCE_EXACT });
   } catch {
     return null;
   }

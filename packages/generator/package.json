@@ -44,12 +44,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@matthewjacobson/str8": "^0.5.0",
     "d3-delaunay": "^6.0.4",
     "fflate": "^0.8.3",
     "harfbuzzjs": "^1.4.0",
     "opentype.js": "^2.0.0",
     "padrone": "^2.0.0",
-    "straight-skeleton": "^3.0.0",
     "tegaki": "workspace:*",
     "zod": "^4.4.3"
   },
