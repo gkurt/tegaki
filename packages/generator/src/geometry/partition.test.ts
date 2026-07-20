@@ -19,11 +19,11 @@ function face(id: number, polygon: Point[], edgeCutIds?: number[]): Face {
   };
 }
 
-// The debris class this pass exists for: a cut-less micro-face pinched off at
-// a corner (Caveat g grew a 29-unit² wedge where its bowl closes onto the
-// stem), sharing edges with normal faces. Fixtures are synthetic on purpose —
-// they must keep exercising this code after the partition itself stops
-// emitting such faces.
+// The debris class this pass exists for: a cut-less micro-face sharing edges
+// with normal faces — the arrangement's honest rendering of a contour that
+// self-overlaps at a stroke cusp (Caveat g's bowl/stem cusp encloses a
+// 29-unit² wedge this way). Fixtures are synthetic on purpose, so they don't
+// depend on any one font's outline quirks.
 describe('dissolvePartitionDebris', () => {
   const FLOOR = 200;
 

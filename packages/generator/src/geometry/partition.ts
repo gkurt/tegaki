@@ -287,14 +287,25 @@ function interiorProbe(polygon: Point[]): Point | null {
 }
 
 /**
- * Post-partition debris cleanup. A face with NO cut edges inside a multi-face
- * region is anomalous: a normal face is either carved by cuts or IS its whole
- * region. Degenerate arrangements (two projected cuts welded at one corner,
- * near-collinear splits) can pinch off a micro-face whose edges all come out
- * tagged as outline — Caveat g grows a 29-unit² wedge at the corner where its
- * bowl closes onto the stem. Left alone, such a face emits a junk width-0
- * stroke AND its corner pinches the union boundary, so every downstream
- * merged-region skeletonization (junction refinement, trial joins) bails.
+ * Post-partition debris cleanup. A face with NO cut edges inside a
+ * multi-face region is anomalous: a normal face is either carved by cuts or
+ * IS its whole region. Handwriting fonts produce one anyway wherever a
+ * contour SELF-overlaps at a stroke cusp: the two walls cross just before
+ * the tip, and the arrangement — correctly — turns the crossing into a
+ * vertex and the doubly-drawn loop into a micro-face whose edges are all
+ * outline (Caveat g's bowl/stem cusp encloses a 29-unit² wedge this way).
+ * Left alone, such a face emits a junk width-0 stroke AND its corner pinches
+ * the union boundary, so every downstream merged-region skeletonization
+ * (junction refinement, trial joins) bails.
+ *
+ * Absorbing AFTER facing is deliberate. Clipping the loop out of the contour
+ * up front was tried and rejected on measurement: the loop's vertices carry
+ * the cusp's true wall tangents, and rerouting the outline through the
+ * crossing point shifts the corner's slots and local-width estimate so far
+ * that g's clean 67-unit cross-section cut became a 211-unit lengthwise
+ * slice — one smooth stroke became two, one of them a fragment. Dissolution
+ * removes the artifact face while keeping every outline vertex the corner
+ * and cut machinery reads.
  *
  * Genuinely tiny cut-less faces that are real ink exist (an island dot inside
  * a ring's counter), so only faces below `areaFloor` are touched — and an
