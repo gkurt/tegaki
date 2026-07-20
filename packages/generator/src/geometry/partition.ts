@@ -16,6 +16,7 @@
 // pockets while keeping annuli (O) as single faces with hole boundaries.
 
 import type { Point } from 'tegaki';
+import { mergeSegmentFaces } from './face-merge.ts';
 import { add, dist, midpoint, pointInPolygon, pointInRegion, polygonCentroid, scale, signedArea, sub } from './primitives.ts';
 import type { Contour, Cut, Face } from './types.ts';
 
@@ -283,6 +284,77 @@ function interiorProbe(polygon: Point[]): Point | null {
   const alt = add(m, scale({ x: nrm.x / nl, y: nrm.y / nl }, -eps));
   if (pointInPolygon(alt, polygon)) return alt;
   return polygonCentroid(polygon);
+}
+
+/**
+ * Post-partition debris cleanup. A face with NO cut edges inside a multi-face
+ * region is anomalous: a normal face is either carved by cuts or IS its whole
+ * region. Degenerate arrangements (two projected cuts welded at one corner,
+ * near-collinear splits) can pinch off a micro-face whose edges all come out
+ * tagged as outline — Caveat g grows a 29-unit² wedge at the corner where its
+ * bowl closes onto the stem. Left alone, such a face emits a junk width-0
+ * stroke AND its corner pinches the union boundary, so every downstream
+ * merged-region skeletonization (junction refinement, trial joins) bails.
+ *
+ * Genuinely tiny cut-less faces that are real ink exist (an island dot inside
+ * a ring's counter), so only faces below `areaFloor` are touched — and an
+ * island shares no edges, so it can only be dropped, never absorbed. Each
+ * debris face is dissolved into the edge-sharing neighbour with the longest
+ * shared boundary (ink preserved, silently — nothing is lost); one with no
+ * edge-sharing neighbour, or whose every candidate merge fails, is dropped
+ * with a warning. Face ids are re-compacted afterwards: callers rely on
+ * `id === index` when offsetting ids across regions.
+ */
+export function dissolvePartitionDebris(faces: Face[], areaFloor: number): { faces: Face[]; warnings: string[] } {
+  const warnings: string[] = [];
+  const keyOf = (p: Point): string => `${Math.round(p.x * 1024)}:${Math.round(p.y * 1024)}`;
+  let out = faces;
+  for (;;) {
+    if (out.length < 2) break; // a lone face IS the region, never debris
+    const debris = out.find((f) => f.cutIds.length === 0 && f.holes.length === 0 && f.area < areaFloor);
+    if (!debris) break;
+
+    // Directed debris edges; a neighbour traverses the same undirected edge
+    // reversed, so its edges are looked up by the swapped key.
+    const debrisEdges = new Map<string, number>();
+    const n = debris.polygon.length;
+    for (let i = 0; i < n; i++) {
+      const a = debris.polygon[i]!;
+      const b = debris.polygon[(i + 1) % n]!;
+      const ka = keyOf(a);
+      const kb = keyOf(b);
+      if (ka !== kb) debrisEdges.set(`${ka}|${kb}`, dist(a, b));
+    }
+    const neighbours: { face: Face; shared: number }[] = [];
+    for (const face of out) {
+      if (face === debris) continue;
+      let shared = 0;
+      const m = face.polygon.length;
+      for (let i = 0; i < m; i++) {
+        shared += debrisEdges.get(`${keyOf(face.polygon[(i + 1) % m]!)}|${keyOf(face.polygon[i]!)}`) ?? 0;
+      }
+      if (shared > 0) neighbours.push({ face, shared });
+    }
+    neighbours.sort((a, b) => b.shared - a.shared);
+
+    let absorbed = false;
+    for (const { face: neighbour } of neighbours) {
+      const merged = mergeSegmentFaces([neighbour, debris]);
+      if (!merged) continue;
+      merged.kind = neighbour.kind;
+      out = out.map((f) => (f === neighbour ? merged : f)).filter((f) => f !== debris);
+      absorbed = true;
+      break;
+    }
+    if (!absorbed) {
+      warnings.push(`partition debris face (area ${debris.area.toFixed(1)}, no cuts) had no absorbing neighbour — dropped`);
+      out = out.filter((f) => f !== debris);
+    }
+  }
+  out.forEach((f, i) => {
+    f.id = i;
+  });
+  return { faces: out, warnings };
 }
 
 /**

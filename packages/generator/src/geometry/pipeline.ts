@@ -20,7 +20,7 @@ import { straightSkeletonFaceAxes, straightSkeletonStrokeAxis } from './face-str
 import { extendUnpairedEnds, routeJunctionPaths } from './junction-routing.ts';
 import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { orderAndTimeStrokes } from './ordering.ts';
-import { classifyFaces, partitionFaces } from './partition.ts';
+import { classifyFaces, dissolvePartitionDebris, partitionFaces } from './partition.ts';
 import { partitionRegions } from './regions.ts';
 import { assembleStrokes, buildJunctions, type JunctionNode, matchContinuations, simplifyStroke, type TrialJoinScorer } from './strokes.ts';
 import { trialJoinAlignment } from './trial-join.ts';
@@ -130,14 +130,17 @@ function processRegion(
   resolved: ReturnType<typeof resolveGeometryOptions>,
   weldEps: number,
   simplifyEps: number,
+  debrisAreaFloor: number,
 ): RegionResult {
   const warnings: string[] = [];
 
   const corners = detectCorners(contours, resolved);
   const cuts = generateCuts(contours, corners, resolved);
 
-  const { faces, warnings: partWarnings } = partitionFaces(contours, cuts, weldEps);
+  const { faces: rawFaces, warnings: partWarnings } = partitionFaces(contours, cuts, weldEps);
   warnings.push(...partWarnings);
+  const { faces, warnings: debrisWarnings } = dissolvePartitionDebris(rawFaces, debrisAreaFloor);
+  warnings.push(...debrisWarnings);
   classifyFaces(faces);
 
   // cut → faces bordering it.
@@ -351,6 +354,10 @@ export function runGeometryPipeline(
   const resolved = resolveGeometryOptions(geometryOptions, input.unitsPerEm);
   const weldEps = input.unitsPerEm * 0.0015;
   const simplifyEps = input.unitsPerEm * 0.004;
+  // Cut-less faces below this area (1% of the em, squared) are partition
+  // debris, not ink — see dissolvePartitionDebris. Real cut-less micro-ink
+  // (island dots) sits orders of magnitude above it.
+  const debrisAreaFloor = (input.unitsPerEm * 0.01) ** 2;
 
   // Stage 1: flatten outline → contours → independent regions.
   const subPaths = flattenPath(rawGlyph.commands, bezierTolerance);
@@ -378,7 +385,7 @@ export function runGeometryPipeline(
     const segOffset = segments.length;
     allContours.push(...region);
 
-    const r = processRegion(region, resolved, weldEps, simplifyEps);
+    const r = processRegion(region, resolved, weldEps, simplifyEps, debrisAreaFloor);
     warnings.push(...r.warnings);
     corners.push(...r.corners);
 
