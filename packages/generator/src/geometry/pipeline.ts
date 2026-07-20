@@ -303,11 +303,12 @@ function processRegion(
   }
 
   const junctions = buildJunctions(segments, nodes);
-  // Conflicting continuation candidates are re-ranked on the MERGED shape:
-  // pretend the join happened (segments' member faces + junction faces),
-  // straight-skeletonize the union, and prefer the join whose spine flows
-  // straightest through the junction (see trial-join.ts). Exact-skeleton
-  // method only — the trial needs the same wasm build the axes use.
+  // Conflicting continuation candidates are additionally judged on the MERGED
+  // shape: pretend the join happened (segments' member faces + junction
+  // faces), straight-skeletonize the union, and VETO joins whose spine turns
+  // back on itself (see trial-join.ts and the reversal-veto note in
+  // matchContinuations). Exact-skeleton method only — the trial needs the
+  // same wasm build the axes use.
   const trialJoin: TrialJoinScorer | undefined =
     resolved.medialMethod === 'straight-skeleton'
       ? (a, b, junction) => trialJoinAlignment(segments, a, b, junction, faceById, segmentMemberFaces, resolved)

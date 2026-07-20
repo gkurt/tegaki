@@ -19,14 +19,16 @@
 // junction centroid so the drawn line passes through the crossing.
 //
 // When candidates CONFLICT (two gated pairs claim the same end) and the
-// caller provides a trial-join scorer, the direction term is re-measured on
-// the MERGED shape of each candidate — the straight skeleton of the two
-// segments' faces united with the junction faces, as if the join had already
-// been accepted (see trial-join.ts). End tangents are read at cut mouths,
-// where per-face skeletons are noisiest; the merged spine is the ground truth
-// they approximate. The tangent test stays as the compatibility GATE (a trial
-// is never used to admit a pair the gate rejected), and unambiguous junctions
-// skip the trial entirely — ranking decides nothing there.
+// caller provides a trial-join scorer, each candidate is additionally judged
+// on the MERGED shape — the straight skeleton of the two segments' faces
+// united with the junction faces, as if the join had already been accepted
+// (see trial-join.ts). The trial is strictly a REVERSAL VETO: a join whose
+// merged spine turns back on itself (alignment < 0) is demoted below its
+// rivals; anything gentler is treated as measurement noise and the tangent
+// ranking stands (see the note in matchContinuations). The tangent test
+// stays as the compatibility GATE (a trial is never used to admit a pair the
+// gate rejected), and unambiguous junctions skip the trial entirely —
+// ranking decides nothing there.
 
 import type { Point } from 'tegaki';
 import { dist, dot, normalize, sub } from './primitives.ts';
@@ -141,7 +143,8 @@ const composeScore = (alignment: number, widthScore: number, offsetScore: number
  * Optional merged-shape scorer for conflicting candidates (see trial-join.ts):
  * cos of the through-bend measured on the straight skeleton of the union of
  * both segments' faces and the junction faces, or null when the trial cannot
- * run (the tangent-based score then stands).
+ * run. Used only as a reversal veto — a candidate is demoted when this is
+ * negative, and ignored otherwise.
  */
 export type TrialJoinScorer = (
   a: { segmentIndex: number; endIndex: number },
@@ -186,6 +189,18 @@ export function matchContinuations(
   // Trial-join re-ranking: only candidates competing for a shared end are
   // trialed — greedy accepts non-conflicting pairs regardless of order, so a
   // trial there would burn a skeleton build to decide nothing.
+  //
+  // The trial is a REVERSAL VETO, nothing more: a candidate is demoted only
+  // when the merged-shape spine turns back on itself (alignment < 0). That is
+  // the one verdict the trial gives reliably (Caveat f's stem×crossbar scored
+  // −0.56, k's stem×arm −0.83 — both genuine folds the tangents missed).
+  // Anywhere gentler the measurement is NOISE at exactly the junctions that
+  // matter: where a stroke crosses itself, the skeleton launders a real 75°
+  // pen turn into a smooth curve (Klee One ぁ's stub×tail scored 0.91 and, as
+  // a promoter, displaced both true pairs and stranded the ring) and
+  // under-scores true joins (ぁ's stub×circle 0.21, む's knot exit 0.39 —
+  // as a min() demoter, the latter split む's canonical first stroke). So:
+  // never promote, and demote only on a confident doubling-back verdict.
   if (trialJoin && candidates.length >= 2) {
     const endUses = new Map<number, number>();
     for (const cand of candidates) {
@@ -194,8 +209,17 @@ export function matchContinuations(
     }
     for (const cand of candidates) {
       if ((endUses.get(cand.i) ?? 0) < 2 && (endUses.get(cand.j) ?? 0) < 2) continue;
-      const alignment = trialJoin(junction.incident[cand.i]!, junction.incident[cand.j]!, junction);
-      if (alignment != null) cand.score = composeScore(alignment, cand.widthScore, cand.offsetScore);
+      const trialAlignment = trialJoin(junction.incident[cand.i]!, junction.incident[cand.j]!, junction);
+      if (typeof process !== 'undefined' && process.env?.GEO_TRIAL_DEBUG) {
+        const a = junction.incident[cand.i]!;
+        const b = junction.incident[cand.j]!;
+        console.error(
+          `[trial] seg${a.segmentIndex}.e${a.endIndex} × seg${b.segmentIndex}.e${b.endIndex} @(${junction.centroid.x.toFixed(0)},${junction.centroid.y.toFixed(0)}) tangentScore=${cand.score.toFixed(3)} trialAlign=${trialAlignment == null ? 'null' : trialAlignment.toFixed(3)}`,
+        );
+      }
+      if (trialAlignment != null && trialAlignment < 0) {
+        cand.score = composeScore(trialAlignment, cand.widthScore, cand.offsetScore);
+      }
     }
   }
 
