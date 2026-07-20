@@ -52,13 +52,15 @@
 import type { Point } from 'tegaki';
 import {
   anchoredAxisFromMedialGraph,
+  dijkstra,
   type InkDisk,
   loopAxesFromMedialGraph,
   type MedialNode,
   segmentAxesFromMedialGraph,
+  walkPath,
 } from './face-medial.ts';
-import { dist, distToSegment, pointInPolygon } from './primitives.ts';
-import type { AxisPoint, Face, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
+import { dist, distToSegment, dot, midpoint, pointInPolygon, polylineLength, resamplePolyline, sub } from './primitives.ts';
+import type { AxisEnd, AxisPoint, Face, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
 
 /** Structural mirror of the package's API (type-only, keeps the import lazy). */
 interface Skeleton {
@@ -257,4 +259,109 @@ export function straightSkeletonStrokeAxis(
   }
   if (!skeleton) return null;
   return anchoredAxisFromMedialGraph(region, options, graphFromSkeleton(skeleton, region), [start, end], otherInk);
+}
+
+/**
+ * TRIAL-JOIN alignment: how straight would a stroke flow through `region` —
+ * the union of two candidate segments and the junction between them, merged
+ * AS IF the join had already been accepted? Builds the region's straight
+ * skeleton, walks the spine between the graph nodes nearest the two FAR
+ * endpoints (`anchors`), and measures the bend between where that path enters
+ * and leaves the junction neighbourhood (a disk covering both cut mouths plus
+ * a pen width). Returns cos(bend) — the same scale as the tangent alignment
+ * in continuation scoring (1 = perfectly straight through) — so callers can
+ * substitute it for the per-face tangent estimate, which is measured at the
+ * cut mouths where per-face skeletons are at their noisiest. No limb or
+ * retrace logic on purpose: this scores a candidate join, it does not produce
+ * final geometry. Returns null when the skeleton fails, an anchor misses the
+ * graph, the anchors are disconnected, or the path yields no usable chords —
+ * callers keep the tangent-based score.
+ */
+export function straightSkeletonJoinAlignment(
+  region: Face,
+  options: ResolvedGeometryOptions,
+  mouths: [AxisEnd, AxisEnd],
+  anchors: [AxisPoint, AxisPoint],
+): number | null {
+  if (!str8) {
+    throw new Error("medialMethod 'straight-skeleton' requires `await initStraightSkeleton()` before processing glyphs");
+  }
+  const rings = [toRing(region.polygon), ...region.holes.map((h) => toRing(h))];
+  const t0 = SS_DEBUG ? performance.now() : 0;
+  let skeleton: Skeleton | null;
+  try {
+    skeleton = str8.buildFromPolygon(rings, { forceExact: FORCE_EXACT });
+  } catch {
+    return null;
+  }
+  if (SS_DEBUG) {
+    console.error(
+      `[ss] joinAlign region${region.id} v=${region.polygon.length} holes=${region.holes.length} ${(performance.now() - t0).toFixed(0)}ms ok=${skeleton !== null}`,
+    );
+  }
+  if (!skeleton) return null;
+  const nodes = graphFromSkeleton(skeleton, region);
+  if (nodes.length < 2) return null;
+
+  // Same anchor rule as anchoredAxisFromMedialGraph: a far-off anchor means
+  // the merged region does not actually contain this end — bail.
+  const anchorNode = anchors.map((a) => {
+    let best = -1;
+    let bestD = Infinity;
+    for (let i = 0; i < nodes.length; i++) {
+      const d = dist(nodes[i]!, a);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return bestD <= Math.max(a.width, 4 * options.resampleSpacing) ? best : -1;
+  }) as [number, number];
+  if (anchorNode[0] < 0 || anchorNode[1] < 0 || anchorNode[0] === anchorNode[1]) return null;
+
+  const { distTo, prev } = dijkstra(nodes, [anchorNode[0]]);
+  if (!Number.isFinite(distTo[anchorNode[1]]!)) return null;
+  const raw = walkPath(prev, anchorNode[1]).map((id) => nodes[id]!);
+  if (raw.length < 2) return null;
+  // Resample before windowing: skeleton vertices are event points, so a long
+  // straight run is ONE edge — a spine can cross the whole junction window
+  // without placing a single vertex inside it.
+  const length = polylineLength(raw);
+  if (length < 1e-6) return null;
+  const pts = resamplePolyline(raw, Math.max(2, Math.ceil(length / Math.max(1e-3, options.resampleSpacing / 2)) + 1));
+
+  // Junction neighbourhood: everything within a disk covering both mouths
+  // plus the wider pen. The path segments INSIDE it are the join's crossing;
+  // the chords just outside it are how each arm's spine approaches it.
+  const center = midpoint(mouths[0].point, mouths[1].point);
+  const radius = dist(mouths[0].point, mouths[1].point) / 2 + Math.max(mouths[0].width, mouths[1].width, options.resampleSpacing);
+  let i0 = -1;
+  let i1 = -1;
+  for (let i = 0; i < pts.length; i++) {
+    if (dist(pts[i]!, center) > radius) continue;
+    if (i0 < 0) i0 = i;
+    i1 = i;
+  }
+  if (i0 < 0) return null; // spine never passes the junction — not this join's flow
+
+  // Direction of travel over a chord of ≥ minChord ending at the window
+  // boundary: backwards into the incoming arm, forwards into the outgoing
+  // one. Chord-based (not single-edge) so short bisector edges near skeleton
+  // events don't inject angle noise.
+  const minChord = Math.max(options.resampleSpacing, (mouths[0].width + mouths[1].width) / 4);
+  const chordDir = (fromIdx: number, step: -1 | 1): Point | null => {
+    let end = fromIdx;
+    let acc = 0;
+    while (end + step >= 0 && end + step < pts.length && acc < minChord) {
+      acc += dist(pts[end]!, pts[end + step]!);
+      end += step;
+    }
+    const v = step === -1 ? sub(pts[fromIdx]!, pts[end]!) : sub(pts[end]!, pts[fromIdx]!);
+    const l = Math.hypot(v.x, v.y);
+    return l > 1e-9 ? { x: v.x / l, y: v.y / l } : null;
+  };
+  const entry = chordDir(i0, -1);
+  const exit = chordDir(i1, 1);
+  if (!entry || !exit) return null; // an arm too short to give the join direction context
+  return dot(entry, exit);
 }

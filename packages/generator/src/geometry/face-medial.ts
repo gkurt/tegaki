@@ -75,7 +75,7 @@ function circumcircle(a: Point, b: Point, c: Point): { x: number; y: number; r: 
 const aliveDegree = (nodes: MedialNode[], id: number) => nodes[id]!.adj.filter((o) => nodes[o]!.alive).length;
 
 /** Dijkstra over alive nodes (O(V²) — medial graphs are small). */
-function dijkstra(nodes: MedialNode[], sources: number[]): { distTo: Float64Array; prev: Int32Array } {
+export function dijkstra(nodes: MedialNode[], sources: number[]): { distTo: Float64Array; prev: Int32Array } {
   const n = nodes.length;
   const distTo = new Float64Array(n).fill(Infinity);
   const prev = new Int32Array(n).fill(-1);
@@ -104,7 +104,7 @@ function dijkstra(nodes: MedialNode[], sources: number[]): { distTo: Float64Arra
   return { distTo, prev };
 }
 
-function walkPath(prev: Int32Array, to: number): number[] {
+export function walkPath(prev: Int32Array, to: number): number[] {
   const path: number[] = [];
   for (let i = to; i >= 0; i = prev[i]!) path.push(i);
   return path.reverse();

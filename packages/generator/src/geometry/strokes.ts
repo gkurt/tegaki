@@ -17,6 +17,16 @@
 // end left unpaired terminates its stroke at the junction. Accepted pairs are
 // then chained across junctions into whole strokes, bridged through each
 // junction centroid so the drawn line passes through the crossing.
+//
+// When candidates CONFLICT (two gated pairs claim the same end) and the
+// caller provides a trial-join scorer, the direction term is re-measured on
+// the MERGED shape of each candidate — the straight skeleton of the two
+// segments' faces united with the junction faces, as if the join had already
+// been accepted (see trial-join.ts). End tangents are read at cut mouths,
+// where per-face skeletons are noisiest; the merged spine is the ground truth
+// they approximate. The tangent test stays as the compatibility GATE (a trial
+// is never used to admit a pair the gate rejected), and unambiguous junctions
+// skip the trial entirely — ranking decides nothing there.
 
 import type { Point } from 'tegaki';
 import { dist, dot, normalize, sub } from './primitives.ts';
@@ -102,31 +112,50 @@ interface PairScore {
   i: number;
   j: number;
   score: number;
+  widthScore: number;
+  offsetScore: number;
 }
 
-/** Score a candidate continuation between two incident ends (higher = better; -1 = incompatible). */
-function scorePair(a: AxisEnd, b: AxisEnd, options: ResolvedGeometryOptions): number {
+/** Component scores for a candidate continuation between two incident ends. */
+function pairParts(a: AxisEnd, b: AxisEnd): { alignment: number; widthScore: number; offsetScore: number } {
   // Directions point OUT of each segment into the junction, so a straight
   // through-stroke has antiparallel directions (dot ≈ -1). "Bend" is the
-  // deviation from straight; accept when cos(bend) ≥ continuationMinCos.
-  const alignment = -dot(a.direction, b.direction); // 1 = perfectly straight
-  if (alignment < options.continuationMinCos) return -1;
+  // deviation from straight; alignment = cos(bend), 1 = perfectly straight.
+  const alignment = -dot(a.direction, b.direction);
 
   // Width compatibility: penalize large relative differences.
   const wMax = Math.max(a.width, b.width, 1e-6);
-  const wMin = Math.min(a.width, b.width);
-  const widthScore = wMin / wMax;
+  const widthScore = Math.min(a.width, b.width) / wMax;
 
   // Offset: how far apart the two cut midpoints are, relative to width.
-  const offset = dist(a.point, b.point);
-  const offsetScore = 1 / (1 + offset / wMax);
+  const offsetScore = 1 / (1 + dist(a.point, b.point) / wMax);
 
-  // Direction dominates; width and offset break ties and reject bad matches.
-  return alignment * 0.6 + widthScore * 0.25 + offsetScore * 0.15;
+  return { alignment, widthScore, offsetScore };
 }
 
+/** Direction dominates; width and offset break ties and reject bad matches. */
+const composeScore = (alignment: number, widthScore: number, offsetScore: number): number =>
+  alignment * 0.6 + widthScore * 0.25 + offsetScore * 0.15;
+
+/**
+ * Optional merged-shape scorer for conflicting candidates (see trial-join.ts):
+ * cos of the through-bend measured on the straight skeleton of the union of
+ * both segments' faces and the junction faces, or null when the trial cannot
+ * run (the tangent-based score then stands).
+ */
+export type TrialJoinScorer = (
+  a: { segmentIndex: number; endIndex: number },
+  b: { segmentIndex: number; endIndex: number },
+  junction: JunctionInfo,
+) => number | null;
+
 /** Greedily accept best-scoring continuation pairs at one junction, each end used once. */
-export function matchContinuations(junction: JunctionInfo, segments: SegmentInfo[], options: ResolvedGeometryOptions): void {
+export function matchContinuations(
+  junction: JunctionInfo,
+  segments: SegmentInfo[],
+  options: ResolvedGeometryOptions,
+  trialJoin?: TrialJoinScorer,
+): void {
   const ends = junction.incident.map((inc) => segments[inc.segmentIndex]!.ends[inc.endIndex]!);
 
   // Degree-2 junction: exactly two segment ends meet and there is nothing else
@@ -147,10 +176,29 @@ export function matchContinuations(junction: JunctionInfo, segments: SegmentInfo
       // Never pair two ends of the same segment (a segment can't continue into
       // itself across a junction).
       if (junction.incident[i]!.segmentIndex === junction.incident[j]!.segmentIndex) continue;
-      const score = scorePair(ends[i]!, ends[j]!, options);
-      if (score > 0) candidates.push({ i, j, score });
+      const { alignment, widthScore, offsetScore } = pairParts(ends[i]!, ends[j]!);
+      if (alignment < options.continuationMinCos) continue;
+      const score = composeScore(alignment, widthScore, offsetScore);
+      if (score > 0) candidates.push({ i, j, score, widthScore, offsetScore });
     }
   }
+
+  // Trial-join re-ranking: only candidates competing for a shared end are
+  // trialed — greedy accepts non-conflicting pairs regardless of order, so a
+  // trial there would burn a skeleton build to decide nothing.
+  if (trialJoin && candidates.length >= 2) {
+    const endUses = new Map<number, number>();
+    for (const cand of candidates) {
+      endUses.set(cand.i, (endUses.get(cand.i) ?? 0) + 1);
+      endUses.set(cand.j, (endUses.get(cand.j) ?? 0) + 1);
+    }
+    for (const cand of candidates) {
+      if ((endUses.get(cand.i) ?? 0) < 2 && (endUses.get(cand.j) ?? 0) < 2) continue;
+      const alignment = trialJoin(junction.incident[cand.i]!, junction.incident[cand.j]!, junction);
+      if (alignment != null) cand.score = composeScore(alignment, cand.widthScore, cand.offsetScore);
+    }
+  }
+
   candidates.sort((a, b) => b.score - a.score);
   const used = new Set<number>();
   for (const cand of candidates) {

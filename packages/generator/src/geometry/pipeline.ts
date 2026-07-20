@@ -22,7 +22,8 @@ import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { orderAndTimeStrokes } from './ordering.ts';
 import { classifyFaces, partitionFaces } from './partition.ts';
 import { partitionRegions } from './regions.ts';
-import { assembleStrokes, buildJunctions, type JunctionNode, matchContinuations, simplifyStroke } from './strokes.ts';
+import { assembleStrokes, buildJunctions, type JunctionNode, matchContinuations, simplifyStroke, type TrialJoinScorer } from './strokes.ts';
+import { trialJoinAlignment } from './trial-join.ts';
 import {
   DEFAULT_GEOMETRY_OPTIONS,
   type Face,
@@ -299,7 +300,16 @@ function processRegion(
   }
 
   const junctions = buildJunctions(segments, nodes);
-  for (const junction of junctions) matchContinuations(junction, segments, resolved);
+  // Conflicting continuation candidates are re-ranked on the MERGED shape:
+  // pretend the join happened (segments' member faces + junction faces),
+  // straight-skeletonize the union, and prefer the join whose spine flows
+  // straightest through the junction (see trial-join.ts). Exact-skeleton
+  // method only — the trial needs the same wasm build the axes use.
+  const trialJoin: TrialJoinScorer | undefined =
+    resolved.medialMethod === 'straight-skeleton'
+      ? (a, b, junction) => trialJoinAlignment(segments, a, b, junction, faceById, segmentMemberFaces, resolved)
+      : undefined;
+  for (const junction of junctions) matchContinuations(junction, segments, resolved, trialJoin);
   routeJunctionPaths(junctions, segments, faceById, resolved);
   const unswept = extendUnpairedEnds(junctions, segments, faceById, resolved);
   // Orphan-face rescue: a node face no route or extension sweeps happens when
