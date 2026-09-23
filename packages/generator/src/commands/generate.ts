@@ -1,5 +1,5 @@
 import * as opentype from 'opentype.js';
-import { type BBox, BUNDLE_VERSION, type FontOutput, type LineCap, type Point, type Stroke } from 'tegaki';
+import { type BBox, BUNDLE_VERSION, type FontOutput, type LineCap, type Nib, type Point, type Stroke } from 'tegaki';
 import * as z from 'zod/v4';
 import {
   BEZIER_TOLERANCE,
@@ -352,15 +352,16 @@ function runPipeline(
 
 // ── Bundle extraction (pure — no file I/O) ────────────────────────────────
 
-type CompactStroke = { p: [number, number, number][]; d: number; a: number; r?: number };
+type CompactNib = [pointIndex: number, dx: number, dy: number, major: number, minor: number, angle: number];
+type CompactStroke = { p: [number, number, number][]; d: number; a: number; r?: number; n?: CompactNib[] };
 type CompactGlyph = {
   w: number;
   t: number;
   s: CompactStroke[];
 };
 
-function toCompactStroke(s: {
-  points: { x: number; y: number; width: number }[];
+export function toCompactStroke(s: {
+  points: { x: number; y: number; width: number; nib?: Nib }[];
   delay: number;
   animationDuration: number;
   priority?: number;
@@ -373,6 +374,12 @@ function toCompactStroke(s: {
   // Omit `r` for default priority so existing bundles and the common case
   // stay byte-identical to the previous schema.
   if (s.priority && s.priority < 0) out.r = s.priority;
+  // Likewise `n`: only strokes that carry nib stamps (geometry ink-graph).
+  const nibs: CompactNib[] = [];
+  s.points.forEach((p, i) => {
+    if (p.nib) nibs.push([i, p.nib.dx, p.nib.dy, p.nib.major, p.nib.minor, p.nib.angle]);
+  });
+  if (nibs.length > 0) out.n = nibs;
   return out;
 }
 

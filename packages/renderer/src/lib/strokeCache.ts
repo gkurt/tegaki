@@ -29,6 +29,8 @@ export interface SubdividedStroke {
   totalLen: number;
   /** Mean width across the original points in font units. */
   avgWidth: number;
+  /** `cumLen` at each ORIGINAL point (they all stay on the polyline) — when the pen reaches it. */
+  pointCumLen: number[];
 }
 
 /**
@@ -49,12 +51,13 @@ export interface SubdividedStroke {
 export function subdivideStroke(stroke: Stroke, maxSegLen: number, smoothing = false): SubdividedStroke {
   const pts = stroke.p;
   const n = pts.length;
-  if (n === 0) return { vertices: [], totalLen: 0, avgWidth: 0 };
+  if (n === 0) return { vertices: [], totalLen: 0, avgWidth: 0, pointCumLen: [] };
 
   const first = pts[0]!;
   const vertices: SubVertex[] = [{ x: first[0]!, y: first[1]!, width: first[2]!, cumLen: 0, idx: 0 }];
 
   let cumLen = 0;
+  const pointCumLen: number[] = [0];
   for (let j = 1; j < n; j++) {
     const prev = pts[j - 1]!;
     const cur = pts[j]!;
@@ -94,10 +97,11 @@ export function subdivideStroke(stroke: Stroke, maxSegLen: number, smoothing = f
       }
       cumLen += chordLen;
     }
+    pointCumLen.push(cumLen);
   }
 
   let widthSum = 0;
   for (const p of pts) widthSum += p[2]!;
 
-  return { vertices, totalLen: cumLen, avgWidth: widthSum / n };
+  return { vertices, totalLen: cumLen, avgWidth: widthSum / n, pointCumLen };
 }

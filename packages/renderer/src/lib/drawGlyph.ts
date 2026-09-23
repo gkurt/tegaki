@@ -198,6 +198,39 @@ export function drawGlyph(
     return m;
   };
 
+  // Helper: fill the nib stamps (see `Nib`) the pen has reached. `reached`
+  // is the drawn length in font units; `pointCumLen[k]` is when the pen
+  // passes point k. Stamps follow the stroke's wobble, taper and scale.
+  const fillNibs = (
+    stroke: Stroke,
+    reached: number,
+    pointCumLen: number[] | undefined,
+    totalLen: number,
+    paint: (progress: number) => string | CanvasGradient | CanvasPattern,
+  ) => {
+    const nibs = stroke.n;
+    if (!nibs) return;
+    for (const nib of nibs) {
+      const k = nib[0]!;
+      const at = stroke.p[k];
+      if (!at) continue;
+      const passed = pointCumLen?.[k] ?? 0;
+      if (passed > reached) continue;
+      const progressAt = totalLen > 0 ? passed / totalLen : 0.5;
+      const m = scale * strokeScale * taperMultiplier(progressAt);
+      const rx = (nib[3]! / 2) * m;
+      const ry = (nib[4]! / 2) * m;
+      if (rx <= 0 || ry <= 0) continue;
+      const angle = nib[5]!;
+      const cx = px(at[0]! + nib[1]! + wobbleDx(at[0]!, at[1]!, k));
+      const cy = py(at[1]! + nib[2]! + wobbleDy(at[0]!, at[1]!, k));
+      ctx.fillStyle = paint(progressAt);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, angle, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+
   for (let si = 0; si < glyph.s.length; si++) {
     const stroke = glyph.s[si]!;
     // Stagger-mode static duration scales bundled `d` and `a`; scheduler-set
@@ -246,6 +279,7 @@ export function drawGlyph(
           ctx.rect(dotX - dotWidth / 2, dotY - dotWidth / 2, dotWidth, dotWidth);
         }
         ctx.fill();
+        fillNibs(stroke, 0, undefined, 0, () => glow.config.color ?? color);
         ctx.restore();
       }
 
@@ -260,12 +294,13 @@ export function drawGlyph(
       } else {
         ctx.fillRect(dotX - dotWidth / 2, dotY - dotWidth / 2, dotWidth, dotWidth);
       }
+      fillNibs(stroke, 0, undefined, 0, () => (hasStrokeGradient ? colorAt(0) : defaultStrokePaint));
       continue;
     }
 
     // --- Multi-point stroke: consume cached subdivision ---
     const cached = subdivide(stroke);
-    const { vertices, totalLen, avgWidth } = cached;
+    const { vertices, totalLen, avgWidth, pointCumLen } = cached;
     if (vertices.length < 2 || totalLen <= 0) continue;
 
     const drawLen = totalLen * progress;
@@ -344,6 +379,7 @@ export function drawGlyph(
       ctx.lineWidth = baseLineWidth;
       tracePolyline();
       ctx.stroke();
+      fillNibs(stroke, drawLen, pointCumLen, totalLen, () => glow.config.color ?? color);
       ctx.restore();
     }
 
@@ -380,5 +416,8 @@ export function drawGlyph(
         ctx.stroke();
       }
     }
+
+    // --- Nib stamps, over the stroke they belong to ---
+    fillNibs(stroke, drawLen, pointCumLen, totalLen, (progressAt) => (hasStrokeGradient ? colorAt(progressAt) : defaultStrokePaint));
   }
 }

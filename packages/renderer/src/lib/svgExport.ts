@@ -120,7 +120,7 @@ function buildLoopingSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig): stri
         continue;
       }
 
-      const { vertices, totalLen, avgWidth } = subdivideStroke(stroke, cfg.segmentLengthFU, cfg.smoothing);
+      const { vertices, totalLen, avgWidth, pointCumLen } = subdivideStroke(stroke, cfg.segmentLengthFU, cfg.smoothing);
       if (vertices.length < 2 || totalLen <= 0) continue;
       const d =
         `M ${fmt(px(vertices[0]!.x))} ${fmt(py(vertices[0]!.y))} ` +
@@ -149,6 +149,17 @@ function buildLoopingSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig): stri
         `<path class="tk-s${si}" d="${d}" fill="none" stroke="${cfg.color}" stroke-width="${fmt(wpx)}" stroke-linecap="${cfg.lineCap}" stroke-linejoin="round" stroke-dasharray="${fmt(L)}" stroke-dashoffset="${fmt(L)}" />`,
       );
       si++;
+      // Nib stamps pop in as the pen reaches them, and reset with the dash.
+      for (const stamp of nibStamps(stroke, pointCumLen, totalLen, px, py, scale, cfg)) {
+        grow(stamp.cx, stamp.cy, stamp.r);
+        const onPct = ((offset + stroke.d + stroke.a * easedTimeAt(stamp.at)) / cycle) * 100;
+        keyframes.push(
+          `@keyframes tk-d${si} { 0%,${fmt(onPct)}% { opacity:0 } ${fmt(Math.min(onPct + 0.4, holdEndPct))}%,${fmt(fadeEndPct)}% { opacity:1 } ${fmt(Math.min(fadeEndPct + 0.01, 100))}%,100% { opacity:0 } }`,
+        );
+        rules.push(`.tk-s${si} { animation: tk-d${si} ${fmt(cycle)}s infinite }`);
+        els.push(stamp.el(` class="tk-s${si}" opacity="0" />`));
+        si++;
+      }
     }
   }
 
@@ -180,6 +191,51 @@ function fmt(n: number): string {
 // stroke reveal closely enough for the SMIL dashoffset animation.
 const EASE_OUT_SPLINE = '0.33 0 0.15 1';
 
+type SvgStroke = TegakiGlyphData['s'][number];
+
+/**
+ * The stroke's nib stamps (see `Nib`) as SVG ellipses, each with the
+ * fraction of the stroke's length at which the pen reaches it. `extra` is
+ * appended inside each element (an animation, or attributes).
+ */
+function nibStamps(
+  stroke: SvgStroke,
+  pointCumLen: number[] | undefined,
+  totalLen: number,
+  px: (fx: number) => number,
+  py: (fy: number) => number,
+  scale: number,
+  cfg: SvgExportConfig,
+): { el: (extra: string) => string; at: number; cx: number; cy: number; r: number }[] {
+  if (!stroke.n) return [];
+  const out: { el: (extra: string) => string; at: number; cx: number; cy: number; r: number }[] = [];
+  for (const nib of stroke.n) {
+    const k = nib[0]!;
+    const p = stroke.p[k];
+    if (!p) continue;
+    const cx = px(p[0]! + nib[1]!);
+    const cy = py(p[1]! + nib[2]!);
+    const rx = (nib[3]! / 2) * scale * cfg.strokeScale;
+    const ry = (nib[4]! / 2) * scale * cfg.strokeScale;
+    const deg = (nib[5]! * 180) / Math.PI;
+    const at = totalLen > 0 ? (pointCumLen?.[k] ?? 0) / totalLen : 0;
+    out.push({
+      at,
+      cx,
+      cy,
+      r: Math.max(rx, ry),
+      el: (extra) =>
+        `<ellipse cx="${fmt(cx)}" cy="${fmt(cy)}" rx="${fmt(rx)}" ry="${fmt(ry)}" transform="rotate(${fmt(deg)} ${fmt(cx)} ${fmt(cy)})" fill="${cfg.color}"${extra}`,
+    });
+  }
+  return out;
+}
+
+/** Time fraction at which ease-out-quad progress reaches `p` (the inverse of 1 − (1 − t)²). */
+function easedTimeAt(p: number): number {
+  return 1 - Math.sqrt(Math.max(0, 1 - Math.min(1, p)));
+}
+
 /**
  * Serialize positioned glyphs to a standalone SVG string. Variable width is
  * achieved exactly as the canvas renderer does it (drawGlyph's per-segment
@@ -191,7 +247,7 @@ const EASE_OUT_SPLINE = '0.33 0 0.15 1';
  * pen order over the stroke's own [delay, delay+duration] window.
  *
  * Not yet modelled in SVG: glow, wobble, gradient, taper, and clip-to-text.
- * pressureWidth (variable width) is fully honoured.
+ * pressureWidth (variable width) and nib stamps are fully honoured.
  */
 export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig): string {
   if (cfg.loop) return buildLoopingSvg(items, cfg);
@@ -229,8 +285,9 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
       }
 
       // --- Multi-point stroke ---
-      const { vertices, totalLen, avgWidth } = subdivideStroke(stroke, cfg.segmentLengthFU, cfg.smoothing);
+      const { vertices, totalLen, avgWidth, pointCumLen } = subdivideStroke(stroke, cfg.segmentLengthFU, cfg.smoothing);
       if (vertices.length < 2 || totalLen <= 0) continue;
+      const stamps = nibStamps(stroke, pointCumLen, totalLen, px, py, scale, cfg);
       const baseWidth = Math.max(avgWidth, 0.5) * scale * cfg.strokeScale;
 
       // Per-segment variable-width lines (the visible shape).
@@ -251,6 +308,7 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
         body.push(
           `<g fill="none" stroke="${cfg.color}" stroke-linecap="${cfg.lineCap}" stroke-linejoin="round">\n${segs.join('\n')}\n</g>`,
         );
+        for (const stamp of stamps) body.push(stamp.el(' />'));
         continue;
       }
 
@@ -277,6 +335,10 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
       body.push(
         `<g mask="url(#${id})" fill="none" stroke="${cfg.color}" stroke-linecap="${cfg.lineCap}" stroke-linejoin="round">\n${segs.join('\n')}\n</g>`,
       );
+      for (const stamp of stamps) {
+        const at = fmt(beginAt + dur * easedTimeAt(stamp.at));
+        body.push(stamp.el(` opacity="0"><set attributeName="opacity" to="1" begin="${at}s" fill="freeze" /></ellipse>`));
+      }
     }
   }
 

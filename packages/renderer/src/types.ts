@@ -104,8 +104,8 @@ export interface PathCommand {
  * - `w`: advance width
  * - `t`: total animation duration
  * - `s`: strokes, each with `p` (points as `[x, y, width]` tuples), `d` (delay),
- *   `a` (animation duration), and optional `r` (priority — see `Stroke.priority`;
- *   omitted when `0`)
+ *   `a` (animation duration), optional `r` (priority — see `Stroke.priority`;
+ *   omitted when `0`), and optional `n` (nibs — see `Nib`; omitted when none)
  */
 export interface TegakiGlyphData {
   w: number;
@@ -115,6 +115,8 @@ export interface TegakiGlyphData {
     d: number;
     a: number;
     r?: number;
+    /** Nib stamps as `[pointIndex, dx, dy, major, minor, angle]` (see `Nib`). */
+    n?: ([pointIndex: number, dx: number, dy: number, major: number, minor: number, angle: number] | number[])[];
   }[];
 }
 
