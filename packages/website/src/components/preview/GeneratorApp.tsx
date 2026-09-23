@@ -169,7 +169,8 @@ export function GeneratorApp() {
     resultsCache.current.clear();
     try {
       const { primary, extra } = await fetchFontFromCDN(family);
-      const info = await parseFont(primary, extra.length > 0 ? extra : undefined);
+      // Google Fonts' subsets carry no name table, so the family is passed in.
+      const info = await parseFont(primary, extra.length > 0 ? extra : undefined, family);
       setFontInfo(info);
       setFontBuffer(primary);
       setExtraFontBuffers(extra.length > 0 ? extra : undefined);
