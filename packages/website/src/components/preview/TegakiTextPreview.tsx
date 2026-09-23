@@ -1,4 +1,3 @@
-import type { Font } from 'opentype.js';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BUNDLE_VERSION,
@@ -16,7 +15,6 @@ import {
 import harfbuzzShaper from 'tegaki/shaper-harfbuzz';
 import {
   collectReferences,
-  createHbShaper,
   DEFAULT_GEOMETRY_OPTIONS,
   type GeometryOptions,
   type GeometryPipelineResult,
@@ -32,6 +30,7 @@ import {
   toCompactStroke,
 } from 'tegaki-generator';
 import type { Pipeline } from './constants.ts';
+import { collectShapedGlyphs } from './shaped-glyphs.ts';
 import { strokeOrderProviders } from './stroke-order-providers.ts';
 
 TegakiEngine.registerShaper(harfbuzzShaper);
@@ -256,103 +255,82 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     };
   }, [geometry, fontInfo, normalizedText, geoKey, geometryOptions, options.bezierTolerance, geoCache, prepareGeometry]);
 
-  // Variant glyphs the shapers produce for the current text, keyed the same
-  // way the renderer looks them up: bare `"<gid>"` for primary-subset glyphs,
-  // `"<subsetIdx>:<gid>"` for extras. Populated asynchronously because
+  // Variant glyphs the renderer's shaper produces for the current text, keyed
+  // the way the renderer looks them up: bare `"<gid>"` for primary-subset
+  // glyphs, `"<subsetIdx>:<gid>"` for extras. Populated asynchronously because
   // harfbuzz needs wasm. Nominal glyphs still go through the char-keyed
   // `glyphData` path below.
+  //
+  // The renderer's own shaper, not a re-implementation: it shapes each word
+  // in isolation (as the browser does for the clip mask), so a line shaped
+  // whole picks different contextual alternates. Caveat's calt cycles three
+  // forms of d; every glyph missing from glyphDataById falls back to the base
+  // letter's strokes, drawn under the alternate's clip mask.
   const [variantData, setVariantData] = useState<Record<string, TegakiGlyphData>>({});
+  const variantShaper = useMemo(
+    () =>
+      useShaper
+        ? harfbuzzShaper({
+            fontUrl,
+            ...(extraFontUrls.length > 0 ? { extraFontUrls } : {}),
+            features: enabledFeatures,
+            glyphDataById: {},
+          } as unknown as TegakiBundle)
+        : null,
+    [useShaper, fontUrl, extraFontUrls, enabledFeatures],
+  );
 
   useEffect(() => {
-    if (!useShaper) {
+    if (!variantShaper) {
       setVariantData((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       return;
     }
     let cancelled = false;
     (async () => {
       if (geometry) await prepareGeometry();
-      const buffers = [fontBuffer, ...(extraFontBuffers ?? [])];
-      const fonts = [fontInfo.font, ...(fontInfo.extraFonts ?? [])];
-      const shapers = await Promise.all(buffers.map((buf) => createHbShaper(buf, enabledFeatures)));
-      try {
-        const optionsKey = JSON.stringify(options);
-        const variants: Record<string, TegakiGlyphData> = {};
-        const seen = new Set<string>();
-        for (const line of normalizedText.split('\n')) {
-          // Split each line into per-subset runs so shaping never crosses a
-          // subset boundary — same routing rule the renderer's `BundleShaper`
-          // uses. For each cluster char, pick the first subset whose cmap
-          // covers it; unmapped chars fall back to the primary shaper so we
-          // don't drop them.
-          const runs = splitByCoverage(line, fonts);
-          for (const { subsetIdx, start, end } of runs) {
-            const shaper = shapers[subsetIdx]!;
-            const runText = line.slice(start, end);
-            for (const g of shaper.shape(runText)) {
-              if (g.g === 0) continue;
-              const keyPrefix = subsetIdx === 0 ? '' : `${subsetIdx}:`;
-              const variantKey = `${keyPrefix}${g.g}`;
-              if (seen.has(variantKey)) continue;
-              seen.add(variantKey);
-              const clusterChar = runText[g.cl];
-              if (!clusterChar) continue;
-              // Process every glyph the shaper emits, including nominal forms
-              // (where g.g === font.charToGlyph(clusterChar).index). For Latin
-              // clusters the nominal glyph is also reachable via glyphData[char],
-              // but for multi-codepoint clusters (Devanagari "हि", "स्ते", etc.)
-              // entry.char is the whole grapheme so the char-keyed fallback
-              // can't find a nominal glyph that landed on a codepoint past
-              // index 0. Storing the variant unconditionally makes
-              // glyphDataById self-contained for every shaped glyph and
-              // removes the renderer's reliance on the codepoint-fallback
-              // path.
-              const rtl = isRtlChar(clusterChar);
-              let res: PipelineResult | GeometryPipelineResult | undefined;
-              if (geometry) {
-                const cacheKey = `#${subsetIdx}:${g.g}:${rtl ? 'r' : 'l'}:${geoKey}`;
-                res = geoCache.get(cacheKey);
-                if (!res) {
-                  const geoRes = processGlyphGeometryById(fontInfo, g.g, geometryOptions, options.bezierTolerance, subsetIdx, rtl);
-                  if (geoRes) geoCache.set(cacheKey, geoRes);
-                  res = geoRes ?? undefined;
-                }
-              } else {
-                const cacheKey = `#${subsetIdx}:${g.g}:${rtl ? 'r' : 'l'}:${optionsKey}`;
-                res = activeCache.get(cacheKey);
-                if (!res) {
-                  const rasterRes = processGlyphById(fontInfo, g.g, options, subsetIdx, rtl);
-                  if (rasterRes) activeCache.set(cacheKey, rasterRes);
-                  res = rasterRes ?? undefined;
-                }
-              }
-              if (!res) continue;
-              variants[variantKey] = toCompactGlyph(res);
-            }
+      const shaper = await variantShaper;
+      if (cancelled || !shaper) return;
+      const optionsKey = JSON.stringify(options);
+      const variants: Record<string, TegakiGlyphData> = {};
+      for (const { key: variantKey, subsetIdx, gid, char: clusterChar } of collectShapedGlyphs(shaper, normalizedText)) {
+        // Process every glyph the shaper emits, including nominal forms
+        // (where gid === font.charToGlyph(clusterChar).index). For Latin
+        // clusters the nominal glyph is also reachable via glyphData[char],
+        // but for multi-codepoint clusters (Devanagari "हि", "स्ते", etc.)
+        // entry.char is the whole grapheme so the char-keyed fallback
+        // can't find a nominal glyph that landed on a codepoint past
+        // index 0. Storing the variant unconditionally makes
+        // glyphDataById self-contained for every shaped glyph and
+        // removes the renderer's reliance on the codepoint-fallback
+        // path.
+        const rtl = isRtlChar(clusterChar);
+        let res: PipelineResult | GeometryPipelineResult | undefined;
+        if (geometry) {
+          const cacheKey = `#${subsetIdx}:${gid}:${rtl ? 'r' : 'l'}:${geoKey}`;
+          res = geoCache.get(cacheKey);
+          if (!res) {
+            const geoRes = processGlyphGeometryById(fontInfo, gid, geometryOptions, options.bezierTolerance, subsetIdx, rtl);
+            if (geoRes) geoCache.set(cacheKey, geoRes);
+            res = geoRes ?? undefined;
+          }
+        } else {
+          const cacheKey = `#${subsetIdx}:${gid}:${rtl ? 'r' : 'l'}:${optionsKey}`;
+          res = activeCache.get(cacheKey);
+          if (!res) {
+            const rasterRes = processGlyphById(fontInfo, gid, options, subsetIdx, rtl);
+            if (rasterRes) activeCache.set(cacheKey, rasterRes);
+            res = rasterRes ?? undefined;
           }
         }
-        if (!cancelled) setVariantData(variants);
-      } finally {
-        for (const s of shapers) s.destroy();
+        if (!res) continue;
+        variants[variantKey] = toCompactGlyph(res);
       }
+      if (!cancelled) setVariantData(variants);
     })();
     return () => {
       cancelled = true;
     };
-  }, [
-    fontBuffer,
-    extraFontBuffers,
-    fontInfo,
-    normalizedText,
-    options,
-    enabledFeatures,
-    activeCache,
-    useShaper,
-    geometry,
-    geoKey,
-    geometryOptions,
-    geoCache,
-    prepareGeometry,
-  ]);
+  }, [variantShaper, fontInfo, normalizedText, options, activeCache, geometry, geoKey, geometryOptions, geoCache, prepareGeometry]);
 
   const fontBundle = useMemo<TegakiBundle>(() => {
     const glyphData: TegakiBundle['glyphData'] = {};
@@ -436,45 +414,3 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     />
   );
 });
-
-interface SubsetRun {
-  subsetIdx: number;
-  /** UTF-16 start offset into the line. */
-  start: number;
-  /** UTF-16 end offset into the line. */
-  end: number;
-}
-
-/**
- * Group consecutive characters that resolve to the same subset into runs.
- * Primary-first coverage check (so shared glyphs like digits stick with the
- * Latin primary) matches the renderer's `BundleShaper` routing.
- */
-function splitByCoverage(line: string, fonts: Font[]): SubsetRun[] {
-  const runs: SubsetRun[] = [];
-  let runStart = 0;
-  let runSubset = -1;
-  const pick = (cp: number): number => {
-    for (let i = 0; i < fonts.length; i++) {
-      const g = fonts[i]!.charToGlyph(String.fromCodePoint(cp));
-      if (g && g.index !== 0) return i;
-    }
-    return 0;
-  };
-  const flush = (end: number) => {
-    if (end > runStart) runs.push({ subsetIdx: runSubset < 0 ? 0 : runSubset, start: runStart, end });
-  };
-  for (let i = 0; i < line.length; ) {
-    const cp = line.codePointAt(i) ?? line.charCodeAt(i);
-    const step = cp > 0xffff ? 2 : 1;
-    const subset = pick(cp);
-    if (subset !== runSubset) {
-      flush(i);
-      runStart = i;
-      runSubset = subset;
-    }
-    i += step;
-  }
-  flush(line.length);
-  return runs;
-}
