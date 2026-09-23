@@ -857,22 +857,41 @@ export function GeneratorApp() {
                 )}
               </div>
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="text-gray-600">Medial axis</span>
+                <span className="text-gray-600">Extraction</span>
                 <div className="flex rounded overflow-hidden border border-gray-300">
-                  {(['chain', 'voronoi', 'straight-skeleton'] as const).map((method) => (
+                  {(['partition', 'ink-graph'] as const).map((mode) => (
                     <button
-                      key={method}
+                      key={mode}
                       type="button"
                       className={`px-2 py-1 text-xs cursor-pointer ${
-                        geometryOptions.medialMethod === method ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'
+                        geometryOptions.extraction === mode ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'
                       }`}
-                      onClick={() => updateGeometryOption('medialMethod', method)}
+                      onClick={() => updateGeometryOption('extraction', mode)}
                     >
-                      {method === 'chain' ? 'Chain' : method === 'voronoi' ? 'Voronoi' : 'Skeleton'}
+                      {mode === 'partition' ? 'Partition' : 'Ink graph'}
                     </button>
                   ))}
                 </div>
               </div>
+              {geometryOptions.extraction === 'partition' && (
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-gray-600">Medial axis</span>
+                  <div className="flex rounded overflow-hidden border border-gray-300">
+                    {(['chain', 'voronoi', 'straight-skeleton'] as const).map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        className={`px-2 py-1 text-xs cursor-pointer ${
+                          geometryOptions.medialMethod === method ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'
+                        }`}
+                        onClick={() => updateGeometryOption('medialMethod', method)}
+                      >
+                        {method === 'chain' ? 'Chain' : method === 'voronoi' ? 'Voronoi' : 'Skeleton'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="text-gray-600">Stroke order</span>
                 <div className="flex rounded overflow-hidden border border-gray-300">
@@ -890,51 +909,86 @@ export function GeneratorApp() {
                   ))}
                 </div>
               </div>
-              <SliderOption
-                label="Corner angle (deg)"
-                value={geometryOptions.cornerAngleThresholdDeg}
-                defaultValue={DEFAULT_GEOMETRY_OPTIONS.cornerAngleThresholdDeg}
-                min={10}
-                max={90}
-                step={1}
-                onChange={(v) => updateGeometryOption('cornerAngleThresholdDeg', v)}
-              />
-              <SliderOption
-                label="Corner window (×em)"
-                value={geometryOptions.cornerWindowRatio}
-                defaultValue={DEFAULT_GEOMETRY_OPTIONS.cornerWindowRatio}
-                min={0.005}
-                max={0.08}
-                step={0.005}
-                onChange={(v) => updateGeometryOption('cornerWindowRatio', v)}
-              />
-              <SliderOption
-                label="Cut align tol (deg)"
-                value={geometryOptions.cutAlignToleranceDeg}
-                defaultValue={DEFAULT_GEOMETRY_OPTIONS.cutAlignToleranceDeg}
-                min={10}
-                max={80}
-                step={1}
-                onChange={(v) => updateGeometryOption('cutAlignToleranceDeg', v)}
-              />
-              <SliderOption
-                label="Max cut length (×width)"
-                value={geometryOptions.maxCutLengthFactor}
-                defaultValue={DEFAULT_GEOMETRY_OPTIONS.maxCutLengthFactor}
-                min={1}
-                max={6}
-                step={0.1}
-                onChange={(v) => updateGeometryOption('maxCutLengthFactor', v)}
-              />
-              <SliderOption
-                label="Lobe extent (×cut span)"
-                value={geometryOptions.junctionCompactness}
-                defaultValue={DEFAULT_GEOMETRY_OPTIONS.junctionCompactness}
-                min={0.5}
-                max={4}
-                step={0.1}
-                onChange={(v) => updateGeometryOption('junctionCompactness', v)}
-              />
+              {geometryOptions.extraction === 'ink-graph' && (
+                <>
+                  <SliderOption
+                    label="Ink sample step (×em)"
+                    value={geometryOptions.inkSampleRatio}
+                    defaultValue={DEFAULT_GEOMETRY_OPTIONS.inkSampleRatio}
+                    min={0.002}
+                    max={0.02}
+                    step={0.001}
+                    onChange={(v) => updateGeometryOption('inkSampleRatio', v)}
+                  />
+                  <SliderOption
+                    label="Spur tolerance (×radius)"
+                    value={geometryOptions.inkSpurTolerance}
+                    defaultValue={DEFAULT_GEOMETRY_OPTIONS.inkSpurTolerance}
+                    min={0}
+                    max={1.5}
+                    step={0.05}
+                    onChange={(v) => updateGeometryOption('inkSpurTolerance', v)}
+                  />
+                  <SliderOption
+                    label="Junction reach (×radius)"
+                    value={geometryOptions.inkJunctionReach}
+                    defaultValue={DEFAULT_GEOMETRY_OPTIONS.inkJunctionReach}
+                    min={1}
+                    max={3}
+                    step={0.1}
+                    onChange={(v) => updateGeometryOption('inkJunctionReach', v)}
+                  />
+                </>
+              )}
+              {geometryOptions.extraction === 'partition' && (
+                <>
+                  <SliderOption
+                    label="Corner angle (deg)"
+                    value={geometryOptions.cornerAngleThresholdDeg}
+                    defaultValue={DEFAULT_GEOMETRY_OPTIONS.cornerAngleThresholdDeg}
+                    min={10}
+                    max={90}
+                    step={1}
+                    onChange={(v) => updateGeometryOption('cornerAngleThresholdDeg', v)}
+                  />
+                  <SliderOption
+                    label="Corner window (×em)"
+                    value={geometryOptions.cornerWindowRatio}
+                    defaultValue={DEFAULT_GEOMETRY_OPTIONS.cornerWindowRatio}
+                    min={0.005}
+                    max={0.08}
+                    step={0.005}
+                    onChange={(v) => updateGeometryOption('cornerWindowRatio', v)}
+                  />
+                  <SliderOption
+                    label="Cut align tol (deg)"
+                    value={geometryOptions.cutAlignToleranceDeg}
+                    defaultValue={DEFAULT_GEOMETRY_OPTIONS.cutAlignToleranceDeg}
+                    min={10}
+                    max={80}
+                    step={1}
+                    onChange={(v) => updateGeometryOption('cutAlignToleranceDeg', v)}
+                  />
+                  <SliderOption
+                    label="Max cut length (×width)"
+                    value={geometryOptions.maxCutLengthFactor}
+                    defaultValue={DEFAULT_GEOMETRY_OPTIONS.maxCutLengthFactor}
+                    min={1}
+                    max={6}
+                    step={0.1}
+                    onChange={(v) => updateGeometryOption('maxCutLengthFactor', v)}
+                  />
+                  <SliderOption
+                    label="Lobe extent (×cut span)"
+                    value={geometryOptions.junctionCompactness}
+                    defaultValue={DEFAULT_GEOMETRY_OPTIONS.junctionCompactness}
+                    min={0.5}
+                    max={4}
+                    step={0.1}
+                    onChange={(v) => updateGeometryOption('junctionCompactness', v)}
+                  />
+                </>
+              )}
               <SliderOption
                 label="Continuation max bend (deg)"
                 value={geometryOptions.continuationMaxBendDeg}

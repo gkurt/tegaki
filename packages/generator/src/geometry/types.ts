@@ -191,6 +191,22 @@ export interface GeometryOptions {
    * Without a reference all three behave identically (heuristic).
    */
   strokeOrder: 'auto' | 'dataset' | 'heuristic';
+  /**
+   * How strokes are extracted from the outline:
+   * - 'partition' (default): concave corners → cuts → face partition →
+   *   per-face medial axes → junction continuation matching.
+   * - 'ink-graph' (experimental): triangulate the ink once, read the stroke
+   *   topology off the triangles (tips / sleeves / junctions), prune spurs by
+   *   ink coverage, and pair branch ends per junction exactly (see ink/).
+   *   Ignores the corner/cut/medial options.
+   */
+  extraction: 'partition' | 'ink-graph';
+  /** Ink graph: outline resampling step as a fraction of unitsPerEm. */
+  inkSampleRatio: number;
+  /** Ink graph: spur prune tolerance, as a fraction of the junction's inscribed radius. */
+  inkSpurTolerance: number;
+  /** Ink graph: junction zone radius as a multiple of the junction's inscribed radius. */
+  inkJunctionReach: number;
 }
 
 export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
@@ -211,6 +227,12 @@ export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
   // measures against, so defaults stay consistent with the join ranking.
   medialMethod: 'straight-skeleton',
   strokeOrder: 'auto',
+  extraction: 'partition',
+  inkSampleRatio: 0.006,
+  // A round pen pokes (√2−1)·r ≈ 0.41·r short of a square outer corner; such
+  // pen-unreachable ears are what spur pruning must remove.
+  inkSpurTolerance: 0.5,
+  inkJunctionReach: 1.5,
 };
 
 /** Options resolved to absolute font units / radians for the core algorithms. */
@@ -223,6 +245,10 @@ export interface ResolvedGeometryOptions {
   continuationMinCos: number;
   resampleSpacing: number;
   medialMethod: 'chain' | 'voronoi' | 'straight-skeleton';
+  extraction: 'partition' | 'ink-graph';
+  inkSampleSpacing: number;
+  inkSpurTolerance: number;
+  inkJunctionReach: number;
 }
 
 export function resolveGeometryOptions(options: GeometryOptions, unitsPerEm: number): ResolvedGeometryOptions {
@@ -235,6 +261,11 @@ export function resolveGeometryOptions(options: GeometryOptions, unitsPerEm: num
     continuationMinCos: Math.cos((options.continuationMaxBendDeg * Math.PI) / 180),
     resampleSpacing: options.resampleSpacingRatio * unitsPerEm,
     medialMethod: options.medialMethod,
+    // Older serialized option sets predate the ink-graph knobs.
+    extraction: options.extraction ?? 'partition',
+    inkSampleSpacing: (options.inkSampleRatio ?? DEFAULT_GEOMETRY_OPTIONS.inkSampleRatio) * unitsPerEm,
+    inkSpurTolerance: options.inkSpurTolerance ?? DEFAULT_GEOMETRY_OPTIONS.inkSpurTolerance,
+    inkJunctionReach: options.inkJunctionReach ?? DEFAULT_GEOMETRY_OPTIONS.inkJunctionReach,
   };
 }
 

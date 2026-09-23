@@ -155,10 +155,15 @@ const GEO_OPTION_KEYS: Record<keyof GeometryOptions, string> = {
   resampleSpacingRatio: 'grs',
   medialMethod: 'gmm',
   strokeOrder: 'gso',
+  extraction: 'gx',
+  inkSampleRatio: 'gis',
+  inkSpurTolerance: 'gip',
+  inkJunctionReach: 'gij',
 };
 
 const MEDIAL_METHODS: readonly GeometryOptions['medialMethod'][] = ['chain', 'voronoi', 'straight-skeleton'];
 const STROKE_ORDER_MODES: readonly GeometryOptions['strokeOrder'][] = ['auto', 'dataset', 'heuristic'];
+const EXTRACTION_MODES: readonly GeometryOptions['extraction'][] = ['partition', 'ink-graph'];
 
 const REVERSE_GEO_OPTION_KEYS = Object.fromEntries(Object.entries(GEO_OPTION_KEYS).map(([k, v]) => [v, k])) as Record<
   string,
@@ -258,6 +263,10 @@ export function parseUrlState(search: string | URLSearchParams = window.location
     if (long === 'strokeOrder') {
       if ((STROKE_ORDER_MODES as readonly string[]).includes(raw))
         state.geometryOptions.strokeOrder = raw as GeometryOptions['strokeOrder'];
+      continue;
+    }
+    if (long === 'extraction') {
+      state.geometryOptions.extraction = parseEnum(raw, EXTRACTION_MODES, DEFAULT_GEOMETRY_OPTIONS.extraction);
       continue;
     }
     const v = Number(raw);

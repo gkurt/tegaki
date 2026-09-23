@@ -1,0 +1,211 @@
+// Ink-graph stroke extraction — orchestrates mesh → graph → cover per region.
+//
+// An alternative to the corner/cut/face partition pipeline: no corner
+// detection, no cuts, no per-face medial axes. The ink is triangulated once,
+// its topology read off the triangles (see mesh.ts / graph.ts), and strokes
+// chosen by an exact per-junction pairing over that graph (cover.ts).
+//
+// COVERAGE is an invariant, not a hope: every triangle is either on a
+// branch centerline, absorbed into a junction whose disk paints it (spur
+// pruning's own criterion), or inside a junction zone crossed by passages /
+// extensions. The one lossy step is the junction zone, so the extraction
+// AUDITS it — every triangle not painted by the final strokes is counted
+// and reported, never silently dropped.
+
+import type { Point } from 'tegaki';
+import { dist, polygonCentroid } from '../primitives.ts';
+import { rdpSimplify } from '../strokes.ts';
+import type { AxisPoint, Contour, Face, GeoStroke, SegmentInfo } from '../types.ts';
+import { coverInkGraph, type JunctionCluster } from './cover.ts';
+import { buildInkGraph, extractBranches, pruneSpurs } from './graph.ts';
+import { buildInkMesh, trianglePoints } from './mesh.ts';
+import { SegmentIndex } from './spatial.ts';
+
+export interface InkExtractionOptions {
+  /** Outline resampling step (font units). */
+  sampleSpacing: number;
+  /** Spur prune tolerance as a fraction of the junction radius. */
+  spurTolerance: number;
+  /** Junction zone radius as a multiple of the junction's inscribed radius. */
+  junctionReach: number;
+  /** cos(max bend) for pass-through pairings. */
+  continuationMinCos: number;
+  /** Final stroke simplification tolerance (font units). */
+  simplifyEpsilon: number;
+}
+
+export interface InkRegionResult {
+  /** Triangles as faces (kind 'junction' inside junction zones) — for visualization. */
+  faces: Face[];
+  /** Trimmed branch centerlines — for visualization. */
+  segments: SegmentInfo[];
+  clusters: JunctionCluster[];
+  strokes: GeoStroke[];
+  /** Ink area (triangle area) no final stroke paints. */
+  uncoveredArea: number;
+  totalArea: number;
+  warnings: string[];
+}
+
+/**
+ * Drop stroke-end points that add no ink: a point whose pen disk lies inside
+ * a later point's disk. A round cap's chordal axis runs on into the cap with
+ * shrinking widths; the pen stops at the cap's center with its full width.
+ * A tapered tip keeps its points — each one reaches ink the others don't.
+ */
+function trimRedundantEnd(points: AxisPoint[], tolerance: number): AxisPoint[] {
+  const out = [...points];
+  const window = 12;
+  while (out.length > 2) {
+    const p = out[0]!;
+    let inside = false;
+    for (let j = 1; j < Math.min(out.length, window + 1); j++) {
+      const q = out[j]!;
+      if (dist(p, q) + p.width / 2 <= q.width / 2 + tolerance) {
+        inside = true;
+        break;
+      }
+    }
+    if (!inside) break;
+    out.shift();
+  }
+  return out;
+}
+
+/** Light positional smoothing (endpoints fixed): the chordal axis zig-zags by a fraction of a sample step. */
+function smooth(points: AxisPoint[], passes: number, isLoop: boolean): AxisPoint[] {
+  // A loop carries a duplicated seam point; smooth the open ring cyclically
+  // and re-close EXACTLY — ordering rotates closed loops only when the seam
+  // matches, and otherwise rotates them as open polylines, dropping a span.
+  if (isLoop && points.length > 3 && dist(points[0]!, points[points.length - 1]!) < 1e-6) {
+    const ring = smooth(points.slice(0, -1), passes, true);
+    return [...ring, { ...ring[0]! }];
+  }
+  let cur = points;
+  for (let pass = 0; pass < passes; pass++) {
+    const nxt = cur.map((p) => ({ ...p }));
+    const n = cur.length;
+    for (let i = 0; i < n; i++) {
+      const edge = i === 0 || i === n - 1;
+      if (edge && !isLoop) continue;
+      const a = cur[(i - 1 + n) % n]!;
+      const b = cur[(i + 1) % n]!;
+      // Hairpins (a flick's tip, a retrace's turn) stay put — averaging
+      // would pull the tip back toward its own return path.
+      const inX = cur[i]!.x - a.x;
+      const inY = cur[i]!.y - a.y;
+      const outX = b.x - cur[i]!.x;
+      const outY = b.y - cur[i]!.y;
+      if (inX * outX + inY * outY < -0.5 * Math.hypot(inX, inY) * Math.hypot(outX, outY)) continue;
+      nxt[i]!.x = (a.x + 2 * cur[i]!.x + b.x) / 4;
+      nxt[i]!.y = (a.y + 2 * cur[i]!.y + b.y) / 4;
+    }
+    cur = nxt;
+  }
+  return cur;
+}
+
+/** True when `p` lies within some stroke segment's swept pen disk (plus `tolerance`). */
+export function paintedBy(p: Point, strokes: AxisPoint[][], tolerance: number): boolean {
+  for (const pts of strokes) {
+    if (pts.length === 1) {
+      if (dist(p, pts[0]!) <= pts[0]!.width / 2 + tolerance) return true;
+      continue;
+    }
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1]!;
+      const b = pts[i]!;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const l2 = dx * dx + dy * dy;
+      let t = l2 > 0 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const w = a.width + (b.width - a.width) * t;
+      const ex = a.x + dx * t - p.x;
+      const ey = a.y + dy * t - p.y;
+      if (ex * ex + ey * ey <= (w / 2 + tolerance) ** 2) return true;
+    }
+  }
+  return false;
+}
+
+export function extractInkRegion(contours: Contour[], options: InkExtractionOptions, faceIdOffset: number): InkRegionResult {
+  const warnings: string[] = [];
+  const step = options.sampleSpacing;
+  const mesh = buildInkMesh(contours, step);
+  if (mesh.missingEdges > 0) warnings.push(`ink mesh: ${mesh.missingEdges} outline edge(s) not conforming after refinement`);
+
+  const outline: [Point, Point][] = [];
+  for (let i = 0; i < mesh.points.length; i++) {
+    const j = mesh.next[i]!;
+    if (j >= 0 && j !== i) outline.push([mesh.points[i]!, mesh.points[j]!]);
+  }
+  const boundary = new SegmentIndex(outline, step * 4);
+
+  const graph = buildInkGraph(mesh, boundary);
+  pruneSpurs(graph, options.spurTolerance, step * 2.5);
+  // Flicks poking out less than a sample step are sampling noise, not ink.
+  const rawBranches = extractBranches(graph, step);
+  const cover = coverInkGraph(graph, rawBranches, contours, {
+    junctionReach: options.junctionReach,
+    continuationMinCos: options.continuationMinCos,
+    step,
+  });
+
+  const strokes = cover.strokes.map((s) => {
+    let pts = s.points;
+    if (!s.isLoop && pts.length > 2) {
+      pts = trimRedundantEnd(pts, step * 0.25);
+      pts = trimRedundantEnd([...pts].reverse(), step * 0.25).reverse();
+    }
+    pts = smooth(pts, 2, s.isLoop);
+    // Width-aware RDP only: simplifyStroke's pinch prune targets partition
+    // skeleton waists and would drop flick tips (width 0 by construction).
+    return { ...s, points: pts.length > 2 ? rdpSimplify(pts, options.simplifyEpsilon) : pts };
+  });
+
+  // ── Coverage audit: which triangles does the final pen leave unpainted? ─
+  const zone = new Set<number>();
+  for (const cl of cover.clusters) for (const t of cl.zoneTris) zone.add(t);
+  const strokePts = strokes.map((s) => s.points);
+  const tolerance = step * 0.5;
+  let uncoveredArea = 0;
+  let totalArea = 0;
+  const faces: Face[] = [];
+  for (let t = 0; t < mesh.triCount; t++) {
+    const tri = trianglePoints(mesh, t);
+    const [a, b, c] = tri;
+    const area = Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) / 2;
+    totalArea += area;
+    const centroid = polygonCentroid(tri);
+    if (!paintedBy(centroid, strokePts, tolerance)) uncoveredArea += area;
+    faces.push({
+      id: faceIdOffset + t,
+      polygon: tri,
+      edgeCutIds: [-1, -1, -1],
+      holes: [],
+      cutIds: [],
+      area,
+      centroid,
+      kind: zone.has(t) ? 'junction' : 'segment',
+    });
+  }
+  if (totalArea > 0 && uncoveredArea / totalArea > 0.005) {
+    warnings.push(`ink graph: ${((100 * uncoveredArea) / totalArea).toFixed(1)}% of the ink is not painted by any stroke`);
+  }
+
+  const segments: SegmentInfo[] = cover.branches.map((b) => ({
+    faceId: faceIdOffset + (b.tris[0] ?? 0),
+    axis: b.axis,
+    isLoop: b.isCycle,
+    ends: [],
+  }));
+  for (const cl of cover.clusters) {
+    for (const slot of cl.slots) {
+      const seg = segments[Math.floor(slot.key / 2)];
+      seg?.ends.push({ cutId: -1, point: slot.point, direction: slot.direction, width: slot.point.width });
+    }
+  }
+
+  return { faces, segments, clusters: cover.clusters, strokes, uncoveredArea, totalArea, warnings };
+}

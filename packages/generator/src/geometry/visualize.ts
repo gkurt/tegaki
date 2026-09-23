@@ -121,13 +121,19 @@ function renderCuts(result: GeometryPipelineResult): string {
 function renderFaces(result: GeometryPipelineResult): string {
   const vb = viewBox(result);
   const parts: string[] = [];
+  // The ink-graph extraction reports its mesh triangles as faces: hundreds of
+  // them, so drop the per-face labels and thin the edges.
+  const dense = result.faces.length > 60;
   result.faces.forEach((face, i) => {
     const isJunction = face.kind === 'junction';
     const fill = isJunction ? 'rgba(230,25,75,0.35)' : `${STROKE_COLORS[i % STROKE_COLORS.length]}55`;
     const stroke = isJunction ? '#e6194b' : STROKE_COLORS[i % STROKE_COLORS.length]!;
     // Even-odd fill so holes are punched out.
     const d = [polyD(face.polygon, true), ...face.holes.map((h) => polyD(h, true))].join(' ');
-    parts.push(`  <path d="${d}" fill="${fill}" fill-rule="evenodd" stroke="${stroke}" stroke-width="${(vb.u * 0.6).toFixed(2)}"/>`);
+    parts.push(
+      `  <path d="${d}" fill="${fill}" fill-rule="evenodd" stroke="${stroke}" stroke-width="${(vb.u * (dense ? 0.2 : 0.6)).toFixed(2)}"/>`,
+    );
+    if (dense) return;
     parts.push(
       `  <text x="${face.centroid.x.toFixed(2)}" y="${face.centroid.y.toFixed(2)}" text-anchor="middle" dominant-baseline="middle" font-size="${(vb.u * 14).toFixed(2)}" fill="#333" font-family="sans-serif">${isJunction ? 'J' : 'S'}</text>`,
     );

@@ -395,7 +395,7 @@ export function simplifyStroke(points: import('./types.ts').AxisPoint[], epsilon
   let pts = points;
   for (let round = 0; round < 4; round++) {
     const before = pts.length;
-    pts = pinchPrune(rdpPass(pts, epsilon), epsilon);
+    pts = pinchPrune(rdpSimplify(pts, epsilon), epsilon);
     if (pts.length === before) break;
   }
   return pts;
@@ -448,7 +448,7 @@ function pinchPrune(pts: import('./types.ts').AxisPoint[], epsilon: number): imp
 }
 
 /** One width-aware Ramer-Douglas-Peucker pass (see simplifyStroke). */
-function rdpPass(points: import('./types.ts').AxisPoint[], epsilon: number): import('./types.ts').AxisPoint[] {
+export function rdpSimplify(points: import('./types.ts').AxisPoint[], epsilon: number): import('./types.ts').AxisPoint[] {
   if (points.length <= 2) return points;
   const keep = new Uint8Array(points.length);
   keep[0] = 1;

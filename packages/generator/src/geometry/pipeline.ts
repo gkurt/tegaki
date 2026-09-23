@@ -20,6 +20,7 @@ import { generateCuts } from './cuts.ts';
 import { type InkDisk, polylineInkDisks } from './face-medial.ts';
 import { mergeSegmentFaces } from './face-merge.ts';
 import { straightSkeletonFaceAxes, straightSkeletonStrokeAxis } from './face-straight-skeleton.ts';
+import { extractInkRegion } from './ink/extract.ts';
 import { extendUnpairedEnds, routeJunctionPaths } from './junction-routing.ts';
 import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { type OrderPlan, orderAndTimeStrokes } from './ordering.ts';
@@ -456,7 +457,29 @@ export function runGeometryPipeline(
   const junctions: GeometryPipelineResult['junctions'] = [];
   const geoStrokes: GeometryPipelineResult['geoStrokes'] = [];
 
-  for (const region of regions) {
+  if (resolved.extraction === 'ink-graph') {
+    for (const region of regions) {
+      allContours.push(...region);
+      const r = extractInkRegion(
+        region,
+        {
+          sampleSpacing: resolved.inkSampleSpacing,
+          spurTolerance: resolved.inkSpurTolerance,
+          junctionReach: resolved.inkJunctionReach,
+          continuationMinCos: resolved.continuationMinCos,
+          simplifyEpsilon: simplifyEps,
+        },
+        faces.length,
+      );
+      warnings.push(...r.warnings);
+      faces.push(...r.faces);
+      const segOffset = segments.length;
+      segments.push(...r.segments);
+      for (const gs of r.strokes) geoStrokes.push({ ...gs, segmentIndices: gs.segmentIndices.map((s) => s + segOffset) });
+    }
+  }
+
+  for (const region of resolved.extraction === 'ink-graph' ? [] : regions) {
     const cutOffset = cuts.length;
     const faceOffset = faces.length;
     const segOffset = segments.length;

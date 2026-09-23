@@ -25,7 +25,7 @@ function commandsFromPolygons(...polygons: Point[][]): PathCommand[] {
   return cmds;
 }
 
-function run(char: string, commands: PathCommand[]) {
+function run(char: string, commands: PathCommand[], options = DEFAULT_GEOMETRY_OPTIONS) {
   const input: GeometryPipelineInput = {
     char,
     unicode: char.codePointAt(0) ?? 0,
@@ -36,7 +36,7 @@ function run(char: string, commands: PathCommand[]) {
     descender: -200,
     unitsPerEm: UPM,
   };
-  return runGeometryPipeline(input, { commands });
+  return runGeometryPipeline(input, { commands }, options);
 }
 
 // Coordinates use a y-down convention (screen space) like opentype's getPath,
@@ -506,5 +506,36 @@ describe('geometry pipeline — dataset re-grouping', () => {
     expect(r.strokeOrderRegrouped).toBeUndefined();
     expect(r.strokesFontUnits.length).toBe(2);
     expect(r.strokesFontUnits[0]!.points[0]!.x).toBeLessThan(500);
+  });
+});
+
+describe('geometry pipeline — ink-graph extraction', () => {
+  const ink = { ...DEFAULT_GEOMETRY_OPTIONS, extraction: 'ink-graph' as const };
+
+  test('the partition extraction stays the default', () => {
+    expect(DEFAULT_GEOMETRY_OPTIONS.extraction).toBe('partition');
+  });
+
+  test('T through the full pipeline: crossbar + stem, ordered and reference-built', () => {
+    const outline: Point[] = [
+      { x: 100, y: 100 },
+      { x: 900, y: 100 },
+      { x: 900, y: 250 },
+      { x: 600, y: 250 },
+      { x: 600, y: 900 },
+      { x: 400, y: 900 },
+      { x: 400, y: 250 },
+      { x: 100, y: 250 },
+    ];
+    const r = run('T', commandsFromPolygons(outline), ink);
+    // No corners or cuts: the ink graph reads topology off the triangulation.
+    expect(r.corners.length).toBe(0);
+    expect(r.cuts.length).toBe(0);
+    expect(r.strokesFontUnits.length).toBe(2);
+  });
+
+  test('ring (O) through the full pipeline: one loop stroke', () => {
+    const r = run('O', commandsFromPolygons(circle(500, 500, 350), circle(500, 500, 200)), ink);
+    expect(r.strokesFontUnits.length).toBe(1);
   });
 });
