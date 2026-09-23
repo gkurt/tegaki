@@ -129,8 +129,14 @@ const WIDTH_OVERSHOOT_WEIGHT = 4;
  */
 const SPILL_WEIGHT = 2;
 
-/** Width-aware RDP that keeps every nib point (each nib was fitted relative to its exact position). */
-function simplifyKeepingNibs(points: AxisPoint[], epsilon: number, clearance: (p: Point) => number): AxisPoint[] {
+/**
+ * Width-aware RDP that keeps every nib point (each nib was fitted relative to
+ * its exact position). `clearance` is the distance to the outline, which lets
+ * the spill term refuse chords that paint past it. Exported for strokes the
+ * pipeline rebuilds from ink-graph strokes (the stroke-order regroup), which
+ * must be simplified by the same rule rather than the partition's.
+ */
+export function simplifyKeepingNibs(points: AxisPoint[], epsilon: number, clearance: (p: Point) => number): AxisPoint[] {
   const out: AxisPoint[] = [];
   let start = 0;
   for (let i = 1; i < points.length; i++) {

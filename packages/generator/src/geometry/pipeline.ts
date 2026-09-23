@@ -7,7 +7,7 @@
 //   classify → per-segment medial axes → junction nodes → continuation
 //   matching → stroke assembly → order + timing.
 
-import type { BBox } from 'tegaki';
+import type { BBox, Point } from 'tegaki';
 import { DRAWING_SPEED, STROKE_PAUSE } from '../constants.ts';
 import type { RawGlyphData } from '../font/parse.ts';
 import { computePathBBox, flattenPath } from '../processing/bezier.ts';
@@ -20,8 +20,9 @@ import { generateCuts } from './cuts.ts';
 import { type InkDisk, polylineInkDisks } from './face-medial.ts';
 import { mergeSegmentFaces } from './face-merge.ts';
 import { straightSkeletonFaceAxes, straightSkeletonStrokeAxis } from './face-straight-skeleton.ts';
-import { extractInkRegion } from './ink/extract.ts';
+import { extractInkRegion, simplifyKeepingNibs } from './ink/extract.ts';
 import { carryNibs } from './ink/nib.ts';
+import { SegmentIndex } from './ink/spatial.ts';
 import { extendUnpairedEnds, routeJunctionPaths } from './junction-routing.ts';
 import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { type OrderPlan, orderAndTimeStrokes } from './ordering.ts';
@@ -36,6 +37,7 @@ import {
   type Face,
   type GeometryOptions,
   type GeometryPipelineResult,
+  type GeoStroke,
   resolveGeometryOptions,
   type SegmentInfo,
 } from './types.ts';
@@ -423,6 +425,16 @@ function processRegion(
   return { cuts, faces, segments, junctions, corners, geoStrokes, warnings };
 }
 
+/**
+ * Scripts whose stroke order is standardized, so a font's glyphs follow the
+ * reference dataset rather than the other way round (KanjiVG's coverage).
+ */
+const CANONICAL_STROKE_ORDER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+
+export function hasCanonicalStrokeOrder(char: string): boolean {
+  return CANONICAL_STROKE_ORDER.test(char);
+}
+
 export function runGeometryPipeline(
   input: GeometryPipelineInput,
   rawGlyph: Pick<RawGlyphData, 'commands'>,
@@ -536,6 +548,23 @@ export function runGeometryPipeline(
       // wrong-stroke assignments (≥ ~0.15); between them a generous margin.
       const AUTO_MAX_MEAN_COST = 0.15;
       const isClean = (m: StrokeMatchResult) => m.extractedCount === m.referenceCount && m.meanCost <= AUTO_MAX_MEAN_COST;
+      // Regrouped strokes are resampled, so they are simplified again — by
+      // the rule that built them. Partition strokes take simplifyStroke;
+      // ink-graph strokes take the extraction's width- and spill-aware RDP,
+      // because simplifyStroke's covered-jog prune treats a wide pen's gentle
+      // curvature as a jog and flattens it (Caveat d's bowl drew as a polygon
+      // that stopped short of the stem).
+      let outlineIndex: SegmentIndex | undefined;
+      const simplifyRegrouped = (points: GeoStroke['points']) => {
+        if (resolved.extraction !== 'ink-graph') return simplifyStroke(points, simplifyEps);
+        if (points.length <= 2) return points;
+        outlineIndex ??= new SegmentIndex(
+          allContours.flatMap((c) => c.points.map((p, i): [Point, Point] => [p, c.points[(i + 1) % c.points.length]!])),
+          resolved.inkSampleSpacing * 4,
+        );
+        const index = outlineIndex;
+        return simplifyKeepingNibs(points, simplifyEps, (p) => index.nearest(p));
+      };
       const totalInk = geoStrokes.reduce(
         (sum, g) => sum + g.points.reduce((len, p, i) => (i > 0 ? len + dist(g.points[i - 1]!, p) : len), 0),
         0,
@@ -570,7 +599,7 @@ export function runGeometryPipeline(
           if (proposal) {
             const candidate = carryNibs(
               geoStrokes,
-              proposal.strokes.map((gs) => ({ ...gs, points: simplifyStroke(gs.points, simplifyEps) })),
+              proposal.strokes.map((gs) => ({ ...gs, points: simplifyRegrouped(gs.points) })),
             );
             // Lifted extras sit at the END of the proposal and have no
             // reference stroke by design — only the chains face the match;
@@ -588,7 +617,23 @@ export function runGeometryPipeline(
               rematch.meanCost +
               (totalInk > 0 ? PRUNE_COST_WEIGHT * (proposal.pruned / totalInk) : 0) +
               (proposal.extras > 0 ? LIFT_RANK_PENALTY : 0);
-            if (rematch.extractedCount === rematch.referenceCount && rematchCost <= AUTO_MAX_MEAN_COST) {
+            // Retraces exist to MERGE: several extracted pieces joined into
+            // one reference stroke that walks a fused corridor twice (れ, a
+            // cursive P's stem). A proposal that ends with MORE strokes than
+            // were extracted and still needs retraces is cutting the font's
+            // own trajectory. Where stroke order is canonical (kanji, kana:
+            // 月, 町, 曜 all split this way) the font follows the reference
+            // and the cut recovers its strokes; elsewhere the reference is one
+            // style among several, and the cut lands where the font's pen
+            // never lifted — Caveat's one-stroke W re-cut into KanjiVG's four
+            // print strokes, its last stroke left with just the tip; A's leg
+            // cut at the crossbar.
+            const retracedSplit = chains.length > geoStrokes.length && proposal.retraces > 0 && !hasCanonicalStrokeOrder(input.char);
+            if (retracedSplit) {
+              variantWarnings.push(
+                `stroke order: dataset re-grouping rejected (${geoStrokes.length} extracted strokes split into ${chains.length} by retracing)`,
+              );
+            } else if (rematch.extractedCount === rematch.referenceCount && rematchCost <= AUTO_MAX_MEAN_COST) {
               variantWarnings.push(
                 `stroke order: re-grouped ${geoStrokes.length} extracted strokes into ${chains.length} matching the dataset (${proposal.splits} split, ${proposal.merges} merged${proposal.retraces > 0 ? `, ${proposal.retraces} retraced` : ''}${proposal.pruned > 0 ? `, ${Math.round(proposal.pruned)} units of duplicated ink pruned` : ''}${proposal.extras > 0 ? `; ${proposal.extras} leftover stroke${proposal.extras === 1 ? '' : 's'} appended after the dataset order` : ''})`,
               );
