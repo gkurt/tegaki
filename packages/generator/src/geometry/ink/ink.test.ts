@@ -7,7 +7,7 @@ import { type ClusterSlot, findSerifArms, type SerifSlotShape, solvePairing } fr
 import { extractInkRegion, type InkExtractionOptions } from './extract.ts';
 import { buildInkGraph, pruneSpurs, withFlicks } from './graph.ts';
 import { buildInkMesh, trianglePoints } from './mesh.ts';
-import { carryNibs, inNib } from './nib.ts';
+import { carryNibs, inNib, paintedBy } from './nib.ts';
 import { SegmentIndex } from './spatial.ts';
 
 const STEP = 6;
@@ -67,7 +67,7 @@ function extractWith(overrides: Partial<InkExtractionOptions>, ...polygons: Poin
     {
       sampleSpacing: STEP,
       spurTolerance: 0.5,
-      junctionReach: 1.5,
+      junctionReach: 0.6,
       continuationMinCos: MIN_COS,
       simplifyEpsilon: 4,
       absorbSerifs: true,
@@ -315,6 +315,29 @@ describe('serif absorption', () => {
 
   test('without absorption the slabs are strokes of their own', () => {
     expect(extractWith({ absorbSerifs: false }, serifedI()).strokes.length).toBeGreaterThan(1);
+  });
+});
+
+/** A 400×60 bar whose right end flares into two horns around a notch (the tip of a heavy slab serif). */
+function fishtailBar(): Point[] {
+  return [
+    { x: 0, y: 0 },
+    { x: 340, y: 0 },
+    { x: 392, y: -12 },
+    { x: 376, y: 30 },
+    { x: 392, y: 72 },
+    { x: 340, y: 60 },
+    { x: 0, y: 60 },
+  ];
+}
+
+describe('forked ends', () => {
+  test("a stroke end forking into its corners is the stroke's end: one stroke painting both horns", () => {
+    const r = extract(fishtailBar());
+    expect(r.strokes.length).toBe(1);
+    const pts = r.strokes.map((s) => s.points);
+    expect(paintedBy({ x: 380, y: -2 }, pts, 0)).toBe(true);
+    expect(paintedBy({ x: 380, y: 62 }, pts, 0)).toBe(true);
   });
 });
 

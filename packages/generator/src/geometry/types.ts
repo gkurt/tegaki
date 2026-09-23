@@ -207,7 +207,12 @@ export interface GeometryOptions {
   inkSampleRatio: number;
   /** Ink graph: spur prune tolerance, as a fraction of the junction's inscribed radius. */
   inkSpurTolerance: number;
-  /** Ink graph: junction zone radius as a multiple of the junction's inscribed radius. */
+  /**
+   * Ink graph: junction zone radius as a multiple of the junction's inscribed
+   * radius. Larger zones measure branch tangents on cleaner body, but in heavy
+   * fonts they swallow whole stems (merging a slab serif, a crossbar and the
+   * next serif into one knot) and the passages cut the corners they skip.
+   */
   inkJunctionReach: number;
   /** Ink graph: fold serifs into the stroke ends they cap, stamped with nibs, instead of drawing them as strokes. */
   inkSerifs: boolean;
@@ -236,7 +241,7 @@ export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
   // A round pen pokes (√2−1)·r ≈ 0.41·r short of a square outer corner; such
   // pen-unreachable ears are what spur pruning must remove.
   inkSpurTolerance: 0.5,
-  inkJunctionReach: 1.5,
+  inkJunctionReach: 0.6,
   inkSerifs: true,
 };
 

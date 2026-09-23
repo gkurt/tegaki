@@ -914,8 +914,8 @@ export function GeneratorApp() {
                     label="Junction reach (×radius)"
                     value={geometryOptions.inkJunctionReach}
                     defaultValue={DEFAULT_GEOMETRY_OPTIONS.inkJunctionReach}
-                    min={1}
-                    max={3}
+                    min={0.3}
+                    max={2}
                     step={0.1}
                     onChange={(v) => updateGeometryOption('inkJunctionReach', v)}
                   />

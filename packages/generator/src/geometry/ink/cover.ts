@@ -34,6 +34,12 @@
 // across to the other's tip); any other absorbed arm is stamped with a nib
 // lying along it.
 //
+// FORKED ENDS. A flared or notched stroke end (a heavy slab serif's tip)
+// forks its centerline into its corners: a node where every branch but one
+// is a short dead end pointing on ahead. That node is the stroke's END, not
+// a junction — its spurs become the end's flick, swept out to each corner
+// and back, before any clustering sees them.
+//
 // ASSEMBLY. Branches are chained through paired ends into strokes: walks
 // start at free ends (tips, unpaired ends); whatever remains is closed
 // rings. Every alive branch is walked exactly once, so no ink the graph
@@ -489,9 +495,88 @@ function median(values: number[]): number {
   return sorted[Math.floor(sorted.length / 2)] ?? 0;
 }
 
-export function coverInkGraph(g: InkGraph, rawBranches: InkBranch[], contours: Contour[], options: CoverOptions): CoverResult {
+/**
+ * A forked end's spurs reach at most this far, in widths of the stroke they
+ * end: a square end's corner spurs run ~0.7 widths, a flared one's a little
+ * more; a branch of its own (a y's arm) runs several.
+ */
+const FORK_MAX_SPUR = 1.5;
+/**
+ * ... and point on ahead into the end's corners, within 60° of the stroke's
+ * direction (a square end's run at 45°). Arms sticking out sideways are a
+ * slab serif's, left to serif absorption.
+ */
+const FORK_MIN_ALIGN = Math.cos((60 * Math.PI) / 180);
+
+/** A branch's centerline oriented away from `node`, flicks expanded, out to the tip beyond its far end. */
+function outwardFrom(b: InkBranch, node: number): AxisPoint[] {
+  const reversed = b.from !== node;
+  return [...withFlicks(b.axis, b.flicks, reversed), ...(b.endFlicks[reversed ? 0 : 1] ?? [])];
+}
+
+/**
+ * Collapse forked stroke ends (see file header): at a node whose branches
+ * are all dead ends but one, each no longer than FORK_MAX_SPUR widths of that
+ * one and pointing on past its end (FORK_MIN_ALIGN), the spurs are dropped
+ * and folded into the remaining branch's end
+ * flick — out along each spur to its tip and back, the longest last and only
+ * out. Returns the surviving branches and the collapsed nodes.
+ */
+function collapseForks(g: InkGraph, rawBranches: InkBranch[]): { branches: InkBranch[]; forkEnds: Set<number> } {
+  const isNode = (t: number) => t >= 0 && g.alive[t] === 1 && g.deg[t]! >= 3;
+  const incident = new Map<number, number[]>();
+  rawBranches.forEach((b, bi) => {
+    if (b.isCycle || b.from === b.to) return;
+    for (const t of [b.from, b.to]) if (isNode(t)) incident.set(t, [...(incident.get(t) ?? []), bi]);
+  });
+  const dropped = new Set<number>();
+  const replaced = new Map<number, InkBranch>();
+  const forkEnds = new Set<number>();
+  for (const [node, bis] of incident) {
+    if (bis.length !== g.deg[node]) continue; // a branch loops back through this node
+    const isSpur = (bi: number) => {
+      const b = rawBranches[bi]!;
+      const far = b.from === node ? b.to : b.from;
+      return !isNode(far) && g.deg[far]! <= 1 && !replaced.has(bi) && !dropped.has(bi);
+    };
+    // The stroke body: the longest branch; everything else must be a short spur.
+    const body = bis.reduce((a, b) => (polylineLength(rawBranches[b]!.axis) > polylineLength(rawBranches[a]!.axis) ? b : a));
+    const spurs = bis.filter((bi) => bi !== body);
+    if (!spurs.every(isSpur)) continue;
+    // A short body forked at both ends carries both sweeps.
+    const bodyBranch = replaced.get(body) ?? rawBranches[body]!;
+    const width = median(bodyBranch.axis.map((p) => p.width));
+    const paths = spurs.map((bi) => outwardFrom(rawBranches[bi]!, node));
+    if (paths.some((path) => polylineLength(path) > FORK_MAX_SPUR * width)) continue;
+    const c = g.center[node]!;
+    const bodyAxis = outwardFrom(bodyBranch, node);
+    const ahead = normalize(sub(c, pointAlong(bodyAxis, Math.min(width, polylineLength(bodyAxis) / 2))));
+    if (paths.some((path) => dot(normalize(sub(path[path.length - 1]!, c)), ahead) < FORK_MIN_ALIGN)) continue;
+    paths.sort((a, b) => polylineLength(a) - polylineLength(b));
+    const sweep: AxisPoint[] = [];
+    paths.forEach((path, i) => {
+      sweep.push(...path);
+      if (i < paths.length - 1) sweep.push(...[...path].reverse());
+    });
+    const end = bodyBranch.from === node ? 0 : 1;
+    const endFlicks: InkBranch['endFlicks'] = [...bodyBranch.endFlicks];
+    endFlicks[end] = sweep;
+    replaced.set(body, {
+      ...bodyBranch,
+      tris: [...bodyBranch.tris, ...spurs.flatMap((bi) => rawBranches[bi]!.tris)],
+      endFlicks,
+    });
+    for (const bi of spurs) dropped.add(bi);
+    forkEnds.add(node);
+  }
+  const branches = rawBranches.flatMap((b, bi) => (dropped.has(bi) ? [] : [replaced.get(bi) ?? b]));
+  return { branches, forkEnds };
+}
+
+export function coverInkGraph(g: InkGraph, graphBranches: InkBranch[], contours: Contour[], options: CoverOptions): CoverResult {
   const { junctionReach, continuationMinCos, step, inkAt } = options;
-  const isJunction = (t: number) => t >= 0 && g.alive[t] === 1 && g.deg[t]! >= 3;
+  const { branches: rawBranches, forkEnds } = collapseForks(g, graphBranches);
+  const isJunction = (t: number) => t >= 0 && g.alive[t] === 1 && g.deg[t]! >= 3 && !forkEnds.has(t);
   const junctionTris = [...new Set(rawBranches.flatMap((b) => [b.from, b.to]).filter(isJunction))];
   const junctionIndex = new Map(junctionTris.map((t, i) => [t, i]));
   const reach = (t: number) => junctionReach * g.radius[t]!;
@@ -600,7 +685,7 @@ export function coverInkGraph(g: InkGraph, rawBranches: InkBranch[], contours: C
       let direction = normalize(sub(point, back));
       if (dist(point, back) < 1e-6) direction = normalize(sub(cl.center, point));
       const far = end === 0 ? b.to : b.from;
-      const deadEnd = far !== node && !isJunction(far) && g.deg[far]! <= 1 ? polylineLength(b.axis) : null;
+      const deadEnd = far !== node && !isJunction(far) && (g.deg[far]! <= 1 || forkEnds.has(far)) ? polylineLength(b.axis) : null;
       slotOf.set(bi * 2 + end, { cluster: ci, slot: cl.slots.length });
       cl.slots.push({ key: bi * 2 + end, point, direction, deadEnd });
       // Triangles trimmed off this end belong to the cluster zone.
