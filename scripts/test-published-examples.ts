@@ -46,7 +46,7 @@ function run(cmd: string, cmdArgs: string[], cwd: string, env?: Record<string, s
 }
 
 function npmView(spec: string): string {
-  return execFileSync('npm', ['view', spec, 'version'], { encoding: 'utf-8' }).trim();
+  return execFileSync('npm', ['view', spec, 'version'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }
 
 /** Resolve a dist-tag to a concrete version, then wait for the registry to serve it. */
@@ -54,10 +54,17 @@ function resolveVersion(spec: string): string {
   const version = /^\d/.test(spec) ? spec : npmView(`tegaki@${spec}`);
   if (!version) throw new Error(`Could not resolve tegaki@${spec} on npm`);
 
-  // npm publish can lag CDN propagation by a few seconds after a release fires.
-  const deadline = Date.now() + 120_000;
+  // A fresh publish can take minutes to become visible (0.22.2 took ~2m). Until
+  // then `npm view` exits non-zero with E404, so a throw means "not yet", not failure.
+  const deadline = Date.now() + 300_000;
   for (;;) {
-    if (npmView(`tegaki@${version}`) === version) return version;
+    let seen = '';
+    try {
+      seen = npmView(`tegaki@${version}`);
+    } catch {
+      /* E404 until the version propagates */
+    }
+    if (seen === version) return version;
     if (Date.now() > deadline) throw new Error(`tegaki@${version} never became visible on npm`);
     console.log(`Waiting for tegaki@${version} to propagate on npm...`);
     execFileSync('sleep', ['5']);
