@@ -7,8 +7,8 @@ import { type ClusterSlot, findSerifArms, type SerifSlotShape, solvePairing } fr
 import { extractInkRegion, type InkExtractionOptions } from './extract.ts';
 import { buildInkGraph, pruneSpurs, withFlicks } from './graph.ts';
 import { buildInkMesh, trianglePoints } from './mesh.ts';
-import { carryNibs, inNib, paintedBy } from './nib.ts';
-import { SegmentIndex } from './spatial.ts';
+import { carryNibs, inNib, paintedBy, stampHoles, triangleSample } from './nib.ts';
+import { RegionIndex, SegmentIndex } from './spatial.ts';
 
 const STEP = 6;
 const MIN_COS = Math.cos((75 * Math.PI) / 180);
@@ -100,6 +100,18 @@ function serifedI(): Point[] {
 function slot(key: number, point: Point, direction: Point, deadEnd: number | null = null): ClusterSlot {
   return { key, point: { ...point, width: 60 }, direction, deadEnd };
 }
+
+describe('RegionIndex', () => {
+  test('agrees with pointInRegion everywhere, holes included', () => {
+    const contours = buildContours([plus(200, 40), rect(-20, -20, 20, 20).reverse(), serifedI()]);
+    const index = new RegionIndex(contours, STEP);
+    for (let i = 0; i < 4000; i++) {
+      // Deterministic scatter over (and just past) the shapes, including exact vertex rows.
+      const p = { x: ((i * 7919) % 700) - 250, y: ((i * 104729) % 820) - 230 + (i % 5 === 0 ? 0 : 0.37) };
+      expect(index.contains(p)).toBe(pointInRegion(p, contours));
+    }
+  });
+});
 
 describe('buildInkMesh', () => {
   test('triangles tile the ink exactly (hole punched out)', () => {
@@ -384,6 +396,45 @@ describe('nibs', () => {
         expect(pointInRegion(q, contours) || outline.nearest(q) < STEP * 0.3).toBe(true);
       }
     }
+  });
+
+  test('stampHoles stamps the ink a stroke leaves, without moving the pen', () => {
+    const polygon = rect(0, 0, 200, 200);
+    const contours = buildContours([polygon]);
+    const boundary = new SegmentIndex(
+      polygon.map((p, i) => [p, polygon[(i + 1) % polygon.length]!] as [Point, Point]),
+      STEP * 4,
+    );
+    const g = buildInkGraph(buildInkMesh(contours, STEP), boundary);
+    const inkAt = (p: Point) => pointInRegion(p, contours) || boundary.nearest(p) < STEP * 0.25;
+    // A 100-wide pen across the middle of a 200-square leaves a band above and below.
+    const strokes = [
+      {
+        points: [
+          { x: 50, y: 100, width: 100 },
+          { x: 150, y: 100, width: 100 },
+        ],
+      },
+    ];
+    const unpainted = () => {
+      let area = 0;
+      for (let t = 0; t < g.mesh.triCount; t++) {
+        const q = triangleSample(g, t);
+        if (
+          !paintedBy(
+            q.p,
+            strokes.map((s) => s.points),
+            0,
+          )
+        )
+          area += q.area;
+      }
+      return area;
+    };
+    const before = unpainted();
+    expect(stampHoles(strokes, g, inkAt, STEP)).toBeGreaterThan(0);
+    expect(unpainted()).toBeLessThan(0.5 * before);
+    for (const p of strokes[0]!.points) expect(p.y).toBeCloseTo(100);
   });
 
   test('carryNibs keeps each stamp at the same place when strokes are re-cut', () => {

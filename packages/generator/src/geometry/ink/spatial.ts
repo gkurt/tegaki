@@ -89,3 +89,58 @@ export class SegmentIndex {
     return best;
   }
 }
+
+/**
+ * Contour edges bucketed by row for fast inside tests. The nonzero winding
+ * at `p` only counts edges whose y-span straddles p.y, so each row keeps just
+ * the edges crossing it — the same rule as `pointInRegion`, without walking
+ * every edge. Nib fitting asks it about every outline sample of every
+ * candidate ellipse.
+ */
+export class RegionIndex {
+  private readonly y0: number;
+  private readonly rowHeight: number;
+  private readonly rows: [Point, Point][][];
+
+  constructor(contours: { points: Point[] }[], rowHeight: number) {
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (const c of contours) {
+      for (const p of c.points) {
+        y0 = Math.min(y0, p.y);
+        y1 = Math.max(y1, p.y);
+      }
+    }
+    if (!Number.isFinite(y0)) y0 = y1 = 0;
+    this.y0 = y0;
+    this.rowHeight = Math.max(rowHeight, 1e-6);
+    this.rows = Array.from({ length: Math.floor((y1 - y0) / this.rowHeight) + 1 }, () => []);
+    for (const c of contours) {
+      const pts = c.points;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i]!;
+        const b = pts[(i + 1) % pts.length]!;
+        const r0 = this.row(Math.min(a.y, b.y));
+        const r1 = this.row(Math.max(a.y, b.y));
+        for (let r = r0; r <= r1; r++) this.rows[r]!.push([a, b]);
+      }
+    }
+  }
+
+  private row(y: number): number {
+    return Math.min(this.rows.length - 1, Math.max(0, Math.floor((y - this.y0) / this.rowHeight)));
+  }
+
+  /** True when `p` is inside the region (nonzero winding). */
+  contains(p: Point): boolean {
+    if (p.y < this.y0 || p.y > this.y0 + this.rows.length * this.rowHeight) return false;
+    let wn = 0;
+    for (const [a, b] of this.rows[this.row(p.y)]!) {
+      const side = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+      if (a.y <= p.y) {
+        if (b.y > p.y && side > 0) wn++;
+      } else if (b.y <= p.y && side < 0) wn--;
+    }
+    return wn !== 0;
+  }
+}

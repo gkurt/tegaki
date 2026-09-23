@@ -329,3 +329,102 @@ export function carryNibs<S extends { points: AxisPoint[] }>(before: S[], after:
   }
   return out;
 }
+
+/** Unpainted ink at least this deep (sample steps from the outline) is a hole, not a sliver along the edge. */
+const HOLE_MIN_DEPTH = 0.5;
+/** Holes (and stamp gains) below this area, in squared sample steps, are left alone. */
+const HOLE_MIN_AREA = 4;
+/** Stamps per hole: one too big for a single ellipse gets another. */
+const HOLE_MAX_STAMPS = 3;
+/** Farthest hole samples tried as stamp directions. */
+const HOLE_TARGETS = 6;
+
+/** Nearest point on any stroke to `p`: stroke, segment start index, position and interpolated width. */
+function nearestOnStrokes(strokes: { points: AxisPoint[] }[], p: Point) {
+  let best: { stroke: number; index: number; at: AxisPoint; d: number } | null = null;
+  strokes.forEach((s, si) => {
+    const pts = s.points;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i]!;
+      const b = pts[Math.min(i + 1, pts.length - 1)]!;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const l2 = dx * dx + dy * dy;
+      const t = l2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0;
+      const at = { x: a.x + dx * t, y: a.y + dy * t, width: a.width + (b.width - a.width) * t };
+      const d = dist(at, p);
+      if (!best || d < best.d) best = { stroke: si, index: i, at, d };
+    }
+  });
+  return best as { stroke: number; index: number; at: AxisPoint; d: number } | null;
+}
+
+/**
+ * Stamp nibs into the HOLES the assembled strokes leave: connected
+ * unpainted ink deeper than a sliver — a junction corner the passages cut
+ * across, the wedge between a flag serif and its stem, the crotch of a
+ * bowl meeting a stem. Each stamp hangs off the pen point nearest the hole's
+ * deepest ink (inserted on the stroke when no point sits there) and is
+ * fitted like a node's nib, pointing across the hole: the ink appears as the
+ * pen passes, and the stroke path is unchanged. Mutates `strokes`; returns
+ * the number of stamps.
+ */
+export function stampHoles(strokes: { points: AxisPoint[] }[], g: InkGraph, inkAt: (p: Point) => boolean, step: number): number {
+  const { mesh } = g;
+  const minArea = HOLE_MIN_AREA * step * step;
+  const paths = () => strokes.map((s) => s.points);
+  const depth = (p: Point) => g.boundary.nearest(p);
+  const hole = new Map<number, InkSample>();
+  const all = paths();
+  for (let t = 0; t < mesh.triCount; t++) {
+    const q = triangleSample(g, t);
+    if (depth(q.p) >= HOLE_MIN_DEPTH * step && !paintedBy(q.p, all, 0)) hole.set(t, q);
+  }
+  // Connected holes, largest first.
+  const holes: InkSample[][] = [];
+  const seen = new Set<number>();
+  for (const start of hole.keys()) {
+    if (seen.has(start)) continue;
+    seen.add(start);
+    const comp: InkSample[] = [];
+    const stack = [start];
+    while (stack.length > 0) {
+      const t = stack.pop()!;
+      comp.push(hole.get(t)!);
+      for (let e = 0; e < 3; e++) {
+        const nb = mesh.nbr[3 * t + e]!;
+        if (nb >= 0 && hole.has(nb) && !seen.has(nb)) {
+          seen.add(nb);
+          stack.push(nb);
+        }
+      }
+    }
+    holes.push(comp);
+  }
+  const areaOf = (qs: InkSample[]) => qs.reduce((acc, q) => acc + q.area, 0);
+  holes.sort((a, b) => areaOf(b) - areaOf(a));
+
+  let stamped = 0;
+  for (const comp of holes) {
+    for (let k = 0; k < HOLE_MAX_STAMPS; k++) {
+      const samples = comp.filter((q) => !paintedBy(q.p, paths(), 0));
+      if (areaOf(samples) < minArea) break;
+      const deepest = samples.reduce((a, b) => (depth(b.p) > depth(a.p) ? b : a));
+      const near = nearestOnStrokes(strokes, deepest.p);
+      if (!near) return stamped;
+      const { at } = near;
+      const radius = Math.max(at.width / 2, depth(deepest.p));
+      const targets = samples
+        .map((q) => q.p)
+        .sort((a, b) => dist(b, at) - dist(a, at))
+        .slice(0, HOLE_TARGETS);
+      const best = fitStamp({ at, radius, targets, samples, inkAt });
+      if (!best || best.gain < minArea) break;
+      // Leave the stamp on a point of its own at the anchor, so it neither
+      // displaces an existing nib nor moves the pen.
+      strokes[near.stroke]!.points.splice(near.index + 1, 0, { ...at, nib: best.nib });
+      stamped++;
+    }
+  }
+  return stamped;
+}

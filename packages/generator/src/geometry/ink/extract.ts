@@ -8,19 +8,21 @@
 // COVERAGE is an invariant, not a hope: every triangle is either on a
 // branch centerline, absorbed into a junction whose disk paints it (spur
 // pruning's own criterion), or inside a junction zone crossed by passages /
-// extensions. The one lossy step is the junction zone, so the extraction
-// AUDITS it — every triangle not painted by the final strokes is counted
-// and reported, never silently dropped.
+// extensions. The one lossy step is the junction zone: passages cut across
+// its corners. Holes the final strokes leave there are STAMPED with nibs
+// (nib.ts, stampHoles), and the extraction then AUDITS the rest — every
+// triangle not painted by the final strokes is counted and reported, never
+// silently dropped.
 
 import type { Point } from 'tegaki';
-import { dist, pointInRegion, polygonCentroid } from '../primitives.ts';
+import { dist, polygonCentroid } from '../primitives.ts';
 import { rdpSimplify } from '../strokes.ts';
 import type { AxisPoint, Contour, Face, GeoStroke, SegmentInfo } from '../types.ts';
 import { coverInkGraph, type JunctionCluster } from './cover.ts';
 import { buildInkGraph, extractBranches, pruneSpurs } from './graph.ts';
 import { buildInkMesh, trianglePoints } from './mesh.ts';
-import { fitNibs, paintedBy } from './nib.ts';
-import { SegmentIndex } from './spatial.ts';
+import { fitNibs, paintedBy, stampHoles } from './nib.ts';
+import { RegionIndex, SegmentIndex } from './spatial.ts';
 
 export interface InkExtractionOptions {
   /** Outline resampling step (font units). */
@@ -161,7 +163,8 @@ export function extractInkRegion(contours: Contour[], options: InkExtractionOpti
   pruneSpurs(graph, options.spurTolerance, step * 2.5);
   // Flicks poking out less than a sample step are sampling noise, not ink.
   const minPoke = step;
-  const inkAt = (p: Point) => pointInRegion(p, contours) || boundary.nearest(p) < step * 0.25;
+  const region = new RegionIndex(contours, step);
+  const inkAt = (p: Point) => region.contains(p) || boundary.nearest(p) < step * 0.25;
   fitNibs(graph, inkAt, step, minPoke);
   const rawBranches = extractBranches(graph, minPoke);
   const cover = coverInkGraph(graph, rawBranches, contours, {
@@ -185,6 +188,7 @@ export function extractInkRegion(contours: Contour[], options: InkExtractionOpti
     if (pts.length > 2) pts = simplifyKeepingNibs(pts, options.simplifyEpsilon, clearance);
     return { ...s, points: pts };
   });
+  stampHoles(strokes, graph, inkAt, step);
 
   // ── Coverage audit: which triangles does the final pen leave unpainted? ─
   const zone = new Set<number>();
