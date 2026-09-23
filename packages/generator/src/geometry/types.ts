@@ -236,7 +236,7 @@ export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
   // measures against, so defaults stay consistent with the join ranking.
   medialMethod: 'straight-skeleton',
   strokeOrder: 'auto',
-  extraction: 'partition',
+  extraction: 'ink-graph',
   inkSampleRatio: 0.006,
   // A round pen pokes (√2−1)·r ≈ 0.41·r short of a square outer corner; such
   // pen-unreachable ears are what spur pruning must remove.

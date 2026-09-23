@@ -22,7 +22,7 @@ import {
   type SkeletonMethod,
 } from 'tegaki-generator';
 import { ZoomCanvas } from '../reactive-canvas.tsx';
-import { parseUrlState, syncUrlState, type TimeMode } from '../url-state.ts';
+import { defaultClipText, parseUrlState, syncUrlState, type TimeMode } from '../url-state.ts';
 import {
   DEFAULT_EXAMPLE_FONT_TEXT,
   EXAMPLE_FONT_TEXTS,
@@ -426,6 +426,17 @@ export function GeneratorApp() {
     setGeometryOptions((prev) => ({ ...prev, [key]: value }));
   }, []);
 
+  // Switching pipelines carries Clip to text over to the new pipeline's default,
+  // unless it was changed by hand.
+  const switchPipeline = useCallback(
+    (next: Pipeline) => {
+      if (next === pipeline) return;
+      setQuality((q) => (q.clipText === defaultClipText(pipeline) ? { ...q, clipText: defaultClipText(next) } : q));
+      setPipeline(next);
+    },
+    [pipeline],
+  );
+
   const [downloading, setDownloading] = useState(false);
 
   const handleDownload = useCallback(async () => {
@@ -440,6 +451,9 @@ export function GeneratorApp() {
         options,
         extraFontBuffers,
         subset: false,
+        pipeline,
+        geometryOptions,
+        strokeOrderProviders,
       });
 
       const encoder = new TextEncoder();
@@ -460,7 +474,7 @@ export function GeneratorApp() {
     } finally {
       setDownloading(false);
     }
-  }, [fontInfo, fontBuffer, extraFontBuffers, chars, options]);
+  }, [fontInfo, fontBuffer, extraFontBuffers, chars, options, pipeline, geometryOptions]);
 
   return (
     <div className="flex h-screen bg-gray-50 text-gray-900">
@@ -1042,7 +1056,7 @@ export function GeneratorApp() {
                 className={`px-2.5 py-1 text-xs rounded cursor-pointer transition-colors ${
                   pipeline === p ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                 }`}
-                onClick={() => setPipeline(p)}
+                onClick={() => switchPipeline(p)}
                 title={p === 'geometry' ? 'Experimental geometry-based stroke extraction' : 'Rasterize + skeletonize pipeline'}
               >
                 {p === 'raster' ? 'Raster' : 'Geometry'}

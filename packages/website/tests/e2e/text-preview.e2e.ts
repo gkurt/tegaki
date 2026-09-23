@@ -4,10 +4,12 @@ const PAGE = '/tegaki/preview/';
 
 /**
  * Build a URL with the standalone preview params. Values are URL-encoded via
- * URLSearchParams so callers don't have to escape them.
+ * URLSearchParams so callers don't have to escape them. The snapshots are of
+ * the raster pipeline (what the shipped bundles use), so it is pinned rather
+ * than left to the Studio's default; a case can still override `pl`.
  */
 function previewUrl(params: Record<string, string | number>): string {
-  const p = new URLSearchParams();
+  const p = new URLSearchParams({ pl: 'raster' });
   for (const [k, v] of Object.entries(params)) p.set(k, String(v));
   return `${PAGE}?${p.toString()}`;
 }

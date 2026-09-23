@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TegakiBundle, TegakiRendererHandle, TimeControlProp } from 'tegaki';
 import type { GeometryOptions, ParsedFontInfo, PipelineOptions, PipelineResult } from 'tegaki-generator';
-import { type CustomEffect, DEFAULT_EFFECTS_STATE, EFFECT_DEFAULTS, type EffectsState, type TimeMode } from '../url-state.ts';
+import {
+  type CustomEffect,
+  DEFAULT_EFFECTS_STATE,
+  defaultClipText,
+  EFFECT_DEFAULTS,
+  type EffectsState,
+  type TimeMode,
+} from '../url-state.ts';
 import { EASING_PRESETS, getEasingFn, type Pipeline, TEXT_PRESETS } from './constants.ts';
 import { ExportPanel } from './ExportPanel.tsx';
 import { CustomEffectControls, EffectColor, EffectSlider, GradientColorStops } from './effect-controls.tsx';
@@ -741,7 +748,7 @@ export function TextPreview({
                   <input
                     type="checkbox"
                     checked={!!quality.clipText}
-                    onChange={(e) => onQualityChange({ ...quality, clipText: e.target.checked ? 2 : false })}
+                    onChange={(e) => onQualityChange({ ...quality, clipText: e.target.checked ? defaultClipText(pipeline) || 2 : false })}
                   />
                   Clip to text
                 </label>

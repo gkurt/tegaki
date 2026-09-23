@@ -87,6 +87,16 @@ export interface UrlState {
   staggerDuration: string;
 }
 
+/**
+ * The pipeline's default for Clip to text. Ink-graph strokes stay inside the
+ * glyph but leave thin slivers along its edges; widened ×1.2 and clipped to
+ * the text they fill them, painting little ahead of the stroke that owns the
+ * ink. Raster strokes already overshoot the outline, so they stay unclipped.
+ */
+export function defaultClipText(pipeline: Pipeline): boolean | number {
+  return pipeline === 'geometry' ? 1.2 : false;
+}
+
 export const URL_DEFAULTS: UrlState = {
   fontFamily: 'Caveat',
   chars: DEFAULT_CHARS,
@@ -95,7 +105,7 @@ export const URL_DEFAULTS: UrlState = {
   previewMode: 'text',
   previewText: 'Hello World',
   options: DEFAULT_OPTIONS,
-  pipeline: 'raster',
+  pipeline: 'geometry',
   geometryStage: 'strokes',
   geometryOptions: DEFAULT_GEOMETRY_OPTIONS,
   animSpeed: 1,
@@ -109,7 +119,7 @@ export const URL_DEFAULTS: UrlState = {
   catchUp: 0,
   effectsState: DEFAULT_EFFECTS_STATE,
   customEffects: [],
-  quality: { pixelRatio: 1, segmentSize: 2, clipText: false, smoothing: false },
+  quality: { pixelRatio: 1, segmentSize: 2, clipText: defaultClipText('geometry'), smoothing: false },
   strokeEasing: 'default',
   glyphEasing: 'default',
   deferDots: true,
@@ -277,6 +287,7 @@ export function parseUrlState(search: string | URLSearchParams = window.location
     const v = Number(raw);
     if (Number.isFinite(v)) (state.geometryOptions as unknown as Record<string, number>)[long] = v;
   }
+  if (!p.has('ct_')) state.quality = { ...state.quality, clipText: defaultClipText(state.pipeline) };
 
   return state;
 }
@@ -308,8 +319,9 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
   }
   if (state.quality.segmentSize !== URL_DEFAULTS.quality.segmentSize) p.set('ss', String(state.quality.segmentSize));
   if (state.quality.pixelRatio !== URL_DEFAULTS.quality.pixelRatio) p.set('pr', String(state.quality.pixelRatio));
-  if (state.quality.clipText !== URL_DEFAULTS.quality.clipText) {
-    p.set('ct_', typeof state.quality.clipText === 'number' ? String(state.quality.clipText) : '1');
+  if (state.quality.clipText !== defaultClipText(state.pipeline)) {
+    const clip = state.quality.clipText;
+    p.set('ct_', clip === false ? '0' : typeof clip === 'number' ? String(clip) : '1');
   }
   if (state.quality.smoothing !== URL_DEFAULTS.quality.smoothing) p.set('sm', '1');
   if (state.strokeEasing !== URL_DEFAULTS.strokeEasing) p.set('se', state.strokeEasing);

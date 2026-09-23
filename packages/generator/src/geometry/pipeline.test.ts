@@ -3,7 +3,7 @@ import type { PathCommand, Point } from 'tegaki';
 import { initStraightSkeleton } from './face-straight-skeleton.ts';
 import type { GeometryPipelineInput } from './pipeline.ts';
 import { runGeometryPipeline } from './pipeline.ts';
-import { DEFAULT_GEOMETRY_OPTIONS } from './types.ts';
+import { DEFAULT_GEOMETRY_OPTIONS, type GeometryOptions } from './types.ts';
 
 const UPM = 1000;
 
@@ -25,7 +25,10 @@ function commandsFromPolygons(...polygons: Point[][]): PathCommand[] {
   return cmds;
 }
 
-function run(char: string, commands: PathCommand[], options = DEFAULT_GEOMETRY_OPTIONS) {
+/** The partition extraction: most suites here pin its corners, cuts and faces. */
+const PARTITION: GeometryOptions = { ...DEFAULT_GEOMETRY_OPTIONS, extraction: 'partition' };
+
+function run(char: string, commands: PathCommand[], options = PARTITION) {
   const input: GeometryPipelineInput = {
     char,
     unicode: char.codePointAt(0) ?? 0,
@@ -512,8 +515,8 @@ describe('geometry pipeline — dataset re-grouping', () => {
 describe('geometry pipeline — ink-graph extraction', () => {
   const ink = { ...DEFAULT_GEOMETRY_OPTIONS, extraction: 'ink-graph' as const };
 
-  test('the partition extraction stays the default', () => {
-    expect(DEFAULT_GEOMETRY_OPTIONS.extraction).toBe('partition');
+  test('the ink-graph extraction is the default', () => {
+    expect(DEFAULT_GEOMETRY_OPTIONS.extraction).toBe('ink-graph');
   });
 
   test('T through the full pipeline: crossbar + stem, ordered and reference-built', () => {

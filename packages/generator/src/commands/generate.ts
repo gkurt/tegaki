@@ -22,8 +22,9 @@ import {
 import { enumerateVariantGlyphIds } from '../font/enumerate-variants.ts';
 import { getGsubFeatures } from '../font/hb-shaper.ts';
 import { extractGlyph, extractGlyphById, inferLineCap } from '../font/parse.ts';
+import { initStraightSkeleton } from '../geometry/face-straight-skeleton.ts';
 import { runGeometryPipeline } from '../geometry/pipeline.ts';
-import type { GeometryOptions, GeometryPipelineResult } from '../geometry/types.ts';
+import { DEFAULT_GEOMETRY_OPTIONS, type GeometryOptions, type GeometryPipelineResult } from '../geometry/types.ts';
 import { computePathBBox, flattenPath } from '../processing/bezier.ts';
 import { toFontUnits } from '../processing/font-units.ts';
 import { rasterize } from '../processing/rasterize.ts';
@@ -31,7 +32,8 @@ import { isRtlChar } from '../processing/rtl.ts';
 import { skeletonize } from '../processing/skeletonize/index.ts';
 import { orderStrokes } from '../processing/stroke-order.ts';
 import { computeInverseDistanceTransform } from '../processing/width.ts';
-import type { ReferenceGlyph } from '../stroke-order/types.ts';
+import { collectReferences } from '../stroke-order/providers.ts';
+import type { ReferenceGlyph, StrokeOrderProvider } from '../stroke-order/types.ts';
 
 // ── Pipeline option schema ─────────────────────────────────────────────────
 // `PipelineOptions` and `DEFAULT_OPTIONS` are derived from this schema so the
@@ -176,6 +178,18 @@ export interface ExtractBundleInput {
   fullFontBuffer?: ArrayBuffer;
   /** Filename for the full font file (e.g. `caveat.ttf`). */
   fullFontFileName?: string;
+  /**
+   * Stroke extraction: `'raster'` (default — rasterize + skeletonize, tuned
+   * by `options`) or the experimental outline-geometry pipeline (tuned by
+   * `geometryOptions`; `options.bezierTolerance` still applies).
+   */
+  pipeline?: 'raster' | 'geometry';
+  geometryOptions?: GeometryOptions;
+  /**
+   * Stroke-order reference sources for the geometry pipeline's `'auto'` /
+   * `'dataset'` ordering. Without them it orders heuristically.
+   */
+  strokeOrderProviders?: StrokeOrderProvider[];
 }
 
 export interface TegakiBundleOutput {
@@ -183,6 +197,9 @@ export interface TegakiBundleOutput {
   glyphResults: Record<string, PipelineResult>;
   /** Variant glyph pipeline results keyed by opentype glyph id (as string). */
   glyphResultsById: Record<string, PipelineResult>;
+  /** Geometry pipeline results, by char and by variant glyph id (`pipeline: 'geometry'` only; the raster maps stay empty). */
+  geometryResults?: Record<string, GeometryPipelineResult>;
+  geometryResultsById?: Record<string, GeometryPipelineResult>;
   files: BundleFile[];
   stats: { processed: number; skipped: number; variants: number };
 }
@@ -419,7 +436,7 @@ export function toCompactStroke(s: {
   return out;
 }
 
-function toCompactGlyph(result: PipelineResult): CompactGlyph {
+function toCompactGlyph(result: Pick<PipelineResult, 'strokesFontUnits' | 'advanceWidth'>): CompactGlyph {
   const { strokesFontUnits } = result;
   const last = strokesFontUnits[strokesFontUnits.length - 1];
   const totalAnimationDuration = last ? Math.round((last.delay + last.animationDuration) * 1000) / 1000 : 0;
@@ -442,8 +459,19 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
     subset = true,
     fullFontBuffer,
     fullFontFileName,
+    pipeline = 'raster',
+    geometryOptions = DEFAULT_GEOMETRY_OPTIONS,
+    strokeOrderProviders = [],
   } = input;
   const fontInfo = await parseFont(fontBuffer, extraFontBuffers, requestedFamily);
+  const geometry = pipeline === 'geometry';
+  if (geometry && geometryOptions.extraction === 'partition' && geometryOptions.medialMethod === 'straight-skeleton') {
+    await initStraightSkeleton();
+  }
+  const geometryReferences = async (char: string): Promise<ReferenceGlyph[]> =>
+    geometryOptions.strokeOrder === 'heuristic' || strokeOrderProviders.length === 0
+      ? []
+      : await collectReferences(char, strokeOrderProviders).catch(() => []);
 
   const lineCap: LineCap = options.lineCap === 'auto' ? fontInfo.lineCap : options.lineCap;
 
@@ -471,23 +499,35 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
   let processed = 0;
   let skipped = 0;
   const glyphResults: Record<string, PipelineResult> = {};
+  const geometryResults: Record<string, GeometryPipelineResult> = {};
 
   for (const char of chars) {
-    const result = processGlyph(fontInfo, char, options);
+    let result: PipelineResult | GeometryPipelineResult | null;
+    let skeletonFontUnits: Point[][];
+    if (geometry) {
+      const geo = processGlyphGeometry(fontInfo, char, geometryOptions, options.bezierTolerance, await geometryReferences(char));
+      result = geo;
+      if (geo) geometryResults[char] = geo;
+      // The geometry pipeline has no pixel skeleton: its centerlines are the strokes.
+      skeletonFontUnits = geo?.strokesFontUnits.map((s) => s.points.map((p) => ({ x: p.x, y: p.y }))) ?? [];
+    } else {
+      const raster = processGlyph(fontInfo, char, options);
+      result = raster;
+      if (raster) glyphResults[char] = raster;
+      skeletonFontUnits =
+        raster?.polylines.map((pl) =>
+          pl.map((p) => ({
+            x: Math.round((p.x / raster.transform.scaleX + raster.transform.offsetX) * 100) / 100,
+            y: Math.round((p.y / raster.transform.scaleY + raster.transform.offsetY) * 100) / 100,
+          })),
+        ) ?? [];
+    }
     if (!result) {
       skipped++;
       continue;
     }
 
-    glyphResults[char] = result;
-
-    const { strokesFontUnits, polylines, transform } = result;
-    const skeletonFontUnits = polylines.map((pl) =>
-      pl.map((p) => ({
-        x: Math.round((p.x / transform.scaleX + transform.offsetX) * 100) / 100,
-        y: Math.round((p.y / transform.scaleY + transform.offsetY) * 100) / 100,
-      })),
-    );
+    const { strokesFontUnits } = result;
 
     const totalLength = Math.round(strokesFontUnits.reduce((sum, s) => sum + s.length, 0) * 100) / 100;
     const last = strokesFontUnits[strokesFontUnits.length - 1];
@@ -514,6 +554,7 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
   // falls back to the char-keyed map for glyphs that aren't variants. That way
   // default glyphs are never duplicated across the two maps.
   const glyphResultsById: Record<string, PipelineResult> = {};
+  const geometryResultsById: Record<string, GeometryPipelineResult> = {};
   const variantCompact: Record<string, CompactGlyph> = {};
   // Subtract any features the caller wants disabled from the font's declared
   // GSUB tags. The remaining set is enabled during variant enumeration and
@@ -527,11 +568,20 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
     const total = variantIds.size;
     let i = 0;
     for (const { gid, clusterChar } of variantIds.values()) {
-      const result = processGlyphById(fontInfo, gid, options, 0, isRtlChar(clusterChar));
+      const rtl = isRtlChar(clusterChar);
       i++;
-      if (!result) continue;
-      glyphResultsById[String(gid)] = result;
-      variantCompact[String(gid)] = toCompactGlyph(result);
+      if (geometry) {
+        // Variants carry no char, so stroke order is heuristic.
+        const result = processGlyphGeometryById(fontInfo, gid, geometryOptions, options.bezierTolerance, 0, rtl);
+        if (!result) continue;
+        geometryResultsById[String(gid)] = result;
+        variantCompact[String(gid)] = toCompactGlyph(result);
+      } else {
+        const result = processGlyphById(fontInfo, gid, options, 0, rtl);
+        if (!result) continue;
+        glyphResultsById[String(gid)] = result;
+        variantCompact[String(gid)] = toCompactGlyph(result);
+      }
       onProgress?.(`Processing variant glyph #${gid}`, total === 0 ? undefined : i / total);
     }
   }
@@ -588,8 +638,9 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
     fontOutput: output,
     glyphResults,
     glyphResultsById,
+    ...(geometry ? { geometryResults, geometryResultsById } : {}),
     files,
-    stats: { processed, skipped, variants: Object.keys(glyphResultsById).length },
+    stats: { processed, skipped, variants: Object.keys(variantCompact).length },
   };
 }
 
