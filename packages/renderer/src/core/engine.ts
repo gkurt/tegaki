@@ -72,6 +72,28 @@ function resolveTimeControl(prop: TimeControlProp): TimeControlMode[keyof TimeCo
   return prop;
 }
 
+const warnedFontFailures = new Set<string>();
+
+/**
+ * Warn (once per font URL) that a bundle's font file failed to load. The most
+ * common cause is Vite's dev pre-bundler relocating the bundle module to
+ * `node_modules/.vite/deps/`, which breaks its relative `.ttf` URL — the dev
+ * server then answers with `index.html` and the browser rejects it as a font.
+ */
+export function warnFontLoadFailure(bundle: TegakiBundle, error: unknown): void {
+  if (warnedFontFailures.has(bundle.fontUrl)) return;
+  warnedFontFailures.add(bundle.fontUrl);
+  const viteHint = bundle.fontUrl.includes('/.vite/deps/')
+    ? " This URL points into Vite's pre-bundle cache: add `optimizeDeps: { exclude: ['tegaki'] }` to your vite.config and restart the dev server."
+    : '';
+  console.warn(
+    `[tegaki] Failed to load font "${bundle.family}" from ${bundle.fontUrl}. ` +
+      `Rendering with the fallback font's layout, so spacing may be off.${viteHint} ` +
+      'See https://gkurt.com/tegaki/guides/bundlers/',
+    error,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // TegakiEngine
 // ---------------------------------------------------------------------------
@@ -779,7 +801,7 @@ export class TegakiEngine {
       this._fontReady = true;
     } else {
       const currentFont = font;
-      pending.then(() => {
+      const onSettled = () => {
         if (this._font === currentFont && !this._destroyed) {
           this._fontReady = true;
           this._recomputeTimeline();
@@ -788,6 +810,12 @@ export class TegakiEngine {
           this._evaluatePlayback();
           this._render();
         }
+      };
+      // A failed font load must not leave the canvas blank forever: strokes come
+      // from the bundle's glyph data, so render anyway and surface the cause.
+      pending.then(onSettled, (error) => {
+        warnFontLoadFailure(currentFont, error);
+        onSettled();
       });
     }
 
@@ -810,7 +838,7 @@ export class TegakiEngine {
 
     this._shaperReady = false;
     const currentFont = this._font;
-    shaperPromise.then((shaper) => {
+    const onSettled = (shaper: BundleShaper | null) => {
       if (this._font === currentFont && this._shaperEnabled && !this._destroyed) {
         this._shaper = shaper;
         this._shaperReady = true;
@@ -819,6 +847,12 @@ export class TegakiEngine {
         this._evaluatePlayback();
         this._render();
       }
+    };
+    // A rejected shaper (e.g. the font fetch failed) falls back to unshaped
+    // rendering instead of stalling playback on `_shaperReady`.
+    shaperPromise.then(onSettled, (error) => {
+      console.warn(`[tegaki] Shaper failed for "${currentFont.family}"; rendering without shaping.`, error);
+      onSettled(null);
     });
   }
 

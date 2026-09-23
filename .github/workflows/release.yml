@@ -16,6 +16,9 @@ jobs:
   release:
     name: Version & publish
     runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.tegami.outputs.published }}
+      version: ${{ steps.tegami.outputs.version }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -34,7 +37,39 @@ jobs:
       # from the committed .tegami/publish-lock.yaml. Bun runs the renderer's
       # prepack (build + asset copy) and packs the tarball; npm publish ships it
       # with provenance via the id-token permission.
+      #
+      # The tag diff tells the smoke job below whether this run published or just
+      # opened a Version PR, and at which version. Tegami tags tegaki@<version>
+      # only when it publishes, so a tag appearing across this step is the
+      # signal; testing whether the tag merely *exists* would read true on every
+      # later push to main too.
       - name: Version & publish
-        run: bun run tegami ci
+        id: tegami
+        run: |
+          set -euo pipefail
+          before=$(git tag -l 'tegaki@*' | sort)
+          bun run tegami ci
+          after=$(git tag -l 'tegaki@*' | sort)
+          new=$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | tail -1)
+          if [ -n "$new" ]; then
+            echo 'published=true' >> "$GITHUB_OUTPUT"
+            echo "version=${new#tegaki@}" >> "$GITHUB_OUTPUT"
+          else
+            echo 'published=false' >> "$GITHUB_OUTPUT"
+          fi
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  # Smoke-test the tarball that just went to npm. `uses:` rather than letting
+  # release-smoke.yml's own `release: published` trigger fire -- it cannot, since
+  # Tegami creates that release with GITHUB_TOKEN. A reusable-workflow call runs
+  # inside this run, so the rule never applies.
+  smoke:
+    name: Release smoke
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-smoke.yml
+    with:
+      version: ${{ needs.release.outputs.version }}

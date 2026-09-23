@@ -15,7 +15,7 @@ Most bundlers handle this transparently. The note below covers Vite, where two `
 
 ## Vite
 
-In **dev mode**, Vite's pre-bundler (esbuild) processes Tegaki's JS but does not propagate the `with { type: 'url' }` asset references — the runtime fetch for `<family>.ttf` then 404s from `/node_modules/.vite/deps/`. Excluding `tegaki` from pre-bundling routes the imports through Vite's normal asset pipeline, where the URL transform works correctly.
+In **dev mode on Vite 7 and earlier**, the esbuild pre-bundler copies Tegaki's font bundle modules into `/node_modules/.vite/deps/` but leaves the `.ttf` files behind, so the bundle's relative font URL now points to a file that isn't there. The dev server answers that request with your `index.html`, and the browser rejects it as a font. Excluding `tegaki` from pre-bundling sends the imports through Vite's normal asset pipeline, where the URLs resolve correctly. Vite 8's Rolldown-based pre-bundler rewrites these URLs itself, so it doesn't need this setting (though adding it does no harm).
 
 Add to `vite.config.ts`:
 
@@ -38,7 +38,7 @@ Production builds (Rollup) handle Tegaki out of the box; this only affects `vite
 
 | Symptom in the browser | What's happening | Fix |
 | --- | --- | --- |
-| `GET /node_modules/.vite/deps/<family>.ttf 404` plus `NetworkError: A network error occurred` from `_loadFont` | The `.ttf` import lost its asset reference during pre-bundling. | `optimizeDeps.exclude: ['tegaki']` |
+| Text is invisible but can be selected, or only appears with `showOverlay`. Console shows `Failed to decode downloaded font: …/node_modules/.vite/deps/<family>.ttf` / `OTS parsing error: invalid sfntVersion`, a `NetworkError: A network error occurred` or a `[tegaki] Failed to load font` warning. | The `.ttf` URL broke during pre-bundling, so the dev server returns HTML instead of the font. Older `tegaki` versions stop drawing at this point; newer ones keep drawing with the fallback font's spacing. | `optimizeDeps.exclude: ['tegaki']` |
 
 ## Other bundlers
 

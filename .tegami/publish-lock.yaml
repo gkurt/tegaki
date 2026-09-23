@@ -1,41 +1,41 @@
 core:changelogs:
-  - content: "---\npackages:\n  tegaki:\n    type: patch\n---\n\n## Ship the `tegaki/fonts/atma` build output\n\nThe Atma (Bengali) bundle was wired into the package `exports` map but never added to the renderer's `tsdown` build config, so `dist/fonts/atma/bundle.mjs` was missing from the published package and `import 'tegaki/fonts/atma'` failed to resolve. Registered the bundle in both the build `entry` map and the `.ttf` copy step so the compiled output ships alongside the other font bundles.\n"
-    filename: atma-build-entry.md
+  - content: "---\npackages:\n  tegaki:\n    type: patch\n---\n\n## Keep rendering when a bundle's font file fails to load\n\nWhen a bundle's `.ttf` failed to load, the engine waited on the rejected promise forever. The canvas stayed blank, with only an unhandled `NetworkError` in the console. The usual trigger is Vite's dev pre-bundler (Vite ≤ 7): it moves the bundle into `node_modules/.vite/deps/`, which breaks the font's relative URL. The engine now logs one warning per font that names the fix (`optimizeDeps: { exclude: ['tegaki'] }`) and links to the bundler guide. It then keeps rendering the handwriting, using the fallback font's layout. A shaper whose promise rejects now falls back to unshaped rendering, so it can no longer stall playback.\n"
+    filename: font-load-failure-fallback.md
     v: 0.0.0
 core:packages:
   - id: npm:@tegaki/root
     updated: true
-  - id: npm:@tegaki/example-nuxt
-    updated: true
-  - changelogIds:
-      - atma-build-entry.md
-    id: npm:tegaki
-    updated: true
-  - id: npm:@tegaki/example-editframe
-    updated: true
-  - id: npm:@tegaki/example-remotion
-    updated: true
-  - id: npm:@tegaki/example-vite
+  - id: npm:@tegaki/example-e2e
     updated: true
   - id: npm:hyperframes
     updated: true
+  - id: npm:@tegaki/example-nuxt
+    updated: true
   - id: npm:tegaki-generator
     updated: true
-  - id: npm:@tegaki/example-next
+  - changelogIds:
+      - font-load-failure-fallback.md
+    id: npm:tegaki
     updated: true
   - id: npm:@tegaki/website
     updated: true
-  - id: npm:@tegaki/example-e2e
+  - id: npm:@tegaki/example-remotion
+    updated: true
+  - id: npm:@tegaki/example-next
+    updated: true
+  - id: npm:@tegaki/example-vite
+    updated: true
+  - id: npm:@tegaki/example-editframe
     updated: true
 npm:packages:
   - id: npm:@tegaki/root
-  - id: npm:@tegaki/example-nuxt
-  - id: npm:tegaki
-  - id: npm:@tegaki/example-editframe
-  - id: npm:@tegaki/example-remotion
-  - id: npm:@tegaki/example-vite
-  - id: npm:hyperframes
-  - id: npm:tegaki-generator
-  - id: npm:@tegaki/example-next
-  - id: npm:@tegaki/website
   - id: npm:@tegaki/example-e2e
+  - id: npm:hyperframes
+  - id: npm:@tegaki/example-nuxt
+  - id: npm:tegaki-generator
+  - id: npm:tegaki
+  - id: npm:@tegaki/website
+  - id: npm:@tegaki/example-remotion
+  - id: npm:@tegaki/example-next
+  - id: npm:@tegaki/example-vite
+  - id: npm:@tegaki/example-editframe

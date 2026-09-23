@@ -4,13 +4,27 @@ name: Release smoke (published package)
 # each example and verify they typecheck, build, and render. This catches
 # packaging regressions the in-repo `examples` job can't — it tests the
 # workspace-linked package, not what ships to npm.
+#
+# Driven as a reusable workflow from release.yml, right after Tegami publishes.
+# NOT driven by Tegami's own GitHub release: Tegami creates it with GITHUB_TOKEN,
+# and events from that token never start a new workflow run (workflow_dispatch
+# and repository_dispatch are the only exceptions). The `release` trigger below
+# therefore fired for none of the first five releases -- it is kept only for
+# releases published by hand.
 on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Published tegaki version to test.'
+        type: string
+        required: true
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       version:
         description: 'Published tegaki version (or dist-tag) to test. Defaults to npm latest.'
+        type: string
         required: false
         default: 'latest'
 
@@ -35,7 +49,10 @@ jobs:
               *) echo "Release tag '$TAG' is not a tegaki release; skipping." ; echo "skip=true" >> "$GITHUB_OUTPUT" ;;
             esac
           else
-            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+            # `inputs`, not `github.event.inputs`: this covers the workflow_call
+            # path too, where the event is the caller's `push` and event.inputs
+            # is empty.
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           fi
 
       - run: apt-get update && apt-get install -y unzip curl
