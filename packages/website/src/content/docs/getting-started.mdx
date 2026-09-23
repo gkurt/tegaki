@@ -158,6 +158,10 @@ Tegaki generates stroke data from any font and renders beautiful handwriting ani
      </TabItem>
    </Tabs>
 
+   :::caution[Using Vite 7 or earlier?]
+   Vite's dev pre-bundler breaks the font bundle's `.ttf` URL, so the text is laid out but never draws. Add `optimizeDeps: { exclude: ['tegaki'] }` to `vite.config.ts` and restart the dev server. See [Bundler Setup](/tegaki/guides/bundlers/#vite).
+   :::
+
 </Steps>
 
 ## What's next?

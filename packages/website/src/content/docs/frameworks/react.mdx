@@ -33,6 +33,10 @@ function App() {
 
 <LiveDemo client:load text="Hello World" />
 
+:::caution[Using Vite 7 or earlier?]
+If the text doesn't draw in `vite dev` (you can select it, or see it with `showOverlay`, but nothing animates), add `optimizeDeps: { exclude: ['tegaki'] }` to `vite.config.ts` and restart the dev server. See [Bundler Setup](/tegaki/guides/bundlers/#vite).
+:::
+
 ## Controlled time
 
 Drive the animation from external state:
