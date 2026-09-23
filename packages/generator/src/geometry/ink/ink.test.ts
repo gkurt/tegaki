@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { Point } from 'tegaki';
 import { buildContours } from '../contours.ts';
+import { pointInRegion } from '../primitives.ts';
 import type { AxisPoint } from '../types.ts';
 import { type ClusterSlot, solvePairing } from './cover.ts';
 import { extractInkRegion } from './extract.ts';
 import { buildInkGraph, pruneSpurs, withFlicks } from './graph.ts';
 import { buildInkMesh, trianglePoints } from './mesh.ts';
+import { carryNibs, inNib } from './nib.ts';
 import { SegmentIndex } from './spatial.ts';
 
 const STEP = 6;
@@ -48,6 +50,15 @@ function tee(): Point[] {
     { x: 170, y: 60 },
     { x: 0, y: 60 },
   ];
+}
+
+/** A 400×60 bar with a small round ear (half-ellipse, 32 wide, `h` high) on its top edge. */
+function barWithEar(h: number): Point[] {
+  const ear = Array.from({ length: 13 }, (_, i) => {
+    const a = Math.PI - (i / 12) * Math.PI;
+    return { x: 200 + 16 * Math.cos(a), y: -h * Math.sin(a) };
+  });
+  return [{ x: 0, y: 0 }, ...ear, { x: 400, y: 0 }, { x: 400, y: 60 }, { x: 0, y: 60 }];
 }
 
 function extract(...polygons: Point[][]) {
@@ -178,5 +189,78 @@ describe('extractInkRegion', () => {
     expect(r.strokes[0]!.isLoop).toBe(true);
     // Square outer corners lie beyond a round pen's reach — a known limit.
     expect(covered(r)).toBeGreaterThan(0.97);
+  });
+});
+
+describe('nibs', () => {
+  test('inNib tests the rotated, offset ellipse', () => {
+    const at = { x: 10, y: 10 };
+    // 40 long along +y (angle 90°), 10 across, centered 5 below the point.
+    const nib = { dx: 0, dy: 5, major: 40, minor: 10, angle: Math.PI / 2 };
+    expect(inNib({ x: 10, y: 34 }, at, nib)).toBe(true);
+    expect(inNib({ x: 10, y: 36 }, at, nib)).toBe(false);
+    expect(inNib({ x: 14, y: 15 }, at, nib)).toBe(true);
+    expect(inNib({ x: 16, y: 15 }, at, nib)).toBe(false);
+  });
+
+  test('a small ear on a stroke gets a nib pointing into it instead of a flick', () => {
+    const r = extract(barWithEar(12));
+    expect(r.strokes.length).toBe(1);
+    const pts = r.strokes[0]!.points;
+    const earNib = pts.find((p) => p.nib && Math.abs(p.x - 200) < 10);
+    expect(earNib).toBeDefined();
+    // Major axis points up into the ear (y-down frame: angle ≈ -90°).
+    expect(Math.abs(Math.sin(earNib!.nib!.angle) + 1)).toBeLessThan(0.1);
+    // No flick excursion (flick tips carry width 0) is left at the ear.
+    expect(pts.some((p) => p.width < 1 && Math.abs(p.x - 200) < 20)).toBe(false);
+  });
+
+  test('nibs stay inside the ink', () => {
+    const polygon = barWithEar(12);
+    const contours = buildContours([polygon]);
+    const outline = new SegmentIndex(
+      polygon.map((p, i) => [p, polygon[(i + 1) % polygon.length]!] as [Point, Point]),
+      STEP * 4,
+    );
+    const nibs = extract(polygon).strokes.flatMap((s) => s.points.filter((p) => p.nib));
+    expect(nibs.length).toBeGreaterThan(0);
+    for (const p of nibs) {
+      const { dx, dy, major, minor, angle } = p.nib!;
+      for (let k = 0; k < 32; k++) {
+        const phi = (k / 32) * Math.PI * 2;
+        const lx = (major / 2) * Math.cos(phi);
+        const ly = (minor / 2) * Math.sin(phi);
+        const q = { x: p.x + dx + lx * Math.cos(angle) - ly * Math.sin(angle), y: p.y + dy + lx * Math.sin(angle) + ly * Math.cos(angle) };
+        // The fit allows its outline a quarter sample step past the ink's.
+        expect(pointInRegion(q, contours) || outline.nearest(q) < STEP * 0.3).toBe(true);
+      }
+    }
+  });
+
+  test('carryNibs keeps each stamp at the same place when strokes are re-cut', () => {
+    const nib = { dx: 3, dy: -4, major: 20, minor: 8, angle: 0.5 };
+    const before: { points: AxisPoint[] }[] = [{ points: [0, 50, 100].map((x) => ({ x, y: 0, width: 10, ...(x === 50 ? { nib } : {}) })) }];
+    // Re-grouped: split at x = 40, and the nib's point simplified away.
+    const after: { points: AxisPoint[] }[] = [
+      {
+        points: [
+          { x: 0, y: 0, width: 10 },
+          { x: 40, y: 0, width: 10 },
+        ],
+      },
+      {
+        points: [
+          { x: 40, y: 0, width: 10 },
+          { x: 100, y: 0, width: 10 },
+        ],
+      },
+    ];
+    const carried = carryNibs(before, after);
+    const stamped = carried.flatMap((s) => s.points.filter((p) => p.nib));
+    expect(stamped.length).toBe(1);
+    const p = stamped[0]!;
+    expect(p.x + p.nib!.dx).toBeCloseTo(53);
+    expect(p.y + p.nib!.dy).toBeCloseTo(-4);
+    expect(after[1]!.points.length).toBe(2); // inputs are not mutated
   });
 });

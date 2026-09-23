@@ -81,9 +81,30 @@ function GeometryAnimationView({ result, time }: { result: GeometryPipelineResul
         const localTime = time - stroke.delay;
         if (localTime < 0) return null;
 
+        // Nibs (elliptic ink stamps) appear as the pen reaches their point.
+        const reached = stroke.animationDuration > 0 ? Math.min(localTime / stroke.animationDuration, 1) : 1;
+        const nibs = stroke.points.map((p, j) =>
+          p.nib && p.t <= reached ? (
+            <ellipse
+              key={`n${j}`}
+              cx={p.x + p.nib.dx}
+              cy={p.y + p.nib.dy}
+              rx={p.nib.major / 2}
+              ry={p.nib.minor / 2}
+              transform={`rotate(${(p.nib.angle * 180) / Math.PI} ${p.x + p.nib.dx} ${p.y + p.nib.dy})`}
+              fill={color}
+            />
+          ) : null,
+        );
+
         if (stroke.points.length === 1) {
           const p = stroke.points[0]!;
-          return <circle key={i} cx={p.x} cy={p.y} r={Math.max(avgWidth / 2, 1)} fill={color} />;
+          return (
+            <g key={i}>
+              <circle cx={p.x} cy={p.y} r={Math.max(avgWidth / 2, 1)} fill={color} />
+              {nibs}
+            </g>
+          );
         }
 
         const d = stroke.points.map((p, j) => `${j === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
@@ -96,17 +117,19 @@ function GeometryAnimationView({ result, time }: { result: GeometryPipelineResul
         const progress = stroke.animationDuration > 0 ? Math.min(localTime / stroke.animationDuration, 1) : 1;
         const dashLen = pathLen + avgWidth;
         return (
-          <path
-            key={i}
-            d={d}
-            fill="none"
-            stroke={color}
-            strokeWidth={Math.max(avgWidth, 1)}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeDasharray={dashLen}
-            strokeDashoffset={dashLen * (1 - progress)}
-          />
+          <g key={i}>
+            <path
+              d={d}
+              fill="none"
+              stroke={color}
+              strokeWidth={Math.max(avgWidth, 1)}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={dashLen}
+              strokeDashoffset={dashLen * (1 - progress)}
+            />
+            {nibs}
+          </g>
         );
       })}
     </svg>

@@ -2,7 +2,7 @@
 // coordinates (y-down), matching the raster pipeline's SVG stages so the Studio
 // can display either interchangeably.
 
-import type { Point } from 'tegaki';
+import type { Nib, Point } from 'tegaki';
 import { STROKE_COLORS } from '../processing/visualize.ts';
 import { add, scale } from './primitives.ts';
 import type { GeometryPipelineResult } from './types.ts';
@@ -163,6 +163,20 @@ function renderSegments(result: GeometryPipelineResult): string {
   return svgWrap(vb, parts.join('\n'));
 }
 
+/** Nib stamps (ink-graph extraction): the ellipse, outlined so it reads against the ribbon. */
+function nibEllipses(points: { x: number; y: number; nib?: Nib }[], color: string, u: number): string[] {
+  const out: string[] = [];
+  for (const p of points) {
+    if (!p.nib) continue;
+    const cx = (p.x + p.nib.dx).toFixed(2);
+    const cy = (p.y + p.nib.dy).toFixed(2);
+    out.push(
+      `  <ellipse cx="${cx}" cy="${cy}" rx="${(p.nib.major / 2).toFixed(2)}" ry="${(p.nib.minor / 2).toFixed(2)}" transform="rotate(${((p.nib.angle * 180) / Math.PI).toFixed(1)} ${cx} ${cy})" fill="${color}" fill-opacity="0.35" stroke="${color}" stroke-width="${(u * 0.9).toFixed(2)}"/>`,
+    );
+  }
+  return out;
+}
+
 function renderStrokes(result: GeometryPipelineResult): string {
   const vb = viewBox(result);
   const parts = [outlinePaths(result, vb.u, 'rgba(0,0,0,0.03)'), partitionEdges(result, vb.u)];
@@ -172,6 +186,7 @@ function renderStrokes(result: GeometryPipelineResult): string {
     if (stroke.points.length === 1) {
       const p = stroke.points[0]!;
       parts.push(`  <circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${Math.max(meanW / 2, vb.u).toFixed(2)}" fill="${color}"/>`);
+      parts.push(...nibEllipses(stroke.points, color, vb.u));
       return;
     }
     const d = polyD(stroke.points);
@@ -181,6 +196,7 @@ function renderStrokes(result: GeometryPipelineResult): string {
     parts.push(
       `  <path d="${d}" fill="none" stroke="${color}" stroke-width="${(vb.u * 0.9).toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"/>`,
     );
+    parts.push(...nibEllipses(stroke.points, color, vb.u));
     const start = stroke.points[0]!;
     parts.push(`  <circle cx="${start.x.toFixed(2)}" cy="${start.y.toFixed(2)}" r="${(vb.u * 8).toFixed(2)}" fill="${color}"/>`);
     parts.push(

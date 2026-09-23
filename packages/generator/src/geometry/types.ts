@@ -12,7 +12,7 @@
 // is purely algebraic (positive signed area = region on the algebraic left),
 // so the y-down convention never needs special-casing.
 
-import type { BBox, Point, Stroke } from 'tegaki';
+import type { BBox, Nib, Point, Stroke } from 'tegaki';
 import type { RegisteredReference } from '../stroke-order/types.ts';
 
 /** A closed outline polygon (no duplicate closing point). */
@@ -91,6 +91,8 @@ export interface Face {
 export interface AxisPoint extends Point {
   /** Local stroke width (full diameter) in font units. */
   width: number;
+  /** Elliptic ink stamp left at this point (ink-graph extraction). */
+  nib?: Nib;
 }
 
 /** Reference from a segment axis end to the cut it terminates on. */

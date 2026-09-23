@@ -175,7 +175,17 @@ export function orderAndTimeStrokes(strokes: GeoStroke[], params: OrderTimingPar
     let cum = 0;
     const timed: TimedPoint[] = pts.map((p, i) => {
       if (i > 0) cum += dist(pts[i - 1]!, p);
-      return { x: round2(p.x), y: round2(p.y), t: round3(totalLen > 0 ? cum / totalLen : 0), width: round2(p.width) };
+      const timedPoint: TimedPoint = {
+        x: round2(p.x),
+        y: round2(p.y),
+        t: round3(totalLen > 0 ? cum / totalLen : 0),
+        width: round2(p.width),
+      };
+      if (p.nib) {
+        const { dx, dy, major, minor, angle } = p.nib;
+        timedPoint.nib = { dx: round2(dx), dy: round2(dy), major: round2(major), minor: round2(minor), angle: round3(angle) };
+      }
+      return timedPoint;
     });
     const length = round2(totalLen);
     const animationDuration = Math.max(round3(length / drawingSpeed), 0.001);

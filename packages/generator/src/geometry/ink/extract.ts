@@ -13,12 +13,13 @@
 // and reported, never silently dropped.
 
 import type { Point } from 'tegaki';
-import { dist, polygonCentroid } from '../primitives.ts';
+import { dist, pointInRegion, polygonCentroid } from '../primitives.ts';
 import { rdpSimplify } from '../strokes.ts';
 import type { AxisPoint, Contour, Face, GeoStroke, SegmentInfo } from '../types.ts';
 import { coverInkGraph, type JunctionCluster } from './cover.ts';
 import { buildInkGraph, extractBranches, pruneSpurs } from './graph.ts';
 import { buildInkMesh, trianglePoints } from './mesh.ts';
+import { fitNibs, inNib } from './nib.ts';
 import { SegmentIndex } from './spatial.ts';
 
 export interface InkExtractionOptions {
@@ -58,6 +59,7 @@ function trimRedundantEnd(points: AxisPoint[], tolerance: number): AxisPoint[] {
   const window = 12;
   while (out.length > 2) {
     const p = out[0]!;
+    if (p.nib) break; // a nib reaches ink its round disk test cannot see
     let inside = false;
     for (let j = 1; j < Math.min(out.length, window + 1); j++) {
       const q = out[j]!;
@@ -88,6 +90,7 @@ function smooth(points: AxisPoint[], passes: number, isLoop: boolean): AxisPoint
     for (let i = 0; i < n; i++) {
       const edge = i === 0 || i === n - 1;
       if (edge && !isLoop) continue;
+      if (cur[i]!.nib) continue; // the nib was fitted at exactly this position
       const a = cur[(i - 1 + n) % n]!;
       const b = cur[(i + 1) % n]!;
       // Hairpins (a flick's tip, a retrace's turn) stay put — averaging
@@ -105,9 +108,27 @@ function smooth(points: AxisPoint[], passes: number, isLoop: boolean): AxisPoint
   return cur;
 }
 
-/** True when `p` lies within some stroke segment's swept pen disk (plus `tolerance`). */
+/** Width-aware RDP that keeps every nib point (each nib was fitted relative to its exact position). */
+function simplifyKeepingNibs(points: AxisPoint[], epsilon: number): AxisPoint[] {
+  const out: AxisPoint[] = [];
+  let start = 0;
+  for (let i = 1; i < points.length; i++) {
+    if (i < points.length - 1 && !points[i]!.nib) continue;
+    const piece = rdpSimplify(points.slice(start, i + 1), epsilon);
+    out.push(...(out.length > 0 ? piece.slice(1) : piece));
+    start = i;
+  }
+  return out.length > 0 ? out : points;
+}
+
+/**
+ * True when `p` lies within the ink some stroke paints (plus `tolerance`):
+ * its round pen swept along the points (width interpolated), plus the nib
+ * stamped at each nib point.
+ */
 export function paintedBy(p: Point, strokes: AxisPoint[][], tolerance: number): boolean {
   for (const pts of strokes) {
+    for (const q of pts) if (q.nib && inNib(p, q, q.nib, tolerance)) return true;
     if (pts.length === 1) {
       if (dist(p, pts[0]!) <= pts[0]!.width / 2 + tolerance) return true;
       continue;
@@ -145,7 +166,10 @@ export function extractInkRegion(contours: Contour[], options: InkExtractionOpti
   const graph = buildInkGraph(mesh, boundary);
   pruneSpurs(graph, options.spurTolerance, step * 2.5);
   // Flicks poking out less than a sample step are sampling noise, not ink.
-  const rawBranches = extractBranches(graph, step);
+  const minPoke = step;
+  const inkAt = (p: Point) => pointInRegion(p, contours) || boundary.nearest(p) < step * 0.25;
+  fitNibs(graph, inkAt, step, minPoke);
+  const rawBranches = extractBranches(graph, minPoke);
   const cover = coverInkGraph(graph, rawBranches, contours, {
     junctionReach: options.junctionReach,
     continuationMinCos: options.continuationMinCos,
@@ -161,7 +185,8 @@ export function extractInkRegion(contours: Contour[], options: InkExtractionOpti
     pts = smooth(pts, 2, s.isLoop);
     // Width-aware RDP only: simplifyStroke's pinch prune targets partition
     // skeleton waists and would drop flick tips (width 0 by construction).
-    return { ...s, points: pts.length > 2 ? rdpSimplify(pts, options.simplifyEpsilon) : pts };
+    if (pts.length > 2) pts = simplifyKeepingNibs(pts, options.simplifyEpsilon);
+    return { ...s, points: pts };
   });
 
   // ── Coverage audit: which triangles does the final pen leave unpainted? ─

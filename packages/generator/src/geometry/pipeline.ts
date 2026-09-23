@@ -21,6 +21,7 @@ import { type InkDisk, polylineInkDisks } from './face-medial.ts';
 import { mergeSegmentFaces } from './face-merge.ts';
 import { straightSkeletonFaceAxes, straightSkeletonStrokeAxis } from './face-straight-skeleton.ts';
 import { extractInkRegion } from './ink/extract.ts';
+import { carryNibs } from './ink/nib.ts';
 import { extendUnpairedEnds, routeJunctionPaths } from './junction-routing.ts';
 import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { type OrderPlan, orderAndTimeStrokes } from './ordering.ts';
@@ -566,7 +567,10 @@ export function runGeometryPipeline(
             maxMeanCost: AUTO_MAX_MEAN_COST,
           });
           if (proposal) {
-            const candidate = proposal.strokes.map((gs) => ({ ...gs, points: simplifyStroke(gs.points, simplifyEps) }));
+            const candidate = carryNibs(
+              geoStrokes,
+              proposal.strokes.map((gs) => ({ ...gs, points: simplifyStroke(gs.points, simplifyEps) })),
+            );
             // Lifted extras sit at the END of the proposal and have no
             // reference stroke by design — only the chains face the match;
             // the plan appends unmatched strokes after the prescribed order.

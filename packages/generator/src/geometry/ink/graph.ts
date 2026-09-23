@@ -16,7 +16,7 @@
 // center stays on the centerline, so the absorbed ink remains covered by
 // construction. Nothing is removed for any other reason.
 
-import type { Point } from 'tegaki';
+import type { Nib, Point } from 'tegaki';
 import { dist } from '../primitives.ts';
 import type { AxisPoint } from '../types.ts';
 import { type InkMesh, sharedEdgeMidpoint, triangleKind, trianglePoints } from './mesh.ts';
@@ -47,6 +47,8 @@ export interface InkGraph {
    * flick keeps the ear's ink reachable (a tapered tip, the point of a V).
    */
   flicks: Flick[][];
+  /** Alive triangle → the elliptic nib stamped at its center (see nib.ts), or null. */
+  nibs: (Nib | null)[];
 }
 
 export interface Flick {
@@ -190,6 +192,7 @@ export function buildInkGraph(mesh: InkMesh, boundary: SegmentIndex): InkGraph {
     kind,
     absorbed: Array.from({ length: n }, () => []),
     flicks: Array.from({ length: n }, () => []),
+    nibs: new Array<Nib | null>(n).fill(null),
   };
 }
 
@@ -330,7 +333,11 @@ function axisThrough(
     axis.push({ x: p.x, y: p.y, width: w });
     axisTri.push(t);
   };
-  const pushCenter = (t: number) => push(g.center[t]!, t, 2 * g.radius[t]!);
+  const pushCenter = (t: number) => {
+    push(g.center[t]!, t, 2 * g.radius[t]!);
+    const nib = g.nibs[t];
+    if (nib) axis[axis.length - 1]!.nib = { ...nib };
+  };
   const endFlick = (t: number): AxisPoint[] | null => {
     if (g.deg[t] !== 1 || g.radius[t]! <= 0) return null;
     const visible = visibleFlicks(g, t, minPoke);

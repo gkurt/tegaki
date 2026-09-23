@@ -18,9 +18,28 @@ export interface Point {
   y: number;
 }
 
+/**
+ * An elliptic ink stamp the pen leaves at a point: ink beyond the round pen's
+ * reach (the point of a V, a pointed terminal, a bulge on a shoulder), drawn
+ * as the pen passes the point — the pen pressed and turned for an instant.
+ * Coordinates share the glyph's units and frame (y-down).
+ */
+export interface Nib {
+  /** Ellipse center relative to the point. */
+  dx: number;
+  dy: number;
+  /** Full diameter along `angle`. */
+  major: number;
+  /** Full diameter across `angle`. */
+  minor: number;
+  /** Direction of the major axis, radians. */
+  angle: number;
+}
+
 export interface TimedPoint extends Point {
   t: number;
   width: number;
+  nib?: Nib;
 }
 
 export interface BBox {
