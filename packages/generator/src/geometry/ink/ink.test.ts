@@ -250,9 +250,36 @@ describe('findSerifArms', () => {
     expect(findSerifArms([stem, arm(-1, { tip: { x: -300, y: 10 } }), arm(1, { tip: { x: 300, y: 10 } })], center, 100)).toEqual([]);
   });
 
-  test("a serif hanging off a corner (an E's foot) is absorbed", () => {
+  test('a one-sided serif on a lone stem is absorbed', () => {
+    expect(findSerifArms([stem, arm(-1)], center, 100)).toEqual([1]);
+  });
+
+  test('a slanted stem meeting its slab at an angle still carries a serif (V, X, K)', () => {
+    const slanted: SerifSlotShape = { ...stem, tip: { x: 250, y: -433 }, out: { x: 0.5, y: -Math.sqrt(3) / 2 } };
+    expect(findSerifArms([slanted, arm(-1), arm(1)], center, 100)).toEqual([1, 2]);
+  });
+
+  test("a splayed slab (arms 140° apart, a lowercase x's foot) is still a slab", () => {
+    const a = (Math.PI * 20) / 180;
+    const splayed = [arm(-1, { out: { x: -Math.cos(a), y: Math.sin(a) } }), arm(1, { out: { x: Math.cos(a), y: Math.sin(a) } })];
+    expect(findSerifArms([stem, ...splayed], center, 100)).toEqual([1, 2]);
+  });
+
+  test("a hairline stem's serif is measured against the stroke weight, not the hairline", () => {
+    const hairline: SerifSlotShape = { ...stem, width: 40, medianWidth: 40 };
+    const long = (side: -1 | 1) => arm(side, { width: 35, medianWidth: 35, tip: { x: side * 200, y: 10 } });
+    expect(findSerifArms([hairline, long(-1), long(1)], center, 100)).toEqual([1, 2]);
+  });
+
+  test('an arm running straight on from a bar is left to the pairing (the foot of an E)', () => {
     const bar: SerifSlotShape = { dead: false, width: 60, medianWidth: 60, tip: { x: 400, y: 0 }, out: { x: 1, y: 0 } };
-    expect(findSerifArms([stem, bar, arm(-1)], center, 100)).toEqual([2]);
+    expect(findSerifArms([stem, bar, arm(-1)], center, 100)).toEqual([]);
+  });
+
+  test("an arm at an acute apex is that V's point, not a serif (the top of an M)", () => {
+    const a = (28 * Math.PI) / 180;
+    const diagonal: SerifSlotShape = { ...stem, tip: { x: 230, y: -440 }, out: { x: Math.sin(a), y: -Math.cos(a) } };
+    expect(findSerifArms([stem, diagonal, arm(-1)], center, 100)).toEqual([]);
   });
 });
 
@@ -264,6 +291,25 @@ describe('serif absorption', () => {
     // The sweep reaches both slab ends.
     expect(Math.min(...xs)).toBeLessThan(20);
     expect(Math.max(...xs)).toBeGreaterThan(280);
+    expect(1 - r.uncoveredArea / r.totalArea).toBeGreaterThan(0.97);
+  });
+
+  test('a slanted serifed stroke (a V or X leg) is one stroke too', () => {
+    const r = extract([
+      { x: 130, y: 0 },
+      { x: 430, y: 0 },
+      { x: 430, y: 45 },
+      { x: 300, y: 45 },
+      { x: 100, y: 555 },
+      { x: 230, y: 555 },
+      { x: 230, y: 600 },
+      { x: -130, y: 600 },
+      { x: -130, y: 555 },
+      { x: 0, y: 555 },
+      { x: 200, y: 45 },
+      { x: 130, y: 45 },
+    ]);
+    expect(r.strokes.length).toBe(1);
     expect(1 - r.uncoveredArea / r.totalArea).toBeGreaterThan(0.97);
   });
 

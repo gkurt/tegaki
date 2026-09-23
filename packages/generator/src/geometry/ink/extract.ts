@@ -77,12 +77,12 @@ function trimRedundantEnd(points: AxisPoint[], tolerance: number): AxisPoint[] {
 }
 
 /** Light positional smoothing (endpoints fixed): the chordal axis zig-zags by a fraction of a sample step. */
-function smooth(points: AxisPoint[], passes: number, isLoop: boolean): AxisPoint[] {
+function smooth(points: AxisPoint[], passes: number, isLoop: boolean, clearance: (p: Point) => number): AxisPoint[] {
   // A loop carries a duplicated seam point; smooth the open ring cyclically
   // and re-close EXACTLY — ordering rotates closed loops only when the seam
   // matches, and otherwise rotates them as open polylines, dropping a span.
   if (isLoop && points.length > 3 && dist(points[0]!, points[points.length - 1]!) < 1e-6) {
-    const ring = smooth(points.slice(0, -1), passes, true);
+    const ring = smooth(points.slice(0, -1), passes, true, clearance);
     return [...ring, { ...ring[0]! }];
   }
   let cur = points;
@@ -107,22 +107,37 @@ function smooth(points: AxisPoint[], passes: number, isLoop: boolean): AxisPoint
       if (inX * outX + inY * outY < -0.5 * Math.hypot(inX, inY) * Math.hypot(outX, outY)) continue;
       nxt[i]!.x = (a.x + 2 * cur[i]!.x + b.x) / 4;
       nxt[i]!.y = (a.y + 2 * cur[i]!.y + b.y) / 4;
+      // Smoothing must not paint past the outline (a junction-wide point
+      // where a serif sweep turns would): a moved disk keeps its width where
+      // the ink clears it, and otherwise shrinks — at most by its move, the
+      // radius at which the disk stays inside the one it was.
+      const w = cur[i]!.width;
+      nxt[i]!.width = Math.min(w, Math.max(2 * clearance(nxt[i]!), w - 2 * dist(nxt[i]!, cur[i]!)));
     }
     cur = nxt;
   }
   return cur;
 }
 
-/** Width overshoot spills ink past the outline: allow a quarter of the positional tolerance. */
+/** Simplifying may widen the pen past a point's own width by a quarter of the positional tolerance. */
 const WIDTH_OVERSHOOT_WEIGHT = 4;
+/**
+ * ... and paint past the outline by half of it. Stricter halves the spill
+ * again but keeps ~20% more points (Rubik, EB Garamond).
+ */
+const SPILL_WEIGHT = 2;
 
 /** Width-aware RDP that keeps every nib point (each nib was fitted relative to its exact position). */
-function simplifyKeepingNibs(points: AxisPoint[], epsilon: number): AxisPoint[] {
+function simplifyKeepingNibs(points: AxisPoint[], epsilon: number, clearance: (p: Point) => number): AxisPoint[] {
   const out: AxisPoint[] = [];
   let start = 0;
   for (let i = 1; i < points.length; i++) {
     if (i < points.length - 1 && !points[i]!.nib) continue;
-    const piece = rdpSimplify(points.slice(start, i + 1), epsilon, WIDTH_OVERSHOOT_WEIGHT);
+    const piece = rdpSimplify(points.slice(start, i + 1), epsilon, {
+      overshootWeight: WIDTH_OVERSHOOT_WEIGHT,
+      clearance,
+      spillWeight: SPILL_WEIGHT,
+    });
     out.push(...(out.length > 0 ? piece.slice(1) : piece));
     start = i;
   }
@@ -157,16 +172,17 @@ export function extractInkRegion(contours: Contour[], options: InkExtractionOpti
     inkAt,
   });
 
+  const clearance = (p: Point) => boundary.nearest(p);
   const strokes = cover.strokes.map((s) => {
     let pts = s.points;
     if (!s.isLoop && pts.length > 2) {
       pts = trimRedundantEnd(pts, step * 0.25);
       pts = trimRedundantEnd([...pts].reverse(), step * 0.25).reverse();
     }
-    pts = smooth(pts, 2, s.isLoop);
+    pts = smooth(pts, 2, s.isLoop, clearance);
     // Width-aware RDP only: simplifyStroke's pinch prune targets partition
     // skeleton waists and would drop flick tips (width 0 by construction).
-    if (pts.length > 2) pts = simplifyKeepingNibs(pts, options.simplifyEpsilon);
+    if (pts.length > 2) pts = simplifyKeepingNibs(pts, options.simplifyEpsilon, clearance);
     return { ...s, points: pts };
   });
 

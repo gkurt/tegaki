@@ -345,20 +345,36 @@ function extension(slot: ClusterSlot, cluster: JunctionCluster, g: InkGraph, con
   return out.length >= 2 ? out : null;
 }
 
-/** A serif arm reaches at most this far from the cluster center, in widths of the stem it caps. */
+/**
+ * A serif arm reaches at most this far from the cluster center, in widths
+ * of the stem it caps — or of the region's stroke weight, when the stem is
+ * a hairline (the thin diagonal of a V or X carries a full-size serif).
+ */
 const SERIF_MAX_LENGTH = 2.4;
 /** A serif arm is at most this wide (median), as a fraction of the region's stroke weight. */
 const SERIF_MAX_WIDTH = 0.6;
 /**
- * The region's stroke weight: the width 80% of its centerline stays under.
- * Not the widest branch — a teardrop knot would make a Devanagari headline
+ * The region's stroke weight: the width 80% of its stroke centerline stays
+ * under. Not the widest branch — a teardrop knot would make a Devanagari headline
  * look thin enough to be a serif.
  */
 const SERIF_WIDTH_PERCENTILE = 0.8;
+/** Stroke weight is taken over junction-to-junction branches when they are at least this share of the centerline. */
+const SERIF_WEIGHT_MIN_SHARE = 0.3;
 /** |cos| between an arm and a stroke body it caps: roughly across it. */
 const SERIF_MAX_ALIGN = 0.7;
 /** Two bodies with outward directions dotting below this pass straight through (a crossing, not a corner). */
 const SERIF_PASS_DOT = -0.5;
+/** Two bodies opening less than 60° (dot above this) form an apex, whose single arm is not absorbed. */
+const SERIF_APEX_DOT = Math.cos((60 * Math.PI) / 180);
+/**
+ * Two arms pointing apart within 45° of opposite form a SLAB (dot of their
+ * outward directions below this); a bracketed foot on a slanted stem
+ * splays its arms by up to ~40°.
+ */
+const SLAB_MAX_DOT = -Math.cos((45 * Math.PI) / 180);
+/** A stem meets its slab at least 25° off the slab's line (|cos| below this), or it is the slab's continuation. */
+const SLAB_STEM_MAX_ALIGN = Math.cos((25 * Math.PI) / 180);
 
 /** A cluster slot as serif detection sees it. */
 export interface SerifSlotShape {
@@ -375,45 +391,75 @@ export interface SerifSlotShape {
 }
 
 /**
- * Indices of the slots that are serif arms: short, thin dead ends lying
- * across the stroke body they cap, at a stroke END. The body is one stem
- * (a foot serif) or two bodies meeting at a corner (the serif hanging off
- * an E's corner) — never two bodies passing straight through, where the
- * "arms" are a crossbar (t, f). At most two arms.
+ * Indices of the slots that are serif arms: short, thin dead ends capping
+ * a stroke END. Either a SLAB — two arms pointing apart along one line that
+ * the stem meets at an angle (a foot serif, on an upright or a slanted
+ * stem alike) — or single arms lying across their body. The body is one
+ * stem or two bodies meeting at a corner (the serif hanging off an E's
+ * corner) — never two bodies passing straight through, where the "arms"
+ * are a crossbar (t, f). At most two arms.
  */
 export function findSerifArms(slots: SerifSlotShape[], center: Point, strokeWeight: number): number[] {
   const n = slots.length;
   if (n < 2) return [];
-  let bodies = slots.map((_, i) => i).filter((i) => !slots[i]!.dead);
+  const all = slots.map((_, i) => i);
+  let bodies = all.filter((i) => !slots[i]!.dead);
   // All dead ends (an i, an l): the longest is the stem.
   if (bodies.length === 0) {
     let longest = 0;
     for (let i = 1; i < n; i++) if (dist(slots[i]!.tip, center) > dist(slots[longest]!.tip, center)) longest = i;
     bodies = [longest];
   }
-  const stemWidth = Math.max(...bodies.map((i) => slots[i]!.width));
-  let arms = slots
-    .map((_, i) => i)
-    .filter((i) => {
-      const s = slots[i]!;
-      return (
-        s.dead &&
-        !bodies.includes(i) &&
-        dist(s.tip, center) <= SERIF_MAX_LENGTH * stemWidth &&
-        s.medianWidth <= SERIF_MAX_WIDTH * strokeWeight
-      );
-    });
-  bodies = slots.map((_, i) => i).filter((i) => !arms.includes(i));
-  arms = arms.filter((a) => bodies.some((b) => Math.abs(dot(slots[a]!.out, slots[b]!.out)) <= SERIF_MAX_ALIGN));
-  bodies = slots.map((_, i) => i).filter((i) => !arms.includes(i));
-  if (arms.length === 0 || arms.length > 2) return [];
-  if (bodies.length === 1) return arms;
-  if (bodies.length === 2 && dot(slots[bodies[0]!]!.out, slots[bodies[1]!]!.out) > SERIF_PASS_DOT) return arms;
-  return [];
-}
+  const lengthUnit = Math.max(strokeWeight, ...bodies.map((i) => slots[i]!.width));
+  const candidates = all.filter((i) => {
+    const s = slots[i]!;
+    return (
+      s.dead &&
+      !bodies.includes(i) &&
+      dist(s.tip, center) <= SERIF_MAX_LENGTH * lengthUnit &&
+      s.medianWidth <= SERIF_MAX_WIDTH * strokeWeight
+    );
+  });
+  const out = (i: number) => slots[i]!.out;
+  const capsAStrokeEnd = (arms: number[]) => {
+    const rest = all.filter((i) => !arms.includes(i));
+    return rest.length === 1 || (rest.length === 2 && dot(out(rest[0]!), out(rest[1]!)) > SERIF_PASS_DOT);
+  };
 
-/** Serif sweep widths are capped at this multiple of the arm's median width. */
-const SWEEP_WIDTH_CAP = 1.5;
+  // A slab: the most nearly opposite pair of candidates, met at an angle by
+  // everything else.
+  let slab: [number, number] | null = null;
+  let slabDot = SLAB_MAX_DOT;
+  for (const a of candidates) {
+    for (const b of candidates) {
+      if (b <= a) continue;
+      const d = dot(out(a), out(b));
+      if (d < slabDot) {
+        slabDot = d;
+        slab = [a, b];
+      }
+    }
+  }
+  if (slab) {
+    const [a, b] = slab;
+    const axis = normalize(sub(out(a), out(b)));
+    const rest = all.filter((i) => i !== a && i !== b);
+    if (rest.every((i) => Math.abs(dot(out(i), axis)) <= SLAB_STEM_MAX_ALIGN) && capsAStrokeEnd(slab)) return slab;
+  }
+
+  // Single arms, each lying across a body. Not at an acute apex (the top
+  // of an M or N): the arm is that V's point, which the pairing's cusp and
+  // retrace already draw.
+  bodies = all.filter((i) => !candidates.includes(i));
+  const arms = candidates.filter((a) => bodies.some((b) => Math.abs(dot(out(a), out(b))) <= SERIF_MAX_ALIGN));
+  if (arms.length === 0 || arms.length > 2) return [];
+  const rest = all.filter((i) => !arms.includes(i));
+  if (rest.length === 2 && dot(out(rest[0]!), out(rest[1]!)) > SERIF_APEX_DOT) return [];
+  // Nor an arm that runs straight on from a body (the foot of an E's
+  // corner continues its bar): the pairing passes through it.
+  if (arms.some((a) => rest.some((b) => dot(out(a), out(b)) < SLAB_MAX_DOT))) return [];
+  return capsAStrokeEnd(arms) ? arms : [];
+}
 
 /**
  * The width a share `q` of the drawn centerline stays under (arc-length
@@ -565,7 +611,13 @@ export function coverInkGraph(g: InkGraph, rawBranches: InkBranch[], contours: C
   // ── Serifs: absorb short arms capping a stroke end ────────────────────
   const absorbedArm = new Set<number>();
   if (options.absorbSerifs) {
-    const strokeWeight = strokeWidthPercentile(branches, SERIF_WIDTH_PERCENTILE);
+    // Weigh the strokes, not their serifs: a lowercase x's eight arms are a
+    // good share of its centerline. Dead ends count only when little else
+    // is left (a bar, a lone stroke).
+    const through = branches.filter((b) => b.isCycle || (isJunction(b.from) && isJunction(b.to)));
+    const length = (bs: InkBranch[]) => bs.reduce((acc, b) => acc + polylineLength(b.axis), 0);
+    const weighed = length(through) >= SERIF_WEIGHT_MIN_SHARE * length(branches) ? through : branches;
+    const strokeWeight = strokeWidthPercentile(weighed, SERIF_WIDTH_PERCENTILE);
     clusters.forEach((cl, ci) => {
       const shapes = cl.slots.map((slot): SerifSlotShape => {
         const b = branches[Math.floor(slot.key / 2)]!;
@@ -646,7 +698,7 @@ export function coverInkGraph(g: InkGraph, rawBranches: InkBranch[], contours: C
       // Straight down the stem to the slab (the junction's own centerline
       // bends off toward whichever arm its triangles lean to).
       const stemEnd = extension(cl.slots[0]!, cl, g, contours, step) ?? [cl.slots[0]!.point];
-      const sweep = serifSweep(cl.serifArms, branches, g, step);
+      const sweep = serifSweep(cl.serifArms, branches, trimmedAxis, g);
       // Narrow to the arm's width BEFORE moving sideways: the junction-wide
       // disk swept toward the arm would bulge out over the slab.
       const last = stemEnd[stemEnd.length - 1]!;
@@ -735,7 +787,7 @@ export function coverInkGraph(g: InkGraph, rawBranches: InkBranch[], contours: C
     strokes.push(walkFrom(bi, 0));
   });
 
-  for (const cl of clusters) if (cl.serifArms.length > 0 && !cl.serifSwept) stampSerif(cl, g, branches, strokes, inkAt, step);
+  for (const cl of clusters) if (cl.serifArms.length > 0 && !cl.serifSwept) stampSerif(cl, g, branches, trimmedAxis, strokes, inkAt, step);
 
   return { strokes, branches, clusters };
 }
@@ -749,56 +801,70 @@ function armAxis(arm: ClusterSlot, branches: InkBranch[]): AxisPoint[] {
 
 /**
  * The pen's path across a two-armed serif from the stem's end: out along
- * the left arm to its tip, back, and across to the right arm's tip — the
- * arms are thin, so the round pen paints the slab where one inscribed
- * ellipse would leave its corners bare.
+ * the left arm to its tip, back, and across to the right arm's tip. Each
+ * arm is run from the junction itself — along the centerline its branch
+ * was trimmed of, whose disks fill the brackets between stem and slab — so
+ * the round pen paints the slab where one inscribed ellipse would leave its
+ * corners bare.
  */
-function serifSweep(arms: ClusterSlot[], branches: InkBranch[], g: InkGraph, step: number): AxisPoint[] {
-  // The arm root's inscribed disk swells into the bracket; swept sideways
-  // from the stem, a capsule of such disks cuts the concave fillet. Keep the
-  // sweep to the slab's own thickness.
+function serifSweep(arms: ClusterSlot[], branches: InkBranch[], trimmedAxis: [AxisPoint[], AxisPoint[]][], g: InkGraph): AxisPoint[] {
   const [a, b] = arms.map((arm) => {
-    const axis = armAxis(arm, branches);
-    const cap = SWEEP_WIDTH_CAP * median(axis.map((p) => p.width));
-    return axis.map((p) => ({ ...p, width: Math.min(p.width, cap) }));
+    const lost = trimmedAxis[Math.floor(arm.key / 2)]?.[arm.key % 2] ?? [];
+    // A junction node's width is its triangle's, not its clearance: clamp
+    // each disk to the ink around it.
+    return [...[...lost].reverse(), ...armAxis(arm, branches)].map((p) => ({ ...p, width: Math.min(p.width, 2 * g.boundary.nearest(p)) }));
   }) as [AxisPoint[], AxisPoint[]];
   const [first, second] = a[a.length - 1]!.x <= b[b.length - 1]!.x ? [a, b] : [b, a];
-  // Back across under the stem, root to root: sampled, each width capped
-  // to the ink there (the chord between two bracket-wide roots would spill
-  // off a cupped foot).
-  const from = first[0]!;
-  const to = second[0]!;
-  const count = Math.ceil(dist(from, to) / step);
-  const bridge: AxisPoint[] = [];
-  for (let i = 1; i < count; i++) {
-    const t = i / count;
-    const p = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
-    bridge.push({ ...p, width: Math.min(from.width + (to.width - from.width) * t, 2 * g.boundary.nearest(p)) });
-  }
-  return [...first, ...[...first].reverse(), ...bridge, ...second];
+  return [...first, ...[...first].reverse(), ...second];
 }
 
+/** A stamp must paint at least this share of its arm's unpainted ink, else the pen runs the arm instead. */
+const STAMP_MIN_SHARE = 0.5;
+
 /**
- * Cover an absorbed serif's ink with one nib per arm, left at the stroke
- * point nearest the cluster center (the capped stroke's end): each lies
- * along its arm's slab, scored on the serif ink (arms and cluster zone) the
- * strokes' round pens leave unpainted.
+ * Cover an absorbed serif arm that is not swept: a nib lying along the arm,
+ * left at the stroke point nearest the cluster center, scored on the serif
+ * ink (arms and cluster zone) the strokes' round pens leave unpainted. An
+ * arm no ellipse fills (a tapered wedge off an M's apex) is RUN instead:
+ * from that point out to its tip — and back, unless the point ends its
+ * stroke.
  */
 function stampSerif(
   cl: JunctionCluster,
   g: InkGraph,
   branches: InkBranch[],
+  trimmedAxis: [AxisPoint[], AxisPoint[]][],
   strokes: GeoStroke[],
   inkAt: (p: Point) => boolean,
   step: number,
 ) {
-  const strokePts = strokes.map((s) => s.points);
-  let samples: InkSample[] = [...new Set(cl.zoneTris)].map((t) => triangleSample(g, t)).filter((q) => !paintedBy(q.p, strokePts, 0));
+  let samples: (InkSample & { t: number })[] = [...new Set(cl.zoneTris)]
+    .map((t) => ({ t, ...triangleSample(g, t) }))
+    .filter(
+      (q) =>
+        !paintedBy(
+          q.p,
+          strokes.map((s) => s.points),
+          0,
+        ),
+    );
   for (const arm of cl.serifArms) {
-    let at: AxisPoint | null = null;
-    for (const pts of strokePts) for (const p of pts) if (!p.nib && (!at || dist(p, cl.center) < dist(at, cl.center))) at = p;
+    let at: { stroke: number; index: number } | null = null;
+    let atDist = Infinity;
+    strokes.forEach((s, si) => {
+      s.points.forEach((p, pi) => {
+        const d = dist(p, cl.center);
+        if (!p.nib && d < atDist) {
+          atDist = d;
+          at = { stroke: si, index: pi };
+        }
+      });
+    });
     if (!at) return;
-    const b = branches[Math.floor(arm.key / 2)]!;
+    const { stroke, index } = at as { stroke: number; index: number };
+    const pen = strokes[stroke]!.points[index]!;
+    const bi = Math.floor(arm.key / 2);
+    const b = branches[bi]!;
     const tip = arm.key % 2 === 0 ? b.axis[b.axis.length - 1]! : b.axis[0]!;
     // The arm's slab runs from where its axis crosses the stem (its root,
     // projected back toward the cluster center) out to its tip.
@@ -806,10 +872,29 @@ function stampSerif(
     const back = Math.max(0, dot(sub(arm.point, cl.center), u));
     const from = { x: arm.point.x - u.x * back, y: arm.point.y - u.y * back };
     const halfWidth = Math.max(...b.axis.map((p) => p.width)) / 2;
-    const best = fitSlabStamp({ at, from, to: tip, halfWidth, samples, inkAt });
-    if (!best || best.gain < step * step) continue;
-    at.nib = best.nib;
-    const stampedAt = at;
-    samples = samples.filter((q) => !inNib(q.p, stampedAt, best.nib));
+    const best = fitSlabStamp({ at: pen, from, to: tip, halfWidth, samples, inkAt });
+    const armTris = new Set(b.tris.flatMap((t) => [t, ...g.absorbed[t]!]));
+    const own = samples.filter((q) => armTris.has(q.t));
+    const ownArea = own.reduce((acc, q) => acc + q.area, 0);
+    const ownGain = best ? own.reduce((acc, q) => acc + (inNib(q.p, pen, best.nib) ? q.area : 0), 0) : 0;
+    if (best && best.gain >= step * step && ownGain >= STAMP_MIN_SHARE * ownArea) {
+      pen.nib = best.nib;
+      samples = samples.filter((q) => !inNib(q.p, pen, best.nib));
+      continue;
+    }
+    // Run the arm: from the junction (along the centerline its branch was
+    // trimmed of) out to the tip, each disk clamped to the ink around it.
+    const lost = trimmedAxis[bi]?.[arm.key % 2] ?? [];
+    const run = [...[...lost].reverse(), ...armAxis(arm, branches)].map((p) => ({
+      ...p,
+      width: Math.min(p.width, 2 * g.boundary.nearest(p)),
+    }));
+    const pts = strokes[stroke]!.points;
+    const returnPath = [...run].reverse();
+    if (index === pts.length - 1) pts.push(...run);
+    else if (index === 0) pts.unshift(...returnPath);
+    else pts.splice(index + 1, 0, ...run, ...returnPath, { ...pen });
+    const ran = run.slice(1).map((q, i) => [run[i]!, q]);
+    samples = samples.filter((q) => !paintedBy(q.p, ran, 0));
   }
 }

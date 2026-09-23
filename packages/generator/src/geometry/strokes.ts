@@ -448,15 +448,27 @@ function pinchPrune(pts: import('./types.ts').AxisPoint[], epsilon: number): imp
 }
 
 /**
- * One width-aware Ramer-Douglas-Peucker pass (see simplifyStroke).
- * `overshootWeight` scales width errors where the chord's interpolated
- * width EXCEEDS the point's: that pen paints past the outline, which an
- * undershoot of the same size does not.
+ * Pen-overshoot checks for `rdpSimplify` (all off by default — plain
+ * width-aware RDP):
+ * - `overshootWeight` scales width errors where the chord's interpolated
+ *   width EXCEEDS the point's: that pen paints past the outline, which an
+ *   undershoot of the same size does not.
+ * - `clearance` (distance to the outline) also checks the chord's pen where
+ *   each dropped point projects onto it; the radius it paints past the
+ *   outline counts, scaled by `spillWeight` — so a chord across a gently
+ *   curved stem stays inside.
  */
+export interface RdpOvershootOptions {
+  overshootWeight?: number;
+  clearance?: (p: Point) => number;
+  spillWeight?: number;
+}
+
+/** One width-aware Ramer-Douglas-Peucker pass (see simplifyStroke), with optional pen-overshoot checks. */
 export function rdpSimplify(
   points: import('./types.ts').AxisPoint[],
   epsilon: number,
-  overshootWeight = 1,
+  { overshootWeight = 1, clearance, spillWeight = 1 }: RdpOvershootOptions = {},
 ): import('./types.ts').AxisPoint[] {
   if (points.length <= 2) return points;
   const keep = new Uint8Array(points.length);
@@ -492,9 +504,14 @@ export function rdpSimplify(
         // Width deviation from the chord's linear interpolation, halved so it
         // measures the drawn RADIUS error — the same units as positional.
         const t = Math.max(0, Math.min(1, ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / (abLen * abLen)));
-        const excess = (a.width + (b.width - a.width) * t - p.width) / 2;
+        const radius = (a.width + (b.width - a.width) * t) / 2;
+        const excess = radius - p.width / 2;
         const widthDev = excess > 0 ? excess * overshootWeight : -excess;
-        const d = Math.max(positional, widthDev);
+        let d = Math.max(positional, widthDev);
+        if (clearance) {
+          const spill = radius - clearance({ x: a.x + ab.x * t, y: a.y + ab.y * t });
+          if (spill > 0) d = Math.max(d, spill * spillWeight);
+        }
         if (d > farD) {
           farD = d;
           far = i;
