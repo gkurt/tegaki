@@ -3,8 +3,8 @@ import type { Point } from 'tegaki';
 import { buildContours } from '../contours.ts';
 import { pointInRegion } from '../primitives.ts';
 import type { AxisPoint } from '../types.ts';
-import { type ClusterSlot, solvePairing } from './cover.ts';
-import { extractInkRegion } from './extract.ts';
+import { type ClusterSlot, findSerifArms, type SerifSlotShape, solvePairing } from './cover.ts';
+import { extractInkRegion, type InkExtractionOptions } from './extract.ts';
 import { buildInkGraph, pruneSpurs, withFlicks } from './graph.ts';
 import { buildInkMesh, trianglePoints } from './mesh.ts';
 import { carryNibs, inNib } from './nib.ts';
@@ -61,12 +61,40 @@ function barWithEar(h: number): Point[] {
   return [{ x: 0, y: 0 }, ...ear, { x: 400, y: 0 }, { x: 400, y: 60 }, { x: 0, y: 60 }];
 }
 
-function extract(...polygons: Point[][]) {
+function extractWith(overrides: Partial<InkExtractionOptions>, ...polygons: Point[][]) {
   return extractInkRegion(
     buildContours(polygons),
-    { sampleSpacing: STEP, spurTolerance: 0.5, junctionReach: 1.5, continuationMinCos: MIN_COS, simplifyEpsilon: 4 },
+    {
+      sampleSpacing: STEP,
+      spurTolerance: 0.5,
+      junctionReach: 1.5,
+      continuationMinCos: MIN_COS,
+      simplifyEpsilon: 4,
+      absorbSerifs: true,
+      ...overrides,
+    },
     0,
   );
+}
+
+const extract = (...polygons: Point[][]) => extractWith({}, ...polygons);
+
+/** A serifed I: a 100-wide stem capped top and bottom by 360×45 slabs. */
+function serifedI(): Point[] {
+  return [
+    { x: -30, y: 0 },
+    { x: 330, y: 0 },
+    { x: 330, y: 45 },
+    { x: 200, y: 45 },
+    { x: 200, y: 555 },
+    { x: 330, y: 555 },
+    { x: 330, y: 600 },
+    { x: -30, y: 600 },
+    { x: -30, y: 555 },
+    { x: 100, y: 555 },
+    { x: 100, y: 45 },
+    { x: -30, y: 45 },
+  ];
 }
 
 function slot(key: number, point: Point, direction: Point, deadEnd: number | null = null): ClusterSlot {
@@ -189,6 +217,58 @@ describe('extractInkRegion', () => {
     expect(r.strokes[0]!.isLoop).toBe(true);
     // Square outer corners lie beyond a round pen's reach — a known limit.
     expect(covered(r)).toBeGreaterThan(0.97);
+  });
+});
+
+describe('findSerifArms', () => {
+  // A foot at (0,0) in y-down units: the stem rises from it (out = up).
+  const stem: SerifSlotShape = { dead: false, width: 100, medianWidth: 100, tip: { x: 0, y: -500 }, out: { x: 0, y: -1 } };
+  const arm = (side: -1 | 1, overrides: Partial<SerifSlotShape> = {}): SerifSlotShape => ({
+    dead: true,
+    width: 45,
+    medianWidth: 45,
+    tip: { x: side * 160, y: 10 },
+    out: { x: side, y: 0 },
+    ...overrides,
+  });
+  const center = { x: 0, y: 0 };
+
+  test('a foot serif: short, thin dead ends across a lone stem are its arms', () => {
+    expect(findSerifArms([stem, arm(-1), arm(1)], center, 100)).toEqual([1, 2]);
+  });
+
+  test('a crossbar is not a serif: the stem runs on past it (t, f)', () => {
+    const above: SerifSlotShape = { dead: true, width: 60, medianWidth: 57, tip: { x: 0, y: 140 }, out: { x: 0, y: 1 } };
+    expect(findSerifArms([stem, above, arm(-1), arm(1)], center, 100)).toEqual([]);
+  });
+
+  test("arms as heavy as the stroke weight are a bar, not a serif (a sans T's top)", () => {
+    expect(findSerifArms([stem, arm(-1, { medianWidth: 90 }), arm(1, { medianWidth: 90 })], center, 100)).toEqual([]);
+  });
+
+  test('arms reaching past 2.4 stem widths are a bar, not a serif', () => {
+    expect(findSerifArms([stem, arm(-1, { tip: { x: -300, y: 10 } }), arm(1, { tip: { x: 300, y: 10 } })], center, 100)).toEqual([]);
+  });
+
+  test("a serif hanging off a corner (an E's foot) is absorbed", () => {
+    const bar: SerifSlotShape = { dead: false, width: 60, medianWidth: 60, tip: { x: 400, y: 0 }, out: { x: 1, y: 0 } };
+    expect(findSerifArms([stem, bar, arm(-1)], center, 100)).toEqual([2]);
+  });
+});
+
+describe('serif absorption', () => {
+  test('a serifed I is one stroke, its slabs swept by the stem ends', () => {
+    const r = extract(serifedI());
+    expect(r.strokes.length).toBe(1);
+    const xs = r.strokes[0]!.points.map((p) => p.x);
+    // The sweep reaches both slab ends.
+    expect(Math.min(...xs)).toBeLessThan(20);
+    expect(Math.max(...xs)).toBeGreaterThan(280);
+    expect(1 - r.uncoveredArea / r.totalArea).toBeGreaterThan(0.97);
+  });
+
+  test('without absorption the slabs are strokes of their own', () => {
+    expect(extractWith({ absorbSerifs: false }, serifedI()).strokes.length).toBeGreaterThan(1);
   });
 });
 

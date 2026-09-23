@@ -469,6 +469,7 @@ export function runGeometryPipeline(
           junctionReach: resolved.inkJunctionReach,
           continuationMinCos: resolved.continuationMinCos,
           simplifyEpsilon: simplifyEps,
+          absorbSerifs: resolved.inkSerifs,
         },
         faces.length,
       );

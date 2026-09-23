@@ -25,6 +25,15 @@
 // bar's centerline) — that path is the ink's own axis, so the junction's ink
 // stays painted.
 //
+// SERIFS. A serif is a short, thin crossbar capping a stroke end: the
+// stem's end cluster meets only short dead ends (the serif's arms) lying
+// across it. Paired or retraced, the arms become strokes of their own (a
+// serifed H would draw seven). Instead they are ABSORBED: dropped from the
+// pairing, so the stem runs on to the cluster center. A two-armed serif on
+// a lone stem is then SWEPT by the stem's end (out along one arm, back
+// across to the other's tip); any other absorbed arm is stamped with a nib
+// lying along it.
+//
 // ASSEMBLY. Branches are chained through paired ends into strokes: walks
 // start at free ends (tips, unpaired ends); whatever remains is closed
 // rings. Every alive branch is walked exactly once, so no ink the graph
@@ -34,6 +43,7 @@ import type { Point } from 'tegaki';
 import { dist, dot, normalize, pointInRegion, polylineLength, sub } from '../primitives.ts';
 import type { AxisPoint, Contour, GeoStroke } from '../types.ts';
 import { type InkBranch, type InkGraph, withFlicks } from './graph.ts';
+import { fitSlabStamp, type InkSample, inNib, paintedBy, triangleSample } from './nib.ts';
 
 export interface CoverOptions {
   /** Junction zone radius as a multiple of the junction's inscribed radius. */
@@ -42,6 +52,10 @@ export interface CoverOptions {
   continuationMinCos: number;
   /** Sampling step for passage curves and extensions (font units). */
   step: number;
+  /** Absorb serifs into the stroke ends they cap (see file header). */
+  absorbSerifs: boolean;
+  /** True where there is ink (outline-tolerant) — bounds serif nibs. */
+  inkAt: (p: Point) => boolean;
 }
 
 /** One branch end opening into a junction cluster. */
@@ -80,6 +94,10 @@ export interface JunctionCluster {
   extensions: (AxisPoint[] | null)[];
   /** Triangles whose centerline was replaced by the cluster's passages. */
   zoneTris: number[];
+  /** Serif arms absorbed into this cluster's stroke end (removed from `slots`). */
+  serifArms: ClusterSlot[];
+  /** The serif is drawn as a sweep at the stem's end (else stamped with nibs). */
+  serifSwept: boolean;
 }
 
 export interface CoverResult {
@@ -327,8 +345,106 @@ function extension(slot: ClusterSlot, cluster: JunctionCluster, g: InkGraph, con
   return out.length >= 2 ? out : null;
 }
 
+/** A serif arm reaches at most this far from the cluster center, in widths of the stem it caps. */
+const SERIF_MAX_LENGTH = 2.4;
+/** A serif arm is at most this wide (median), as a fraction of the region's stroke weight. */
+const SERIF_MAX_WIDTH = 0.6;
+/**
+ * The region's stroke weight: the width 80% of its centerline stays under.
+ * Not the widest branch — a teardrop knot would make a Devanagari headline
+ * look thin enough to be a serif.
+ */
+const SERIF_WIDTH_PERCENTILE = 0.8;
+/** |cos| between an arm and a stroke body it caps: roughly across it. */
+const SERIF_MAX_ALIGN = 0.7;
+/** Two bodies with outward directions dotting below this pass straight through (a crossing, not a corner). */
+const SERIF_PASS_DOT = -0.5;
+
+/** A cluster slot as serif detection sees it. */
+export interface SerifSlotShape {
+  /** Dead-end (far end free), so the slot could be an arm. */
+  dead: boolean;
+  /** Width where the slot meets the cluster. */
+  width: number;
+  /** Median width along the slot's branch. */
+  medianWidth: number;
+  /** The branch's far end. */
+  tip: Point;
+  /** Unit direction leaving the cluster along the branch. */
+  out: Point;
+}
+
+/**
+ * Indices of the slots that are serif arms: short, thin dead ends lying
+ * across the stroke body they cap, at a stroke END. The body is one stem
+ * (a foot serif) or two bodies meeting at a corner (the serif hanging off
+ * an E's corner) — never two bodies passing straight through, where the
+ * "arms" are a crossbar (t, f). At most two arms.
+ */
+export function findSerifArms(slots: SerifSlotShape[], center: Point, strokeWeight: number): number[] {
+  const n = slots.length;
+  if (n < 2) return [];
+  let bodies = slots.map((_, i) => i).filter((i) => !slots[i]!.dead);
+  // All dead ends (an i, an l): the longest is the stem.
+  if (bodies.length === 0) {
+    let longest = 0;
+    for (let i = 1; i < n; i++) if (dist(slots[i]!.tip, center) > dist(slots[longest]!.tip, center)) longest = i;
+    bodies = [longest];
+  }
+  const stemWidth = Math.max(...bodies.map((i) => slots[i]!.width));
+  let arms = slots
+    .map((_, i) => i)
+    .filter((i) => {
+      const s = slots[i]!;
+      return (
+        s.dead &&
+        !bodies.includes(i) &&
+        dist(s.tip, center) <= SERIF_MAX_LENGTH * stemWidth &&
+        s.medianWidth <= SERIF_MAX_WIDTH * strokeWeight
+      );
+    });
+  bodies = slots.map((_, i) => i).filter((i) => !arms.includes(i));
+  arms = arms.filter((a) => bodies.some((b) => Math.abs(dot(slots[a]!.out, slots[b]!.out)) <= SERIF_MAX_ALIGN));
+  bodies = slots.map((_, i) => i).filter((i) => !arms.includes(i));
+  if (arms.length === 0 || arms.length > 2) return [];
+  if (bodies.length === 1) return arms;
+  if (bodies.length === 2 && dot(slots[bodies[0]!]!.out, slots[bodies[1]!]!.out) > SERIF_PASS_DOT) return arms;
+  return [];
+}
+
+/** Serif sweep widths are capped at this multiple of the arm's median width. */
+const SWEEP_WIDTH_CAP = 1.5;
+
+/**
+ * The width a share `q` of the drawn centerline stays under (arc-length
+ * weighted): the region's typical stroke weight, robust to a blob or two.
+ */
+function strokeWidthPercentile(branches: InkBranch[], q: number): number {
+  const spans: [number, number][] = [];
+  let total = 0;
+  for (const b of branches) {
+    for (let i = 1; i < b.axis.length; i++) {
+      const len = dist(b.axis[i - 1]!, b.axis[i]!);
+      spans.push([(b.axis[i - 1]!.width + b.axis[i]!.width) / 2, len]);
+      total += len;
+    }
+  }
+  spans.sort((a, b) => a[0] - b[0]);
+  let acc = 0;
+  for (const [w, len] of spans) {
+    acc += len;
+    if (acc >= q * total) return w;
+  }
+  return spans[spans.length - 1]?.[0] ?? 0;
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+}
+
 export function coverInkGraph(g: InkGraph, rawBranches: InkBranch[], contours: Contour[], options: CoverOptions): CoverResult {
-  const { junctionReach, continuationMinCos, step } = options;
+  const { junctionReach, continuationMinCos, step, inkAt } = options;
   const isJunction = (t: number) => t >= 0 && g.alive[t] === 1 && g.deg[t]! >= 3;
   const junctionTris = [...new Set(rawBranches.flatMap((b) => [b.from, b.to]).filter(isJunction))];
   const junctionIndex = new Map(junctionTris.map((t, i) => [t, i]));
@@ -400,6 +516,8 @@ export function coverInkGraph(g: InkGraph, rawBranches: InkBranch[], contours: C
         passages: [],
         extensions: [],
         zoneTris: [],
+        serifArms: [],
+        serifSwept: false,
       });
     }
     clusters[ci]!.members.push(t);
@@ -443,6 +561,37 @@ export function coverInkGraph(g: InkGraph, rawBranches: InkBranch[], contours: C
       cl.zoneTris.push(...trimmedAt[bi]![end]!);
     }
   });
+
+  // ── Serifs: absorb short arms capping a stroke end ────────────────────
+  const absorbedArm = new Set<number>();
+  if (options.absorbSerifs) {
+    const strokeWeight = strokeWidthPercentile(branches, SERIF_WIDTH_PERCENTILE);
+    clusters.forEach((cl, ci) => {
+      const shapes = cl.slots.map((slot): SerifSlotShape => {
+        const b = branches[Math.floor(slot.key / 2)]!;
+        return {
+          dead: slot.deadEnd !== null,
+          width: slot.point.width,
+          medianWidth: median(b.axis.map((p) => p.width)),
+          tip: slot.key % 2 === 0 ? b.axis[b.axis.length - 1]! : b.axis[0]!,
+          out: { x: -slot.direction.x, y: -slot.direction.y },
+        };
+      });
+      const arms = new Set(findSerifArms(shapes, cl.center, strokeWeight));
+      if (arms.size === 0) return;
+      cl.serifArms = cl.slots.filter((_, i) => arms.has(i));
+      cl.slots = cl.slots.filter((_, i) => !arms.has(i));
+      for (const arm of cl.serifArms) {
+        const bi = Math.floor(arm.key / 2);
+        absorbedArm.add(bi);
+        slotOf.delete(arm.key);
+        for (const t of branches[bi]!.tris) cl.zoneTris.push(t, ...g.absorbed[t]!);
+      }
+      cl.slots.forEach((slot, si) => {
+        slotOf.set(slot.key, { cluster: ci, slot: si });
+      });
+    });
+  }
 
   // ── Solve each cluster; build passages and extensions ─────────────────
   for (const cl of clusters) {
@@ -492,6 +641,18 @@ export function coverInkGraph(g: InkGraph, rawBranches: InkBranch[], contours: C
       if (lost.length > 0) return [slot.point, ...lost];
       return extension(slot, cl, g, contours, step);
     });
+    // A two-armed serif capping a lone stem: the stem's end sweeps it.
+    if (cl.serifArms.length === 2 && cl.slots.length === 1) {
+      // Straight down the stem to the slab (the junction's own centerline
+      // bends off toward whichever arm its triangles lean to).
+      const stemEnd = extension(cl.slots[0]!, cl, g, contours, step) ?? [cl.slots[0]!.point];
+      const sweep = serifSweep(cl.serifArms, branches, g, step);
+      // Narrow to the arm's width BEFORE moving sideways: the junction-wide
+      // disk swept toward the arm would bulge out over the slab.
+      const last = stemEnd[stemEnd.length - 1]!;
+      cl.extensions[0] = [...stemEnd, { x: last.x, y: last.y, width: Math.min(last.width, sweep[0]!.width) }, ...sweep];
+      cl.serifSwept = true;
+    }
   }
 
   // ── Assembly ───────────────────────────────────────────────────────────
@@ -510,7 +671,8 @@ export function coverInkGraph(g: InkGraph, rawBranches: InkBranch[], contours: C
   const append = (dst: AxisPoint[], src: AxisPoint[]) => {
     for (const p of src) {
       const last = dst[dst.length - 1];
-      if (last && dist(last, p) < 1e-6) continue;
+      // A repeat point is dropped unless it changes the width in place.
+      if (last && dist(last, p) < 1e-6 && Math.abs(last.width - p.width) < 1e-6) continue;
       dst.push({ ...p });
     }
   };
@@ -518,6 +680,8 @@ export function coverInkGraph(g: InkGraph, rawBranches: InkBranch[], contours: C
   const visited = new Uint8Array(branches.length);
   // Retraced dead ends are drawn inside their passage.
   for (const cl of clusters) for (const mid of cl.retraced) if (mid >= 0) visited[Math.floor(cl.slots[mid]!.key / 2)] = 1;
+  // Absorbed serif arms are stamped, not walked.
+  for (const bi of absorbedArm) visited[bi] = 1;
   const strokes: GeoStroke[] = [];
   const walkFrom = (startBranch: number, startEnd: 0 | 1): GeoStroke => {
     const points: AxisPoint[] = [];
@@ -571,5 +735,81 @@ export function coverInkGraph(g: InkGraph, rawBranches: InkBranch[], contours: C
     strokes.push(walkFrom(bi, 0));
   });
 
+  for (const cl of clusters) if (cl.serifArms.length > 0 && !cl.serifSwept) stampSerif(cl, g, branches, strokes, inkAt, step);
+
   return { strokes, branches, clusters };
+}
+
+/** An arm's centerline (with its flicks) oriented away from its cluster. */
+function armAxis(arm: ClusterSlot, branches: InkBranch[]): AxisPoint[] {
+  const b = branches[Math.floor(arm.key / 2)]!;
+  const reversed = arm.key % 2 === 1;
+  return [...withFlicks(b.axis, b.flicks, reversed), ...(b.endFlicks[reversed ? 0 : 1] ?? [])];
+}
+
+/**
+ * The pen's path across a two-armed serif from the stem's end: out along
+ * the left arm to its tip, back, and across to the right arm's tip — the
+ * arms are thin, so the round pen paints the slab where one inscribed
+ * ellipse would leave its corners bare.
+ */
+function serifSweep(arms: ClusterSlot[], branches: InkBranch[], g: InkGraph, step: number): AxisPoint[] {
+  // The arm root's inscribed disk swells into the bracket; swept sideways
+  // from the stem, a capsule of such disks cuts the concave fillet. Keep the
+  // sweep to the slab's own thickness.
+  const [a, b] = arms.map((arm) => {
+    const axis = armAxis(arm, branches);
+    const cap = SWEEP_WIDTH_CAP * median(axis.map((p) => p.width));
+    return axis.map((p) => ({ ...p, width: Math.min(p.width, cap) }));
+  }) as [AxisPoint[], AxisPoint[]];
+  const [first, second] = a[a.length - 1]!.x <= b[b.length - 1]!.x ? [a, b] : [b, a];
+  // Back across under the stem, root to root: sampled, each width capped
+  // to the ink there (the chord between two bracket-wide roots would spill
+  // off a cupped foot).
+  const from = first[0]!;
+  const to = second[0]!;
+  const count = Math.ceil(dist(from, to) / step);
+  const bridge: AxisPoint[] = [];
+  for (let i = 1; i < count; i++) {
+    const t = i / count;
+    const p = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+    bridge.push({ ...p, width: Math.min(from.width + (to.width - from.width) * t, 2 * g.boundary.nearest(p)) });
+  }
+  return [...first, ...[...first].reverse(), ...bridge, ...second];
+}
+
+/**
+ * Cover an absorbed serif's ink with one nib per arm, left at the stroke
+ * point nearest the cluster center (the capped stroke's end): each lies
+ * along its arm's slab, scored on the serif ink (arms and cluster zone) the
+ * strokes' round pens leave unpainted.
+ */
+function stampSerif(
+  cl: JunctionCluster,
+  g: InkGraph,
+  branches: InkBranch[],
+  strokes: GeoStroke[],
+  inkAt: (p: Point) => boolean,
+  step: number,
+) {
+  const strokePts = strokes.map((s) => s.points);
+  let samples: InkSample[] = [...new Set(cl.zoneTris)].map((t) => triangleSample(g, t)).filter((q) => !paintedBy(q.p, strokePts, 0));
+  for (const arm of cl.serifArms) {
+    let at: AxisPoint | null = null;
+    for (const pts of strokePts) for (const p of pts) if (!p.nib && (!at || dist(p, cl.center) < dist(at, cl.center))) at = p;
+    if (!at) return;
+    const b = branches[Math.floor(arm.key / 2)]!;
+    const tip = arm.key % 2 === 0 ? b.axis[b.axis.length - 1]! : b.axis[0]!;
+    // The arm's slab runs from where its axis crosses the stem (its root,
+    // projected back toward the cluster center) out to its tip.
+    const u = normalize(sub(tip, arm.point));
+    const back = Math.max(0, dot(sub(arm.point, cl.center), u));
+    const from = { x: arm.point.x - u.x * back, y: arm.point.y - u.y * back };
+    const halfWidth = Math.max(...b.axis.map((p) => p.width)) / 2;
+    const best = fitSlabStamp({ at, from, to: tip, halfWidth, samples, inkAt });
+    if (!best || best.gain < step * step) continue;
+    at.nib = best.nib;
+    const stampedAt = at;
+    samples = samples.filter((q) => !inNib(q.p, stampedAt, best.nib));
+  }
 }

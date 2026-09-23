@@ -209,6 +209,8 @@ export interface GeometryOptions {
   inkSpurTolerance: number;
   /** Ink graph: junction zone radius as a multiple of the junction's inscribed radius. */
   inkJunctionReach: number;
+  /** Ink graph: fold serifs into the stroke ends they cap, stamped with nibs, instead of drawing them as strokes. */
+  inkSerifs: boolean;
 }
 
 export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
@@ -235,6 +237,7 @@ export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
   // pen-unreachable ears are what spur pruning must remove.
   inkSpurTolerance: 0.5,
   inkJunctionReach: 1.5,
+  inkSerifs: true,
 };
 
 /** Options resolved to absolute font units / radians for the core algorithms. */
@@ -251,6 +254,7 @@ export interface ResolvedGeometryOptions {
   inkSampleSpacing: number;
   inkSpurTolerance: number;
   inkJunctionReach: number;
+  inkSerifs: boolean;
 }
 
 export function resolveGeometryOptions(options: GeometryOptions, unitsPerEm: number): ResolvedGeometryOptions {
@@ -268,6 +272,7 @@ export function resolveGeometryOptions(options: GeometryOptions, unitsPerEm: num
     inkSampleSpacing: (options.inkSampleRatio ?? DEFAULT_GEOMETRY_OPTIONS.inkSampleRatio) * unitsPerEm,
     inkSpurTolerance: options.inkSpurTolerance ?? DEFAULT_GEOMETRY_OPTIONS.inkSpurTolerance,
     inkJunctionReach: options.inkJunctionReach ?? DEFAULT_GEOMETRY_OPTIONS.inkJunctionReach,
+    inkSerifs: options.inkSerifs ?? DEFAULT_GEOMETRY_OPTIONS.inkSerifs,
   };
 }
 

@@ -144,7 +144,7 @@ const REVERSE_OPTION_KEYS = Object.fromEntries(Object.entries(OPTION_KEYS).map((
   keyof PipelineOptions
 >;
 
-// Geometry-pipeline option short keys (numeric except medialMethod).
+// Geometry-pipeline option short keys (numeric except the enums and inkSerifs).
 const GEO_OPTION_KEYS: Record<keyof GeometryOptions, string> = {
   cornerAngleThresholdDeg: 'gca',
   cornerWindowRatio: 'gcw',
@@ -159,6 +159,7 @@ const GEO_OPTION_KEYS: Record<keyof GeometryOptions, string> = {
   inkSampleRatio: 'gis',
   inkSpurTolerance: 'gip',
   inkJunctionReach: 'gij',
+  inkSerifs: 'gsf',
 };
 
 const MEDIAL_METHODS: readonly GeometryOptions['medialMethod'][] = ['chain', 'voronoi', 'straight-skeleton'];
@@ -252,7 +253,7 @@ export function parseUrlState(search: string | URLSearchParams = window.location
     }
   }
 
-  // Geometry options — numeric, except the enum-valued medialMethod / strokeOrder.
+  // Geometry options — numeric, except the enum-valued medialMethod / strokeOrder / extraction and boolean inkSerifs.
   for (const [short, long] of Object.entries(REVERSE_GEO_OPTION_KEYS)) {
     if (!p.has(short)) continue;
     const raw = p.get(short)!;
@@ -267,6 +268,10 @@ export function parseUrlState(search: string | URLSearchParams = window.location
     }
     if (long === 'extraction') {
       state.geometryOptions.extraction = parseEnum(raw, EXTRACTION_MODES, DEFAULT_GEOMETRY_OPTIONS.extraction);
+      continue;
+    }
+    if (long === 'inkSerifs') {
+      state.geometryOptions.inkSerifs = raw !== 'false' && raw !== '0';
       continue;
     }
     const v = Number(raw);

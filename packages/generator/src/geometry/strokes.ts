@@ -447,8 +447,17 @@ function pinchPrune(pts: import('./types.ts').AxisPoint[], epsilon: number): imp
   return deduped;
 }
 
-/** One width-aware Ramer-Douglas-Peucker pass (see simplifyStroke). */
-export function rdpSimplify(points: import('./types.ts').AxisPoint[], epsilon: number): import('./types.ts').AxisPoint[] {
+/**
+ * One width-aware Ramer-Douglas-Peucker pass (see simplifyStroke).
+ * `overshootWeight` scales width errors where the chord's interpolated
+ * width EXCEEDS the point's: that pen paints past the outline, which an
+ * undershoot of the same size does not.
+ */
+export function rdpSimplify(
+  points: import('./types.ts').AxisPoint[],
+  epsilon: number,
+  overshootWeight = 1,
+): import('./types.ts').AxisPoint[] {
   if (points.length <= 2) return points;
   const keep = new Uint8Array(points.length);
   keep[0] = 1;
@@ -483,7 +492,8 @@ export function rdpSimplify(points: import('./types.ts').AxisPoint[], epsilon: n
         // Width deviation from the chord's linear interpolation, halved so it
         // measures the drawn RADIUS error — the same units as positional.
         const t = Math.max(0, Math.min(1, ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / (abLen * abLen)));
-        const widthDev = Math.abs(p.width - (a.width + (b.width - a.width) * t)) / 2;
+        const excess = (a.width + (b.width - a.width) * t - p.width) / 2;
+        const widthDev = excess > 0 ? excess * overshootWeight : -excess;
         const d = Math.max(positional, widthDev);
         if (d > farD) {
           farD = d;

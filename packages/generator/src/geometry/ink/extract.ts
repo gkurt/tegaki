@@ -19,7 +19,7 @@ import type { AxisPoint, Contour, Face, GeoStroke, SegmentInfo } from '../types.
 import { coverInkGraph, type JunctionCluster } from './cover.ts';
 import { buildInkGraph, extractBranches, pruneSpurs } from './graph.ts';
 import { buildInkMesh, trianglePoints } from './mesh.ts';
-import { fitNibs, inNib } from './nib.ts';
+import { fitNibs, paintedBy } from './nib.ts';
 import { SegmentIndex } from './spatial.ts';
 
 export interface InkExtractionOptions {
@@ -33,6 +33,8 @@ export interface InkExtractionOptions {
   continuationMinCos: number;
   /** Final stroke simplification tolerance (font units). */
   simplifyEpsilon: number;
+  /** Fold serif arms into the stroke ends they cap (cover.ts). */
+  absorbSerifs: boolean;
 }
 
 export interface InkRegionResult {
@@ -93,6 +95,9 @@ function smooth(points: AxisPoint[], passes: number, isLoop: boolean): AxisPoint
       if (cur[i]!.nib) continue; // the nib was fitted at exactly this position
       const a = cur[(i - 1 + n) % n]!;
       const b = cur[(i + 1) % n]!;
+      // A point doubled in place is a deliberate width change (the pen
+      // narrowing at a stem's end before sweeping its serif): keep both.
+      if (dist(a, cur[i]!) < 1e-6 || dist(b, cur[i]!) < 1e-6) continue;
       // Hairpins (a flick's tip, a retrace's turn) stay put — averaging
       // would pull the tip back toward its own return path.
       const inX = cur[i]!.x - a.x;
@@ -108,46 +113,20 @@ function smooth(points: AxisPoint[], passes: number, isLoop: boolean): AxisPoint
   return cur;
 }
 
+/** Width overshoot spills ink past the outline: allow a quarter of the positional tolerance. */
+const WIDTH_OVERSHOOT_WEIGHT = 4;
+
 /** Width-aware RDP that keeps every nib point (each nib was fitted relative to its exact position). */
 function simplifyKeepingNibs(points: AxisPoint[], epsilon: number): AxisPoint[] {
   const out: AxisPoint[] = [];
   let start = 0;
   for (let i = 1; i < points.length; i++) {
     if (i < points.length - 1 && !points[i]!.nib) continue;
-    const piece = rdpSimplify(points.slice(start, i + 1), epsilon);
+    const piece = rdpSimplify(points.slice(start, i + 1), epsilon, WIDTH_OVERSHOOT_WEIGHT);
     out.push(...(out.length > 0 ? piece.slice(1) : piece));
     start = i;
   }
   return out.length > 0 ? out : points;
-}
-
-/**
- * True when `p` lies within the ink some stroke paints (plus `tolerance`):
- * its round pen swept along the points (width interpolated), plus the nib
- * stamped at each nib point.
- */
-export function paintedBy(p: Point, strokes: AxisPoint[][], tolerance: number): boolean {
-  for (const pts of strokes) {
-    for (const q of pts) if (q.nib && inNib(p, q, q.nib, tolerance)) return true;
-    if (pts.length === 1) {
-      if (dist(p, pts[0]!) <= pts[0]!.width / 2 + tolerance) return true;
-      continue;
-    }
-    for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1]!;
-      const b = pts[i]!;
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const l2 = dx * dx + dy * dy;
-      let t = l2 > 0 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2 : 0;
-      t = Math.max(0, Math.min(1, t));
-      const w = a.width + (b.width - a.width) * t;
-      const ex = a.x + dx * t - p.x;
-      const ey = a.y + dy * t - p.y;
-      if (ex * ex + ey * ey <= (w / 2 + tolerance) ** 2) return true;
-    }
-  }
-  return false;
 }
 
 export function extractInkRegion(contours: Contour[], options: InkExtractionOptions, faceIdOffset: number): InkRegionResult {
@@ -174,6 +153,8 @@ export function extractInkRegion(contours: Contour[], options: InkExtractionOpti
     junctionReach: options.junctionReach,
     continuationMinCos: options.continuationMinCos,
     step,
+    absorbSerifs: options.absorbSerifs,
+    inkAt,
   });
 
   const strokes = cover.strokes.map((s) => {

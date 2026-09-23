@@ -938,6 +938,20 @@ export function GeneratorApp() {
                     step={0.1}
                     onChange={(v) => updateGeometryOption('inkJunctionReach', v)}
                   />
+                  <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={geometryOptions.inkSerifs}
+                      onChange={(e) => updateGeometryOption('inkSerifs', e.target.checked)}
+                    />
+                    <span
+                      className={
+                        geometryOptions.inkSerifs !== DEFAULT_GEOMETRY_OPTIONS.inkSerifs ? 'text-blue-600 font-medium' : 'text-gray-600'
+                      }
+                    >
+                      Absorb serifs into stroke ends
+                    </span>
+                  </label>
                 </>
               )}
               {geometryOptions.extraction === 'partition' && (
