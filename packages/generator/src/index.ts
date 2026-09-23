@@ -12,7 +12,9 @@ export {
   processGlyph,
   processGlyphById,
   processGlyphGeometry,
+  processGlyphGeometryById,
   type TegakiBundleOutput,
+  toCompactStroke,
 } from './commands/generate.ts';
 export {
   formatStrokeOrderSummary,

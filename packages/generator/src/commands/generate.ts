@@ -272,6 +272,42 @@ export function processGlyphGeometry(
 }
 
 /**
+ * Run the geometry pipeline for a variant glyph identified by its opentype
+ * index — the geometry counterpart of {@link processGlyphById} (same
+ * `subsetIndex` / `rtl` semantics). Variant glyphs have no source character
+ * to look up a stroke-order reference by, so ordering is heuristic.
+ */
+export function processGlyphGeometryById(
+  fontInfo: ParsedFontInfo,
+  glyphId: number,
+  geometryOptions?: GeometryOptions,
+  bezierTolerance?: number,
+  subsetIndex = 0,
+  rtl = false,
+): GeometryPipelineResult | null {
+  const font = subsetIndex === 0 ? fontInfo.font : fontInfo.extraFonts?.[subsetIndex - 1];
+  if (!font) return null;
+  const rawGlyph = extractGlyphById(font, glyphId);
+  if (!rawGlyph) return null;
+  return runGeometryPipeline(
+    {
+      char: rawGlyph.char,
+      unicode: rawGlyph.unicode,
+      advanceWidth: rawGlyph.advanceWidth,
+      boundingBox: rawGlyph.boundingBox,
+      pathString: rawGlyph.pathString,
+      ascender: fontInfo.ascender,
+      descender: fontInfo.descender,
+      unitsPerEm: fontInfo.unitsPerEm,
+      rtl,
+    },
+    rawGlyph,
+    geometryOptions,
+    bezierTolerance,
+  );
+}
+
+/**
  * Run the pipeline for a variant glyph identified by its opentype index.
  *
  * `subsetIndex` selects which font in `fontInfo` to extract from: `0` (default)

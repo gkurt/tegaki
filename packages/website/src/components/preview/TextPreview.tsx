@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TegakiBundle, TegakiRendererHandle, TimeControlProp } from 'tegaki';
-import type { ParsedFontInfo, PipelineOptions, PipelineResult } from 'tegaki-generator';
+import type { GeometryOptions, ParsedFontInfo, PipelineOptions, PipelineResult } from 'tegaki-generator';
 import { type CustomEffect, DEFAULT_EFFECTS_STATE, EFFECT_DEFAULTS, type EffectsState, type TimeMode } from '../url-state.ts';
-import { EASING_PRESETS, getEasingFn, TEXT_PRESETS } from './constants.ts';
+import { EASING_PRESETS, getEasingFn, type Pipeline, TEXT_PRESETS } from './constants.ts';
 import { ExportPanel } from './ExportPanel.tsx';
 import { CustomEffectControls, EffectColor, EffectSlider, GradientColorStops } from './effect-controls.tsx';
 import { TegakiTextPreview } from './TegakiTextPreview.tsx';
@@ -13,6 +13,8 @@ export function TextPreview({
   fontBuffer,
   extraFontBuffers,
   options,
+  pipeline,
+  geometryOptions,
   text,
   onTextChange,
   resultsCache,
@@ -59,6 +61,8 @@ export function TextPreview({
   fontBuffer: ArrayBuffer | null;
   extraFontBuffers: ArrayBuffer[] | undefined;
   options: PipelineOptions;
+  pipeline: Pipeline;
+  geometryOptions: GeometryOptions;
   text: string;
   onTextChange: (text: string) => void;
   resultsCache: React.RefObject<Map<string, PipelineResult>>;
@@ -345,6 +349,8 @@ export function TextPreview({
                 extraFontBuffers={extraFontBuffers}
                 text={text}
                 options={options}
+                pipeline={pipeline}
+                geometryOptions={geometryOptions}
                 time={timeProp}
                 effects={effects}
                 timing={timingConfig}

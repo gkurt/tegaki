@@ -4,9 +4,6 @@ import type { LineCap } from 'tegaki';
 import {
   CHARSET_PRESETS,
   collectReferences,
-  createHersheyProvider,
-  createHersheySimplexProvider,
-  createKanjiVGProvider,
   DEFAULT_GEOMETRY_OPTIONS,
   DEFAULT_OPTIONS,
   EXAMPLE_FONTS,
@@ -15,7 +12,6 @@ import {
   type GeometryOptions,
   type GeometryPipelineResult,
   initStraightSkeleton,
-  kanjiVGUrl,
   type ParsedFontInfo,
   type PipelineOptions,
   type PipelineResult,
@@ -41,25 +37,10 @@ import {
 import { fetchFontFromCDN } from './font-cdn.ts';
 import { SelectOption, SliderOption } from './form-controls.tsx';
 import { AnimationControls, GeometryStageRenderer, StageRenderer } from './stage-views.tsx';
+import { strokeOrderProviders } from './stroke-order-providers.ts';
 import { TextPreview } from './TextPreview.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-
-// Stroke-order reference data: KanjiVG fetched per character straight from
-// the pinned release (raw.githubusercontent.com is CORS-open), Hershey
-// cursive + print Latin embedded in the generator. All are queried and the
-// pipeline adopts whichever variant matches the extracted ink best. Providers
-// memoize; module scope makes the caches survive re-renders.
-const strokeOrderProviders = [
-  createKanjiVGProvider(async (char) => {
-    const response = await fetch(kanjiVGUrl(char));
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`KanjiVG fetch failed: ${response.status}`);
-    return response.text();
-  }),
-  createHersheyProvider(),
-  createHersheySimplexProvider(),
-];
 
 export function GeneratorApp() {
   const [initialUrlState] = useState(parseUrlState);
@@ -841,8 +822,8 @@ export function GeneratorApp() {
             )}
           </fieldset>
 
-          {/* Geometry pipeline options (glyph inspector, experimental) */}
-          {pipeline === 'geometry' && previewMode === 'glyph' && (
+          {/* Geometry pipeline options (experimental) */}
+          {pipeline === 'geometry' && (
             <fieldset className="flex flex-col gap-2 border border-indigo-200 rounded p-2 bg-indigo-50/40">
               <div className="flex items-center justify-between mb-1">
                 <legend className="text-sm font-medium text-indigo-700">Geometry options</legend>
@@ -1052,24 +1033,22 @@ export function GeneratorApp() {
               {mode === 'glyph' ? 'Glyph Inspector' : 'Text Preview'}
             </button>
           ))}
-          {previewMode === 'glyph' && (
-            <div className="ml-auto flex items-center gap-1">
-              <span className="text-xs text-gray-400">Pipeline:</span>
-              {(['raster', 'geometry'] as const).map((p) => (
-                <button
-                  type="button"
-                  key={p}
-                  className={`px-2.5 py-1 text-xs rounded cursor-pointer transition-colors ${
-                    pipeline === p ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                  }`}
-                  onClick={() => setPipeline(p)}
-                  title={p === 'geometry' ? 'Experimental geometry-based stroke extraction' : 'Rasterize + skeletonize pipeline'}
-                >
-                  {p === 'raster' ? 'Raster' : 'Geometry'}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="ml-auto flex items-center gap-1">
+            <span className="text-xs text-gray-400">Pipeline:</span>
+            {(['raster', 'geometry'] as const).map((p) => (
+              <button
+                type="button"
+                key={p}
+                className={`px-2.5 py-1 text-xs rounded cursor-pointer transition-colors ${
+                  pipeline === p ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                }`}
+                onClick={() => setPipeline(p)}
+                title={p === 'geometry' ? 'Experimental geometry-based stroke extraction' : 'Rasterize + skeletonize pipeline'}
+              >
+                {p === 'raster' ? 'Raster' : 'Geometry'}
+              </button>
+            ))}
+          </div>
         </div>
 
         {previewMode === 'glyph' ? (
@@ -1199,6 +1178,8 @@ export function GeneratorApp() {
             fontBuffer={fontBuffer}
             extraFontBuffers={extraFontBuffers}
             options={options}
+            pipeline={pipeline}
+            geometryOptions={geometryOptions}
             text={previewText}
             onTextChange={setPreviewText}
             resultsCache={resultsCache}

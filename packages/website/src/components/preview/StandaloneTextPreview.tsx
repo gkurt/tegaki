@@ -126,6 +126,8 @@ export function StandaloneTextPreview() {
         extraFontBuffers={extraFontBuffers}
         text={state.previewText}
         options={state.options}
+        pipeline={state.pipeline}
+        geometryOptions={state.geometryOptions}
         time={timeProp}
         effects={effects}
         timing={timingConfig}

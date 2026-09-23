@@ -15,14 +15,24 @@ import {
 } from 'tegaki';
 import harfbuzzShaper from 'tegaki/shaper-harfbuzz';
 import {
+  collectReferences,
   createHbShaper,
+  DEFAULT_GEOMETRY_OPTIONS,
+  type GeometryOptions,
+  type GeometryPipelineResult,
+  initStraightSkeleton,
   isRtlChar,
   type ParsedFontInfo,
   type PipelineOptions,
   type PipelineResult,
   processGlyph,
   processGlyphById,
+  processGlyphGeometry,
+  processGlyphGeometryById,
+  toCompactStroke,
 } from 'tegaki-generator';
+import type { Pipeline } from './constants.ts';
+import { strokeOrderProviders } from './stroke-order-providers.ts';
 
 TegakiEngine.registerShaper(harfbuzzShaper);
 
@@ -31,18 +41,18 @@ TegakiEngine.registerShaper(harfbuzzShaper);
 // harfbuzz's contextual positional assignment.
 const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig']);
 
-// Mirrors `toCompactStroke` in `packages/generator/src/commands/generate.ts`
-// so browser-generated bundles preserve the `r` priority field (dots etc.).
-type CompactStroke = TegakiGlyphData['s'][number];
-function toCompactStroke(s: PipelineResult['strokesFontUnits'][number]): CompactStroke {
-  const out: CompactStroke = {
-    p: s.points.map((p) => [p.x, p.y, p.width] as [number, number, number]),
-    d: s.delay,
-    a: s.animationDuration,
+/** A pipeline result (either pipeline) as the bundle's compact glyph entry. */
+function toCompactGlyph(res: PipelineResult | GeometryPipelineResult): TegakiGlyphData {
+  const last = res.strokesFontUnits[res.strokesFontUnits.length - 1];
+  return {
+    w: res.advanceWidth,
+    t: last ? Math.round((last.delay + last.animationDuration) * 1000) / 1000 : 0,
+    s: res.strokesFontUnits.map(toCompactStroke),
   };
-  if (s.priority && s.priority < 0) out.r = s.priority;
-  return out;
 }
+
+/** Let the browser paint between glyphs while a long geometry run is in progress. */
+const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 export interface TegakiTextPreviewReadyInfo {
   bundle: TegakiBundle;
@@ -56,6 +66,13 @@ export interface TegakiTextPreviewProps {
   extraFontBuffers?: ArrayBuffer[];
   text: string;
   options: PipelineOptions;
+  /**
+   * Which stroke-extraction pipeline builds the glyphs. `'geometry'` runs the
+   * experimental geometry pipeline with `geometryOptions` (asynchronously —
+   * nothing renders until the first bundle is built). Defaults to `'raster'`.
+   */
+  pipeline?: Pipeline;
+  geometryOptions?: GeometryOptions;
   time?: TimeControlProp;
   effects?: TegakiEffects<Record<string, any>>;
   timing?: TimelineConfig;
@@ -94,6 +111,8 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     extraFontBuffers,
     text,
     options,
+    pipeline = 'raster',
+    geometryOptions = DEFAULT_GEOMETRY_OPTIONS,
     time,
     effects,
     timing,
@@ -192,6 +211,51 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // the engine would look up NFC keys against an NFD-keyed bundle and miss.
   const normalizedText = useMemo(() => text.normalize('NFC'), [text]);
 
+  // ── Geometry pipeline ────────────────────────────────────────────────
+  // Unlike the raster pipeline it may need async work first (stroke-order
+  // references for 'auto'/'dataset' ordering, the straight-skeleton wasm),
+  // so its char-keyed glyphs are built in an effect. Results are cached per
+  // font; `geoKey` covers every input besides the glyph itself.
+  const geometry = pipeline === 'geometry';
+  const geoCache = useMemo(() => new Map<string, GeometryPipelineResult>(), []);
+  const geoKey = useMemo(() => JSON.stringify([geometryOptions, options.bezierTolerance]), [geometryOptions, options.bezierTolerance]);
+  const geoWanted = `${geoKey}:${normalizedText}`;
+  const [geoGlyphs, setGeoGlyphs] = useState<{ key: string; data: TegakiBundle['glyphData'] } | null>(null);
+  const prepareGeometry = useCallback(async () => {
+    if (geometryOptions.extraction === 'partition' && geometryOptions.medialMethod === 'straight-skeleton') {
+      await initStraightSkeleton();
+    }
+  }, [geometryOptions]);
+
+  useEffect(() => {
+    if (!geometry) return;
+    let cancelled = false;
+    (async () => {
+      await prepareGeometry();
+      const data: TegakiBundle['glyphData'] = {};
+      const seen = new Set<string>();
+      for (const char of normalizedText) {
+        if (seen.has(char) || char === ' ' || char === '\n') continue;
+        seen.add(char);
+        const refs = geometryOptions.strokeOrder === 'heuristic' ? [] : await collectReferences(char, strokeOrderProviders).catch(() => []);
+        if (cancelled) return;
+        const cacheKey = `${char}:${geoKey}:${refs.map((r) => r.source).join('+') || 'noref'}`;
+        let res = geoCache.get(cacheKey);
+        if (!res) {
+          await yieldToBrowser();
+          if (cancelled) return;
+          res = processGlyphGeometry(fontInfo, char, geometryOptions, options.bezierTolerance, refs) ?? undefined;
+          if (res) geoCache.set(cacheKey, res);
+        }
+        if (res) data[char] = toCompactGlyph(res);
+      }
+      if (!cancelled) setGeoGlyphs({ key: `${geoKey}:${normalizedText}`, data });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [geometry, fontInfo, normalizedText, geoKey, geometryOptions, options.bezierTolerance, geoCache, prepareGeometry]);
+
   // Variant glyphs the shapers produce for the current text, keyed the same
   // way the renderer looks them up: bare `"<gid>"` for primary-subset glyphs,
   // `"<subsetIdx>:<gid>"` for extras. Populated asynchronously because
@@ -206,6 +270,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     }
     let cancelled = false;
     (async () => {
+      if (geometry) await prepareGeometry();
       const buffers = [fontBuffer, ...(extraFontBuffers ?? [])];
       const fonts = [fontInfo.font, ...(fontInfo.extraFonts ?? [])];
       const shapers = await Promise.all(buffers.map((buf) => createHbShaper(buf, enabledFeatures)));
@@ -242,19 +307,26 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
               // removes the renderer's reliance on the codepoint-fallback
               // path.
               const rtl = isRtlChar(clusterChar);
-              const cacheKey = `#${subsetIdx}:${g.g}:${rtl ? 'r' : 'l'}:${optionsKey}`;
-              let res = activeCache.get(cacheKey);
-              if (!res) {
-                res = processGlyphById(fontInfo, g.g, options, subsetIdx, rtl) ?? undefined;
-                if (res) activeCache.set(cacheKey, res);
+              let res: PipelineResult | GeometryPipelineResult | undefined;
+              if (geometry) {
+                const cacheKey = `#${subsetIdx}:${g.g}:${rtl ? 'r' : 'l'}:${geoKey}`;
+                res = geoCache.get(cacheKey);
+                if (!res) {
+                  const geoRes = processGlyphGeometryById(fontInfo, g.g, geometryOptions, options.bezierTolerance, subsetIdx, rtl);
+                  if (geoRes) geoCache.set(cacheKey, geoRes);
+                  res = geoRes ?? undefined;
+                }
+              } else {
+                const cacheKey = `#${subsetIdx}:${g.g}:${rtl ? 'r' : 'l'}:${optionsKey}`;
+                res = activeCache.get(cacheKey);
+                if (!res) {
+                  const rasterRes = processGlyphById(fontInfo, g.g, options, subsetIdx, rtl);
+                  if (rasterRes) activeCache.set(cacheKey, rasterRes);
+                  res = rasterRes ?? undefined;
+                }
               }
               if (!res) continue;
-              const last = res.strokesFontUnits[res.strokesFontUnits.length - 1];
-              variants[variantKey] = {
-                w: res.advanceWidth,
-                t: last ? Math.round((last.delay + last.animationDuration) * 1000) / 1000 : 0,
-                s: res.strokesFontUnits.map(toCompactStroke),
-              };
+              variants[variantKey] = toCompactGlyph(res);
             }
           }
         }
@@ -266,31 +338,42 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     return () => {
       cancelled = true;
     };
-  }, [fontBuffer, extraFontBuffers, fontInfo, normalizedText, options, enabledFeatures, activeCache, useShaper]);
+  }, [
+    fontBuffer,
+    extraFontBuffers,
+    fontInfo,
+    normalizedText,
+    options,
+    enabledFeatures,
+    activeCache,
+    useShaper,
+    geometry,
+    geoKey,
+    geometryOptions,
+    geoCache,
+    prepareGeometry,
+  ]);
 
   const fontBundle = useMemo<TegakiBundle>(() => {
     const glyphData: TegakiBundle['glyphData'] = {};
     const optionsKey = JSON.stringify(options);
 
     const seen = new Set<string>();
-    for (const char of normalizedText) {
-      if (seen.has(char) || char === ' ' || char === '\n') continue;
-      seen.add(char);
+    if (geometry) Object.assign(glyphData, geoGlyphs?.data);
+    else {
+      for (const char of normalizedText) {
+        if (seen.has(char) || char === ' ' || char === '\n') continue;
+        seen.add(char);
 
-      const cacheKey = `${char}:${optionsKey}`;
-      let res = activeCache.get(cacheKey);
-      if (!res) {
-        res = processGlyph(fontInfo, char, options) ?? undefined;
-        if (res) activeCache.set(cacheKey, res);
+        const cacheKey = `${char}:${optionsKey}`;
+        let res = activeCache.get(cacheKey);
+        if (!res) {
+          res = processGlyph(fontInfo, char, options) ?? undefined;
+          if (res) activeCache.set(cacheKey, res);
+        }
+        if (!res) continue;
+        glyphData[char] = toCompactGlyph(res);
       }
-      if (!res) continue;
-
-      const last = res.strokesFontUnits[res.strokesFontUnits.length - 1];
-      glyphData[char] = {
-        w: res.advanceWidth,
-        t: last ? Math.round((last.delay + last.animationDuration) * 1000) / 1000 : 0,
-        s: res.strokesFontUnits.map(toCompactStroke),
-      };
     }
 
     const hasVariants = Object.keys(variantData).length > 0;
@@ -308,7 +391,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       ...(hasVariants ? { glyphDataById: variantData } : {}),
       ...(enabledFeatures.length > 0 ? { features: enabledFeatures } : {}),
     } satisfies TegakiBundle;
-  }, [fontInfo, fontUrl, extraFontUrls, normalizedText, options, activeCache, enabledFeatures, variantData]);
+  }, [fontInfo, fontUrl, extraFontUrls, normalizedText, options, activeCache, enabledFeatures, variantData, geometry, geoGlyphs]);
 
   // Latest bundle, captured by ref so the stable `handleTimelineChange`
   // callback can read it without re-subscribing the engine. Without this,
@@ -324,11 +407,17 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // collapses to a single half-form glyph (e.g. Devanagari "द्") fell
   // through to the bare consonant's duration, so the host clock stopped
   // before the engine's last stroke had drawn.
+  // A geometry bundle still being rebuilt (stale glyphs shown meanwhile) is
+  // not ready: snapshot tooling must wait for the current one.
+  const bundleCurrentRef = useRef(true);
+  bundleCurrentRef.current = !geometry || geoGlyphs?.key === geoWanted;
   const handleTimelineChange = useCallback((timeline: Timeline) => {
+    if (!bundleCurrentRef.current) return;
     onReadyRef.current?.({ bundle: bundleRef.current, totalDuration: timeline.totalDuration });
   }, []);
 
   if (!fontReady) return null;
+  if (geometry && !geoGlyphs) return null;
 
   return (
     <TegakiRenderer
