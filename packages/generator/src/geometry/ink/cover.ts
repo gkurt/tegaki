@@ -573,6 +573,27 @@ function collapseForks(g: InkGraph, rawBranches: InkBranch[]): { branches: InkBr
   return { branches, forkEnds };
 }
 
+/**
+ * Append `src` to a stroke's points (copies), dropping a repeat point unless
+ * it changes the width in place — but never its nib: a node center can land
+ * exactly on the chord midpoint before it (a dot's two-triangle axis), and
+ * dropping it lost the stamp covering that end of the dot. A nib moves onto
+ * the repeat's stamp-free twin; two stamps at one point stay two points.
+ */
+export function appendAxisPoints(dst: AxisPoint[], src: AxisPoint[]): void {
+  for (const p of src) {
+    const last = dst[dst.length - 1];
+    if (last && dist(last, p) < 1e-6 && Math.abs(last.width - p.width) < 1e-6) {
+      if (!p.nib) continue;
+      if (!last.nib) {
+        last.nib = { ...p.nib };
+        continue;
+      }
+    }
+    dst.push({ ...p });
+  }
+}
+
 export function coverInkGraph(g: InkGraph, graphBranches: InkBranch[], contours: Contour[], options: CoverOptions): CoverResult {
   const { junctionReach, continuationMinCos, step, inkAt } = options;
   const { branches: rawBranches, forkEnds } = collapseForks(g, graphBranches);
@@ -805,14 +826,6 @@ export function coverInkGraph(g: InkGraph, graphBranches: InkBranch[], contours:
     const s = slotOf.get(key);
     return s ? (clusters[s.cluster]!.extensions[s.slot] ?? null) : null;
   };
-  const append = (dst: AxisPoint[], src: AxisPoint[]) => {
-    for (const p of src) {
-      const last = dst[dst.length - 1];
-      // A repeat point is dropped unless it changes the width in place.
-      if (last && dist(last, p) < 1e-6 && Math.abs(last.width - p.width) < 1e-6) continue;
-      dst.push({ ...p });
-    }
-  };
 
   const visited = new Uint8Array(branches.length);
   // Retraced dead ends are drawn inside their passage.
@@ -824,22 +837,22 @@ export function coverInkGraph(g: InkGraph, graphBranches: InkBranch[], contours:
     const points: AxisPoint[] = [];
     const segs: number[] = [];
     const startExt = extensionOf(startBranch * 2 + startEnd);
-    if (startExt) append(points, [...startExt].reverse());
-    else append(points, [...(branches[startBranch]!.endFlicks[startEnd] ?? [])].reverse());
+    if (startExt) appendAxisPoints(points, [...startExt].reverse());
+    else appendAxisPoints(points, [...(branches[startBranch]!.endFlicks[startEnd] ?? [])].reverse());
     let bi = startBranch;
     let end: 0 | 1 = startEnd;
     let isLoop = false;
     for (let guard = branches.length + 1; guard > 0; guard--) {
       visited[bi] = 1;
       segs.push(bi);
-      append(points, withFlicks(branches[bi]!.axis, branches[bi]!.flicks, end === 1));
+      appendAxisPoints(points, withFlicks(branches[bi]!.axis, branches[bi]!.flicks, end === 1));
       const outKey = bi * 2 + (1 - end);
       const next = partner.get(outKey);
       if (!next) {
-        append(points, extensionOf(outKey) ?? branches[bi]!.endFlicks[1 - end] ?? []);
+        appendAxisPoints(points, extensionOf(outKey) ?? branches[bi]!.endFlicks[1 - end] ?? []);
         break;
       }
-      append(points, next.passage);
+      appendAxisPoints(points, next.passage);
       const nb = Math.floor(next.key / 2);
       if (visited[nb]) {
         isLoop = nb === startBranch && next.key === startBranch * 2 + startEnd;

@@ -3,11 +3,11 @@ import type { Point } from 'tegaki';
 import { buildContours } from '../contours.ts';
 import { pointInRegion } from '../primitives.ts';
 import type { AxisPoint } from '../types.ts';
-import { type ClusterSlot, findSerifArms, type SerifSlotShape, solvePairing } from './cover.ts';
+import { appendAxisPoints, type ClusterSlot, findSerifArms, type SerifSlotShape, solvePairing } from './cover.ts';
 import { extractInkRegion, type InkExtractionOptions } from './extract.ts';
 import { buildInkGraph, pruneSpurs, withFlicks } from './graph.ts';
 import { buildInkMesh, trianglePoints } from './mesh.ts';
-import { carryNibs, inNib, paintedBy, stampHoles, triangleSample } from './nib.ts';
+import { carryNibs, inNib, paintedBy, stampHoles, triangleSample, unpaintedSamples } from './nib.ts';
 import { RegionIndex, SegmentIndex } from './spatial.ts';
 
 const STEP = 6;
@@ -462,5 +462,72 @@ describe('nibs', () => {
     expect(p.x + p.nib!.dx).toBeCloseTo(53);
     expect(p.y + p.nib!.dy).toBeCloseTo(-4);
     expect(after[1]!.points.length).toBe(2); // inputs are not mutated
+  });
+});
+
+describe('appendAxisPoints', () => {
+  const nib = { dx: 4, dy: 0, major: 20, minor: 10, angle: 0 };
+  test('a repeat point is dropped, but its nib moves onto the stamp-free twin', () => {
+    const dst: AxisPoint[] = [{ x: 0, y: 0, width: 10 }];
+    appendAxisPoints(dst, [
+      { x: 0, y: 0, width: 10, nib },
+      { x: 20, y: 0, width: 10 },
+    ]);
+    expect(dst.map((p) => [p.x, p.nib?.major])).toEqual([
+      [0, 20],
+      [20, undefined],
+    ]);
+  });
+
+  test('two stamps at one point stay two points', () => {
+    const dst: AxisPoint[] = [{ x: 0, y: 0, width: 10, nib }];
+    appendAxisPoints(dst, [{ x: 0, y: 0, width: 10, nib: { ...nib, angle: 1 } }]);
+    expect(dst.map((p) => p.nib?.angle)).toEqual([0, 1]);
+  });
+});
+
+describe('paintedBy', () => {
+  test('a negative tolerance past the pen radius paints nothing', () => {
+    const pen = [
+      [
+        { x: 0, y: 0, width: 10 },
+        { x: 100, y: 0, width: 10 },
+      ],
+    ];
+    expect(paintedBy({ x: 50, y: 0 }, pen, -4)).toBe(true);
+    expect(paintedBy({ x: 50, y: 0 }, pen, -6)).toBe(false);
+  });
+});
+
+describe('unpaintedSamples', () => {
+  const mesh = buildInkMesh(buildContours([rect(0, 0, 60, 60)]), 1000);
+  const g = buildInkGraph(mesh, new SegmentIndex([], 1000));
+  const areaOf = (t: number) => {
+    const [a, b, c] = trianglePoints(mesh, t);
+    return Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) / 2;
+  };
+
+  test('bare ink is sampled about `spacing` apart, area preserved', () => {
+    for (let t = 0; t < mesh.triCount; t++) {
+      const [a] = trianglePoints(mesh, t);
+      const qs = unpaintedSamples(g, t, 6, [], 0);
+      expect(qs.length).toBeGreaterThan(100);
+      expect(qs.reduce((acc, q) => acc + q.area, 0)).toBeCloseTo(areaOf(t), 6);
+      expect(Math.min(...qs.map((q) => Math.hypot(q.p.x - a.x, q.p.y - a.y)))).toBeLessThan(6);
+    }
+  });
+
+  test('a sliver along the rim of a broad triangle is measured, not hidden by its painted centroid', () => {
+    // A pen along y = 28 painting 0 ≤ y ≤ 56 of the square: a 4-high band is left.
+    const pen = [
+      [
+        { x: 0, y: 28, width: 56 },
+        { x: 60, y: 28, width: 56 },
+      ],
+    ];
+    let left = 0;
+    for (let t = 0; t < mesh.triCount; t++) for (const q of unpaintedSamples(g, t, 3, pen, 0)) left += q.area;
+    expect(left / 3600).toBeGreaterThan(0.04);
+    expect(left / 3600).toBeLessThan(0.1);
   });
 });

@@ -457,18 +457,24 @@ function pinchPrune(pts: import('./types.ts').AxisPoint[], epsilon: number): imp
  *   each dropped point projects onto it; the radius it paints past the
  *   outline counts, scaled by `spillWeight` — so a chord across a gently
  *   curved stem stays inside.
+ * - `coverage` measures a narrower pen by the ink it stops reaching: its
+ *   offset from the dropped point PLUS the radius it falls short by, since
+ *   the far side of the dropped disk loses both. Plain RDP takes the larger
+ *   of the two, which lets a chord across a bulging blob (a comma's body)
+ *   leave a sliver unpainted along one side.
  */
 export interface RdpOvershootOptions {
   overshootWeight?: number;
   clearance?: (p: Point) => number;
   spillWeight?: number;
+  coverage?: boolean;
 }
 
 /** One width-aware Ramer-Douglas-Peucker pass (see simplifyStroke), with optional pen-overshoot checks. */
 export function rdpSimplify(
   points: import('./types.ts').AxisPoint[],
   epsilon: number,
-  { overshootWeight = 1, clearance, spillWeight = 1 }: RdpOvershootOptions = {},
+  { overshootWeight = 1, clearance, spillWeight = 1, coverage = false }: RdpOvershootOptions = {},
 ): import('./types.ts').AxisPoint[] {
   if (points.length <= 2) return points;
   const keep = new Uint8Array(points.length);
@@ -507,7 +513,7 @@ export function rdpSimplify(
         const radius = (a.width + (b.width - a.width) * t) / 2;
         const excess = radius - p.width / 2;
         const widthDev = excess > 0 ? excess * overshootWeight : -excess;
-        let d = Math.max(positional, widthDev);
+        let d = coverage && excess < 0 ? positional - excess : Math.max(positional, widthDev);
         if (clearance) {
           const spill = radius - clearance({ x: a.x + ab.x * t, y: a.y + ab.y * t });
           if (spill > 0) d = Math.max(d, spill * spillWeight);

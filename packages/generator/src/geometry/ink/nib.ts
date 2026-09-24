@@ -195,6 +195,37 @@ export function triangleSample(g: InkGraph, tri: number): InkSample {
 }
 
 /**
+ * The ink of `tri` no stroke paints within `tolerance`, as area-weighted
+ * samples at most about `spacing` apart. One centroid per triangle can't
+ * see a sliver along the rim of a broad triangle (a dot's two-triangle
+ * interior), so the triangle is split in four until its pieces are that
+ * small — except a piece inside one pen disk, skipped whole: a negative
+ * tolerance of its reach about the centroid asks exactly that (nibs aside —
+ * a shrunk ellipse isn't its inner parallel).
+ */
+export function unpaintedSamples(g: InkGraph, tri: number, spacing: number, strokes: AxisPoint[][], tolerance: number): InkSample[] {
+  const out: InkSample[] = [];
+  const visit = (a: Point, b: Point, c: Point) => {
+    const p = { x: (a.x + b.x + c.x) / 3, y: (a.y + b.y + c.y) / 3 };
+    if (paintedBy(p, strokes, tolerance - Math.max(dist(p, a), dist(p, b), dist(p, c)), false)) return;
+    if (Math.max(dist(a, b), dist(b, c), dist(c, a)) <= spacing) {
+      if (!paintedBy(p, strokes, tolerance)) out.push({ p, area: Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) / 2 });
+      return;
+    }
+    const ab = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const bc = { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 };
+    const ca = { x: (c.x + a.x) / 2, y: (c.y + a.y) / 2 };
+    visit(a, ab, ca);
+    visit(ab, b, bc);
+    visit(ca, bc, c);
+    visit(ab, bc, ca);
+  };
+  const [a, b, c] = trianglePoints(g.mesh, tri);
+  visit(a, b, c);
+  return out;
+}
+
+/**
  * Fit nibs at every stroke-carrying node with visible flicks (hubs and
  * pruned-down ends; junction nodes are trimmed out of strokes, so skipped).
  * Sets `g.nibs[t]` (relative to the node center, where the stroke passes)
@@ -244,12 +275,12 @@ export function fitNibs(g: InkGraph, inkAt: (p: Point) => boolean, step: number,
 
 /**
  * True when `p` lies within the ink some stroke paints (plus `tolerance`):
- * its round pen swept along the points (width interpolated), plus the nib
- * stamped at each nib point.
+ * its round pen swept along the points (width interpolated), plus — unless
+ * `stamps` is false — the nib stamped at each nib point.
  */
-export function paintedBy(p: Point, strokes: AxisPoint[][], tolerance: number): boolean {
+export function paintedBy(p: Point, strokes: AxisPoint[][], tolerance: number, stamps = true): boolean {
   for (const pts of strokes) {
-    for (const q of pts) if (q.nib && inNib(p, q, q.nib, tolerance)) return true;
+    if (stamps) for (const q of pts) if (q.nib && inNib(p, q, q.nib, tolerance)) return true;
     if (pts.length === 1) {
       if (dist(p, pts[0]!) <= pts[0]!.width / 2 + tolerance) return true;
       continue;
@@ -262,10 +293,10 @@ export function paintedBy(p: Point, strokes: AxisPoint[][], tolerance: number): 
       const l2 = dx * dx + dy * dy;
       let t = l2 > 0 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2 : 0;
       t = Math.max(0, Math.min(1, t));
-      const w = a.width + (b.width - a.width) * t;
+      const r = (a.width + (b.width - a.width) * t) / 2 + tolerance;
       const ex = a.x + dx * t - p.x;
       const ey = a.y + dy * t - p.y;
-      if (ex * ex + ey * ey <= (w / 2 + tolerance) ** 2) return true;
+      if (r >= 0 && ex * ex + ey * ey <= r * r) return true;
     }
   }
   return false;
@@ -332,11 +363,17 @@ export function carryNibs<S extends { points: AxisPoint[] }>(before: S[], after:
 
 /** Unpainted ink at least this deep (sample steps from the outline) is a hole, not a sliver along the edge. */
 const HOLE_MIN_DEPTH = 0.5;
+/**
+ * Hole detection samples the ink this many sample steps apart: coarser than
+ * the coverage audit, since the slivers finer sampling finds lie within
+ * `HOLE_MIN_DEPTH` of the outline and are no holes anyway.
+ */
+const HOLE_SAMPLE_SPACING = 3;
 /** Holes (and stamp gains) below this area, in squared sample steps, are left alone. */
 const HOLE_MIN_AREA = 4;
 /** Stamps per hole: one too big for a single ellipse gets another. */
 const HOLE_MAX_STAMPS = 3;
-/** Farthest hole samples tried as stamp directions. */
+/** Farthest hole samples (a step apart) tried as stamp directions. */
 const HOLE_TARGETS = 6;
 
 /** Nearest point on any stroke to `p`: stroke, segment start index, position and interpolated width. */
@@ -374,11 +411,11 @@ export function stampHoles(strokes: { points: AxisPoint[] }[], g: InkGraph, inkA
   const minArea = HOLE_MIN_AREA * step * step;
   const paths = () => strokes.map((s) => s.points);
   const depth = (p: Point) => g.boundary.nearest(p);
-  const hole = new Map<number, InkSample>();
+  const hole = new Map<number, InkSample[]>();
   const all = paths();
   for (let t = 0; t < mesh.triCount; t++) {
-    const q = triangleSample(g, t);
-    if (depth(q.p) >= HOLE_MIN_DEPTH * step && !paintedBy(q.p, all, 0)) hole.set(t, q);
+    const qs = unpaintedSamples(g, t, HOLE_SAMPLE_SPACING * step, all, 0).filter((q) => depth(q.p) >= HOLE_MIN_DEPTH * step);
+    if (qs.length > 0) hole.set(t, qs);
   }
   // Connected holes, largest first.
   const holes: InkSample[][] = [];
@@ -390,7 +427,7 @@ export function stampHoles(strokes: { points: AxisPoint[] }[], g: InkGraph, inkA
     const stack = [start];
     while (stack.length > 0) {
       const t = stack.pop()!;
-      comp.push(hole.get(t)!);
+      comp.push(...hole.get(t)!);
       for (let e = 0; e < 3; e++) {
         const nb = mesh.nbr[3 * t + e]!;
         if (nb >= 0 && hole.has(nb) && !seen.has(nb)) {
@@ -414,10 +451,13 @@ export function stampHoles(strokes: { points: AxisPoint[] }[], g: InkGraph, inkA
       if (!near) return stamped;
       const { at } = near;
       const radius = Math.max(at.width / 2, depth(deepest.p));
-      const targets = samples
-        .map((q) => q.p)
-        .sort((a, b) => dist(b, at) - dist(a, at))
-        .slice(0, HOLE_TARGETS);
+      // The farthest samples, a step apart so they spread over the hole
+      // instead of crowding its far tip.
+      const targets: Point[] = [];
+      for (const q of samples.map((q) => q.p).sort((a, b) => dist(b, at) - dist(a, at))) {
+        if (targets.length === HOLE_TARGETS) break;
+        if (targets.every((t) => dist(t, q) >= step)) targets.push(q);
+      }
       const best = fitStamp({ at, radius, targets, samples, inkAt });
       if (!best || best.gain < minArea) break;
       // Leave the stamp on a point of its own at the anchor, so it neither

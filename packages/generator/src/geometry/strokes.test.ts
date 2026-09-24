@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Point } from 'tegaki';
-import { matchContinuations, simplifyStroke, type TrialJoinScorer } from './strokes.ts';
+import { matchContinuations, rdpSimplify, simplifyStroke, type TrialJoinScorer } from './strokes.ts';
 import { type AxisPoint, DEFAULT_GEOMETRY_OPTIONS, type JunctionInfo, resolveGeometryOptions, type SegmentInfo } from './types.ts';
 
 const pt = (x: number, y: number): AxisPoint => ({ x, y, width: 10 });
@@ -191,5 +191,21 @@ describe('matchContinuations — trial-join re-ranking', () => {
       [0, 1],
       [2, 3],
     ]);
+  });
+});
+
+describe('rdpSimplify coverage', () => {
+  // A blob bulging 3 off the chord and 10 wider than it: neither error alone
+  // passes epsilon 6, but together the far side of the blob loses 8.
+  const blob: AxisPoint[] = [
+    { x: 0, y: 0, width: 20 },
+    { x: 50, y: 3, width: 30 },
+    { x: 100, y: 0, width: 20 },
+  ];
+  test('plain RDP drops the bulge', () => {
+    expect(rdpSimplify(blob, 6).length).toBe(2);
+  });
+  test('coverage keeps it: offset and radius shortfall add up', () => {
+    expect(rdpSimplify(blob, 6, { coverage: true }).length).toBe(3);
   });
 });

@@ -21,7 +21,7 @@ import type { AxisPoint, Contour, Face, GeoStroke, SegmentInfo } from '../types.
 import { coverInkGraph, type JunctionCluster } from './cover.ts';
 import { buildInkGraph, extractBranches, pruneSpurs } from './graph.ts';
 import { buildInkMesh, trianglePoints } from './mesh.ts';
-import { fitNibs, paintedBy, stampHoles } from './nib.ts';
+import { fitNibs, stampHoles, unpaintedSamples } from './nib.ts';
 import { RegionIndex, SegmentIndex } from './spatial.ts';
 
 export interface InkExtractionOptions {
@@ -145,6 +145,7 @@ export function simplifyKeepingNibs(points: AxisPoint[], epsilon: number, cleara
       overshootWeight: WIDTH_OVERSHOOT_WEIGHT,
       clearance,
       spillWeight: SPILL_WEIGHT,
+      coverage: true,
     });
     out.push(...(out.length > 0 ? piece.slice(1) : piece));
     start = i;
@@ -210,7 +211,7 @@ export function extractInkRegion(contours: Contour[], options: InkExtractionOpti
     const area = Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) / 2;
     totalArea += area;
     const centroid = polygonCentroid(tri);
-    if (!paintedBy(centroid, strokePts, tolerance)) uncoveredArea += area;
+    for (const q of unpaintedSamples(graph, t, step, strokePts, tolerance)) uncoveredArea += q.area;
     faces.push({
       id: faceIdOffset + t,
       polygon: tri,
