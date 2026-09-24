@@ -5,11 +5,11 @@ const PAGE = '/tegaki/preview/';
 /**
  * Build a URL with the standalone preview params. Values are URL-encoded via
  * URLSearchParams so callers don't have to escape them. The snapshots are of
- * the raster pipeline (what the shipped bundles use), so it is pinned rather
- * than left to the Studio's default; a case can still override `pl`.
+ * the default geometry pipeline (what the shipped bundles use); a case can
+ * still set `pl=raster`.
  */
 function previewUrl(params: Record<string, string | number>): string {
-  const p = new URLSearchParams({ pl: 'raster' });
+  const p = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) p.set(k, String(v));
   return `${PAGE}?${p.toString()}`;
 }
@@ -207,6 +207,10 @@ const CASES: PreviewCase[] = [
 ];
 
 test('Standalone text preview — snapshots across URL params', async ({ page }) => {
+  // Every case runs in this one test, each extracting its glyphs in the page
+  // (the geometry pipeline takes a few seconds per case): the default 30s
+  // budget is for one case, not all of them.
+  test.setTimeout(20_000 + CASES.length * 15_000);
   for (const c of CASES) {
     await test.step(c.name, async () => {
       await page.goto(previewUrl(c.params));

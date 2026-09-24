@@ -4,7 +4,8 @@
 #
 # Usage:
 #   scripts/e2e-docker.sh               # run tests (compare against committed linux snapshots)
-#   scripts/e2e-docker.sh --update      # regenerate linux snapshots
+#   scripts/e2e-docker.sh --update      # regenerate linux snapshots that no longer match
+#   scripts/e2e-docker.sh --update-all  # regenerate every linux snapshot, even ones within tolerance
 set -euo pipefail
 
 # Keep in sync with the @playwright/test version in package.json and the CI image.
@@ -16,6 +17,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 CMD="bun test:e2e"
 if [ "${1:-}" = "--update" ]; then
   CMD="bun test:e2e:update"
+elif [ "${1:-}" = "--update-all" ]; then
+  CMD="bunx playwright test --update-snapshots=all"
 fi
 
 docker run --rm \
