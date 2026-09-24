@@ -5,17 +5,30 @@ description: How to use the generator to create stroke data from fonts.
 
 The Tegaki generator processes fonts through a multi-stage pipeline to produce stroke data suitable for handwriting animation. Use the [studio](/tegaki/studio/) on the Tegaki website to generate font bundles directly in the browser.
 
-## Pipeline
+## Pipelines
 
-Each glyph goes through these stages:
+The generator has two ways to find a glyph's strokes. Both start the same way: opentype.js extracts the path commands and metrics, and adaptive de Casteljau subdivision flattens the bezier curves into polylines.
 
-1. **Extract** — opentype.js extracts path commands and metrics
-2. **Flatten** — Adaptive de Casteljau subdivision converts bezier curves to polyline segments
-3. **Rasterize** — Scanline fill with nonzero winding rule produces a binary bitmap
-4. **Skeletonize** — Zhang-Suen thinning reduces the bitmap to 1px-wide skeleton
-5. **Trace** — Walks skeleton pixels into polylines, prunes short spurs, simplifies with Ramer-Douglas-Peucker
-6. **Width** — Distance transform computes stroke width at each skeleton point
-7. **Stroke order** — Groups polylines into connected components, sorts top-to-bottom/left-to-right
+### Geometry (default)
+
+Works on the outline itself, with no bitmap:
+
+1. **Mesh** — A conforming Delaunay triangulation fills the glyph's ink
+2. **Ink graph** — The triangles' chordal axis gives each stroke's centerline, with its width read from the chords
+3. **Spurs and nibs** — Short offshoots at pointed ends and corners are pruned, and the ink they held is painted by an elliptic nib stamp as the pen passes
+4. **Junctions** — Where strokes meet, the arms are paired so a pen runs straight through a crossing instead of turning
+5. **Simplify** — Width-aware Ramer-Douglas-Peucker keeps the points the pen needs to cover the ink; leftover holes get stamps of their own
+6. **Stroke order** — Ordered by a matching [KanjiVG](https://kanjivg.tagaini.net/) or Hershey reference glyph when one fits the ink, otherwise top-to-bottom/left-to-right
+
+### Raster
+
+Rasterizes the glyph and thins it to a skeleton:
+
+1. **Rasterize** — Scanline fill with nonzero winding rule produces a binary bitmap
+2. **Skeletonize** — Zhang-Suen thinning reduces the bitmap to 1px-wide skeleton
+3. **Trace** — Walks skeleton pixels into polylines, prunes short spurs, simplifies with Ramer-Douglas-Peucker
+4. **Width** — Distance transform computes stroke width at each skeleton point
+5. **Stroke order** — Groups polylines into connected components, sorts top-to-bottom/left-to-right
 
 ## Options
 
@@ -23,15 +36,16 @@ Each glyph goes through these stages:
 |--------|---------|-------------|
 | Font | `Caveat` | Google Font family name |
 | Characters | `A-Za-z0-9` + punctuation | Characters to process |
-| Resolution | `400` | Bitmap resolution for rasterization |
-| Skeleton method | `zhang-suen` | Skeletonization algorithm |
+| Pipeline | `geometry` | Stroke extraction: `geometry` or `raster` |
+| Resolution | `400` | Bitmap resolution for rasterization (raster) |
+| Skeleton method | `zhang-suen` | Skeletonization algorithm (raster) |
 | Line cap | `round` | Stroke line cap style |
 | Bezier tolerance | `0.5` | Flatness tolerance for bezier subdivision |
-| RDP tolerance | `1.0` | Ramer-Douglas-Peucker simplification tolerance |
+| RDP tolerance | `1.0` | Ramer-Douglas-Peucker simplification tolerance (raster) |
 
 ## Output format
 
-The generator outputs a compressed format with short keys to minimize bundle size. Per-glyph data includes `w` (advance width), `t` (total animation duration), and `s` (strokes). Each stroke has `p` (points as `[x, y, width]` tuples), `d` (delay), and `a` (animation duration). See the `TegakiGlyphData` type for full details.
+The generator outputs a compressed format with short keys to minimize bundle size. Per-glyph data includes `w` (advance width), `t` (total animation duration), and `s` (strokes). Each stroke has `p` (points as `[x, y, width]` tuples), `d` (delay), `a` (animation duration), and — for geometry strokes that carry them — `n` (nib stamps as `[pointIndex, dx, dy, major, minor, angle]`). See the `TegakiGlyphData` type for full details.
 
 ## Interactive generator
 

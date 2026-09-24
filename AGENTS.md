@@ -71,9 +71,9 @@ Pre-generated font bundles live outside `src/`, under `packages/renderer/fonts/<
 
 ### Generator (`packages/generator`)
 
-CLI entry point uses Padrone. The `generate` command orchestrates a pipeline that processes each glyph through several stages.
+CLI entry point uses Padrone. The `generate` command orchestrates a pipeline that processes each glyph through several stages. `--pipeline` picks the stroke extraction: `geometry` (default — outline-geometry ink-graph extraction in `src/geometry/`, ordered by KanjiVG / Hershey references; the shipped bundles use it) or `raster` (below).
 
-#### Pipeline (per glyph)
+#### Raster pipeline (per glyph)
 
 ```
 Font download -> Parse (opentype.js) -> Flatten beziers -> Rasterize -> Skeletonize -> Trace -> Compute width -> Order strokes -> JSON output
@@ -260,7 +260,7 @@ The Playwright suite drives [/tegaki/preview/](packages/website/src/components/p
 
 To add a case:
 
-1. Append a `PreviewCase` to the `CASES` array (`previewUrl` pins `pl=raster`, the pipeline the shipped bundles use; set `pl` in the case to snapshot the geometry pipeline) in [text-preview.e2e.ts](packages/website/tests/e2e/text-preview.e2e.ts) with deterministic params: `tm=controlled` + a fixed `ct` for a stable frame, `w` / `h` to fix the container size in pixels. Use `ol=1` and a mid-timeline `ct` when the case needs to lock in the canvas/overlay seam (both layers visible in one frame).
+1. Append a `PreviewCase` to the `CASES` array (`previewUrl` leaves `pl` at the default geometry pipeline, the one the shipped bundles use; set `pl=raster` in the case to snapshot the raster pipeline) in [text-preview.e2e.ts](packages/website/tests/e2e/text-preview.e2e.ts) with deterministic params: `tm=controlled` + a fixed `ct` for a stable frame, `w` / `h` to fix the container size in pixels. Use `ol=1` and a mid-timeline `ct` when the case needs to lock in the canvas/overlay seam (both layers visible in one frame).
 2. Generate the local darwin baseline: `cd packages/website && bun test:e2e:update`.
 3. Generate the linux baseline (required for CI): `cd packages/website && bun test:e2e:docker:update`. Runs the same Playwright Ubuntu image CI uses — needs Docker. Without this CI will fail with "missing snapshot".
 4. Eyeball the produced PNGs to confirm they capture the intended behaviour (don't just trust a passing test — a buggy fix can still snapshot cleanly). Commit both `-darwin` and `-linux` files alongside the test code change.
