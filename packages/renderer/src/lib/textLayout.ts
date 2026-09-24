@@ -3,10 +3,7 @@ import type { BundleShaper, ShapedGlyph } from './shaper.ts';
 import type { Timeline } from './timeline.ts';
 import { graphemes } from './utils.ts';
 
-// Strong-RTL codepoints: Hebrew, Arabic, Syriac, Thaana, NKo, Samaritan,
-// Mandaic, plus Arabic Presentation Forms A/B. Sufficient to decide per-line
-// shaping direction for `applyShaperPositions`.
-const RTL_CHAR_RE = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
+const WHITESPACE_RE = /\s/u;
 
 export interface TextLayout {
   /** Character indices per line */
@@ -23,6 +20,52 @@ export interface TextLayout {
    * shaper path isn't taken; consumers must fall back to `charOffsets`.
    */
   lineLefts?: number[];
+  /**
+   * The paragraph's resolved base direction, as the browser laid it out:
+   * `dir="auto"` resolves from the first strong character, so Arabic text
+   * that opens with a Latin word is still LTR (left-aligned, runs ordered
+   * left to right). Anything redrawing the text itself (the clip mask's
+   * `fillText`) must use it to reproduce the same bidi order. Defaults to
+   * `'ltr'` when absent.
+   */
+  direction?: 'ltr' | 'rtl';
+}
+
+/** A whitespace-delimited word of a laid-out line, with its visual-left edge in em. */
+export interface LineWord {
+  text: string;
+  leftEm: number;
+}
+
+/**
+ * The words of line `lineIdx`, each anchored at its leftmost measured
+ * grapheme — where the browser put it, bidi order included. Redrawing text
+ * word by word at these anchors (the clip mask) keeps a word the canvas
+ * shapes differently from the DOM from shifting every word after it: the
+ * canvas and the DOM can disagree next to another script (Amiri's `1⁄2`
+ * beside Arabic measures 19px wider in canvas). Words that measured no width
+ * are left out.
+ */
+export function lineWords(layout: TextLayout, characters: readonly string[], lineIdx: number): LineWord[] {
+  const words: LineWord[] = [];
+  let text = '';
+  let left = Infinity;
+  const flush = () => {
+    if (text && Number.isFinite(left)) words.push({ text, leftEm: left });
+    text = '';
+    left = Infinity;
+  };
+  for (const charIdx of layout.lines[lineIdx] ?? []) {
+    const char = characters[charIdx] ?? '';
+    if (!char || WHITESPACE_RE.test(char)) {
+      flush();
+      continue;
+    }
+    text += char;
+    if ((layout.charWidths[charIdx] ?? 0) > 0) left = Math.min(left, layout.charOffsets[charIdx] ?? 0);
+  }
+  flush();
+  return words;
 }
 
 /**
@@ -92,6 +135,7 @@ function measureElement(el: HTMLElement, fontSize: number): TextLayout {
   const text = textNode.textContent ?? '';
   const chars = graphemes(text);
   if (!chars.length) return { lines: [], charOffsets: [], charWidths: [] };
+  const direction = getComputedStyle(el).direction === 'rtl' ? 'rtl' : 'ltr';
 
   // Use element's left edge as reference so offsets are direction-agnostic.
   // For LTR the first char is near the left edge; for RTL it's near the right —
@@ -157,7 +201,7 @@ function measureElement(el: HTMLElement, fontSize: number): TextLayout {
   }
   if (currentLine.length > 0) lines.push(currentLine);
 
-  return { lines, charOffsets, charWidths };
+  return { lines, charOffsets, charWidths, direction };
 }
 
 /**
@@ -175,9 +219,10 @@ function measureElement(el: HTMLElement, fontSize: number): TextLayout {
  * glyph origins the shaper produced. Using the shaper's own `ax` walk keeps
  * the stroke positions aligned with the glyph ids the shaper chose.
  *
- * Line anchor (the leftmost visual pixel of each line) is measured from the
- * DOM using a full-line Range — per-grapheme rects inside shaped clusters are
- * not reliable enough to anchor against.
+ * Anchors are measured from the DOM with Ranges over whole spans — the line
+ * (its leftmost visual pixel) and each word in it — never per grapheme:
+ * per-grapheme rects inside shaped clusters are not reliable enough. Word
+ * anchors also carry the browser's bidi ordering; see positionLineGlyphs.
  *
  * `letterSpacingEm` (CSS `letter-spacing` divided by font size) is inserted
  * between clusters during the pen-walk so the shaper path tracks whatever the
@@ -226,7 +271,6 @@ export function applyShaperPositions(
   const charOffsets = layout.charOffsets.slice();
   const charWidths = layout.charWidths.slice();
   const lineLefts: number[] = new Array(layout.lines.length).fill(0);
-  const emPerUnit = 1 / font.unitsPerEm;
 
   // Index timeline entries by `graphemeIndex:glyphId` so each shaped glyph
   // can find its corresponding entry and fill in xOffsetEm/yOffsetEm.
@@ -265,64 +309,29 @@ export function applyShaperPositions(
     const lineLeftEm = (lineLeftPx - elLeft) / scale / fontSize;
     lineLefts[li] = lineLeftEm;
 
-    // Harfbuzz emits glyphs in a per-run visual order: within each bidi/word
-    // run (contiguous stretch where cluster indices walk monotonically) the
-    // glyphs are already in visual left-to-right order, but the *runs* are
-    // emitted in logical order. For RTL lines that means each word is
-    // shaped correctly internally yet the words themselves appear in the
-    // wrong order — pen-walking the raw buffer would put the logical-first
-    // word at the visual left edge. Detect run boundaries (cl jumps up for
-    // RTL, where within a word cl walks downward) and reverse the list of
-    // runs so pen-walking forward produces the true visual-LTR layout.
+    // Word order comes from the browser; glyph order within a word from the
+    // shaper. See positionLineGlyphs.
     const lineText = text.slice(lineStartU, lineEndU);
-    const lineRTL = RTL_CHAR_RE.test(lineText);
     const shaped = shaper.shape(lineText);
     if (shaped.length === 0) continue;
-    const visualGlyphs = lineRTL ? reverseRTLRuns(shaped) : shaped;
-
-    // Walk glyphs in visual order. Glyph draw position is pen + (dx, dy),
-    // and the pen advances by (ax, ay) after each glyph. HarfBuzz uses a
-    // y-up coordinate system; we negate dy/ay to match our y-down draw
-    // axis. Record each cluster's visual left + summed advance for layout
-    // (consumed by the engine's fallback path, the layout bbox, and any
-    // consumer that indexes by grapheme), and fill in per-entry x/y for
-    // the engine's primary draw path so marks land on their base correctly.
-    const clusterLeft = new Map<number, number>();
-    const clusterAdvance = new Map<number, number>();
-    let penEm = 0;
-    let penYEm = 0;
-    let prevCl: number | undefined;
-    for (const g of visualGlyphs) {
-      // CSS `letter-spacing` adds a gap after each typographic unit. Insert it
-      // once per cluster boundary (before every cluster except the first) so
-      // the extra advance accumulates just like the browser applied it to the
-      // overlay the DOM broke lines against.
-      if (prevCl !== undefined && g.cl !== prevCl) penEm += letterSpacingEm;
-      prevCl = g.cl;
-      const axEm = g.ax * emPerUnit;
-      const ayEm = g.ay * emPerUnit;
-      const dxEm = g.dx * emPerUnit;
-      const dyEm = g.dy * emPerUnit;
-      const glyphXEm = penEm + dxEm;
-      const glyphYEm = penYEm - dyEm;
-      if (!clusterLeft.has(g.cl)) clusterLeft.set(g.cl, glyphXEm);
-      clusterAdvance.set(g.cl, (clusterAdvance.get(g.cl) ?? 0) + axEm);
-
-      if (timeline) {
+    const spanLeftEm = (start: number, end: number): number | undefined => {
+      range.setStart(textNode, lineStartU + start);
+      range.setEnd(textNode, lineStartU + end);
+      let left = Infinity;
+      for (const r of range.getClientRects()) if (r.width > 0 && r.left < left) left = r.left;
+      return Number.isFinite(left) ? (left - elLeft) / scale / fontSize - lineLeftEm : undefined;
+    };
+    const { glyphs, clusterLeft, clusterAdvance } = positionLineGlyphs(shaped, lineText, spanLeftEm, font.unitsPerEm, letterSpacingEm);
+    if (timeline) {
+      for (const { glyph: g, xEm, yEm } of glyphs) {
         const gIdx = utf16ToGrapheme[lineStartU + g.cl];
-        if (gIdx !== undefined && gIdx >= 0) {
-          const queue = entryQueue.get(`${gIdx}:${g.g}`);
-          const ei = queue?.shift();
-          if (ei !== undefined) {
-            const entry = timeline.entries[ei]!;
-            entry.xOffsetEm = glyphXEm;
-            entry.yOffsetEm = glyphYEm;
-          }
-        }
+        if (gIdx === undefined || gIdx < 0) continue;
+        const ei = entryQueue.get(`${gIdx}:${g.g}`)?.shift();
+        if (ei === undefined) continue;
+        const entry = timeline.entries[ei]!;
+        entry.xOffsetEm = xEm;
+        entry.yOffsetEm = yEm;
       }
-
-      penEm += axEm;
-      penYEm -= ayEm;
     }
 
     // Assign offsets to the grapheme at each cluster start.
@@ -353,30 +362,82 @@ export function applyShaperPositions(
     }
   }
 
-  return { lines: layout.lines, charOffsets, charWidths, lineLefts };
+  return { ...layout, charOffsets, charWidths, lineLefts };
+}
+
+/** A shaped glyph with its draw origin, in em from the line's visual-left edge (y down). */
+export interface PositionedGlyph {
+  glyph: ShapedGlyph;
+  xEm: number;
+  yEm: number;
 }
 
 /**
- * Reorder a harfbuzz-shaped RTL line so that pen-walking forward produces
- * visual left-to-right positions. HB emits each word's glyphs in within-word
- * visual order (cl descending for RTL) but keeps the words themselves in
- * logical order — so we split on cl-jumps and reverse the list of runs while
- * preserving each run's internal order.
+ * Place one line's shaped glyphs. The shaper shapes each whitespace-delimited
+ * word on its own and returns the words in LOGICAL order, each word's glyphs
+ * already in visual order (an RTL word comes out right to left). Arranging
+ * the words visually is the Unicode bidi algorithm's job, with the
+ * paragraph's base direction — which `dir="auto"` takes from the first strong
+ * character, so an Arabic line opening with a Latin word is laid out LTR. The
+ * browser has already done all of that for the overlay, so each word is
+ * anchored where the DOM put it (`spanLeftEm`, em from the line's left edge,
+ * over a UTF-16 span of `lineText`) and the shaper's advances only walk the
+ * glyphs inside it. A word the DOM can't measure continues from the previous
+ * one.
+ *
+ * `letterSpacingEm` is inserted before every cluster but a word's first; the
+ * gaps between words are in the DOM's measured positions.
  */
-function reverseRTLRuns(shaped: ShapedGlyph[]): ShapedGlyph[] {
-  const runs: ShapedGlyph[][] = [];
-  let cur: ShapedGlyph[] = [];
-  for (const g of shaped) {
-    if (cur.length && g.cl > cur[cur.length - 1]!.cl) {
-      runs.push(cur);
-      cur = [];
-    }
-    cur.push(g);
+export function positionLineGlyphs(
+  shaped: ShapedGlyph[],
+  lineText: string,
+  spanLeftEm: (start: number, end: number) => number | undefined,
+  unitsPerEm: number,
+  letterSpacingEm = 0,
+): { glyphs: PositionedGlyph[]; clusterLeft: Map<number, number>; clusterAdvance: Map<number, number> } {
+  // Word (and whitespace-run) spans of the line, as UTF-16 [start, end).
+  const spanOf = new Int32Array(lineText.length).fill(-1);
+  const spans: [number, number][] = [];
+  for (let i = 0; i < lineText.length; ) {
+    const ws = WHITESPACE_RE.test(lineText[i]!);
+    let j = i + 1;
+    while (j < lineText.length && WHITESPACE_RE.test(lineText[j]!) === ws) j++;
+    for (let k = i; k < j; k++) spanOf[k] = spans.length;
+    spans.push([i, j]);
+    i = j;
   }
-  if (cur.length) runs.push(cur);
-  const out: ShapedGlyph[] = [];
-  for (let i = runs.length - 1; i >= 0; i--) out.push(...runs[i]!);
-  return out;
+
+  const emPerUnit = 1 / unitsPerEm;
+  const glyphs: PositionedGlyph[] = [];
+  const clusterLeft = new Map<number, number>();
+  const clusterAdvance = new Map<number, number>();
+  let penEm = 0;
+  let penYEm = 0;
+  let span = -1;
+  let prevCl: number | undefined;
+  for (const g of shaped) {
+    const gSpan = spanOf[g.cl] ?? -1;
+    if (gSpan !== span) {
+      span = gSpan;
+      prevCl = undefined;
+      const anchor = gSpan >= 0 ? spanLeftEm(spans[gSpan]![0], spans[gSpan]![1]) : undefined;
+      if (anchor !== undefined) {
+        penEm = anchor;
+        penYEm = 0;
+      }
+    }
+    if (prevCl !== undefined && g.cl !== prevCl) penEm += letterSpacingEm;
+    prevCl = g.cl;
+    // HarfBuzz is y-up; the draw axis is y-down, so dy / ay are negated.
+    const xEm = penEm + g.dx * emPerUnit;
+    const yEm = penYEm - g.dy * emPerUnit;
+    glyphs.push({ glyph: g, xEm, yEm });
+    if (!clusterLeft.has(g.cl)) clusterLeft.set(g.cl, xEm);
+    clusterAdvance.set(g.cl, (clusterAdvance.get(g.cl) ?? 0) + g.ax * emPerUnit);
+    penEm += g.ax * emPerUnit;
+    penYEm -= g.ay * emPerUnit;
+  }
+  return { glyphs, clusterLeft, clusterAdvance };
 }
 
 function measureWithTempElement(text: string, fontFamily: string, fontSize: number, lineHeight: number, maxWidth: number): TextLayout {

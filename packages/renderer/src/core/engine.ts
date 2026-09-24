@@ -22,7 +22,7 @@ import type { BundleShaper } from '../lib/shaper.ts';
 import { type SubdividedStroke, subdivideStroke } from '../lib/strokeCache.ts';
 import { placementsToSvg, type SvgGlyphPlacement } from '../lib/svgExport.ts';
 import type { TextLayout } from '../lib/textLayout.ts';
-import { applyShaperPositions, computeLayoutBbox, computeTextLayout } from '../lib/textLayout.ts';
+import { applyShaperPositions, computeLayoutBbox, computeTextLayout, lineWords } from '../lib/textLayout.ts';
 import type { Timeline, TimelineConfig, TimelineEntry } from '../lib/timeline.ts';
 import { computeTimeline } from '../lib/timeline.ts';
 import { cssFontFamily, graphemes, lookupGlyphData } from '../lib/utils.ts';
@@ -1252,23 +1252,24 @@ export class TegakiEngine {
       maskCtx.translate(padH, padV);
       maskCtx.font = `${fontSize}px ${cssFontFamily(font)}`;
       maskCtx.textBaseline = 'alphabetic';
-      // Fill each line as a single string so the browser's shaper sees the
-      // full run — per-character fillText would drop ligatures, kerning, and
-      // script-specific contextual forms (Arabic init/medi/fina, Indic
-      // conjuncts, etc.), producing a mask that doesn't match the shaped
-      // stroke positions.
+      // Draw each word where the DOM put it, as a single string so the
+      // browser's shaper sees the whole word — per-character fillText would
+      // drop ligatures, kerning, and script-specific contextual forms (Arabic
+      // init/medi/fina, Indic conjuncts, etc.). Browsers shape each word on
+      // its own anyway, so nothing crosses a word gap. Anchoring words rather
+      // than lines keeps the mask aligned where the canvas shapes a word
+      // differently from the DOM, and needs no bidi reordering across words:
+      // the anchors carry the DOM's order. `direction` still orders a word
+      // that mixes scripts, and textAlign 'left' pins its left edge — the
+      // mask canvas is detached, so 'start' alignment would resolve by its
+      // own direction.
+      maskCtx.direction = layout.direction ?? 'ltr';
+      maskCtx.textAlign = 'left';
+      if ('letterSpacing' in maskCtx) maskCtx.letterSpacing = `${this._letterSpacing}px`;
       let clipY = 0;
-      for (const lineIndices of layout.lines) {
-        let lineText = '';
-        for (const charIdx of lineIndices) {
-          const char = characters[charIdx]!;
-          if (char === '\n') continue;
-          lineText += char;
-        }
-        if (lineText) {
-          const baseline = clipY + halfLeading + (font.ascender / font.unitsPerEm) * fontSize;
-          maskCtx.fillText(lineText, 0, baseline);
-        }
+      for (let li = 0; li < layout.lines.length; li++) {
+        const baseline = clipY + halfLeading + (font.ascender / font.unitsPerEm) * fontSize;
+        for (const word of lineWords(layout, characters, li)) maskCtx.fillText(word.text, word.leftEm * fontSize, baseline);
         clipY += lineHeight;
       }
 

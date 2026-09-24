@@ -1,0 +1,88 @@
+import { describe, expect, test } from 'bun:test';
+import type { ShapedGlyph } from './shaper.ts';
+import { lineWords, positionLineGlyphs, type TextLayout } from './textLayout.ts';
+
+/** One glyph per UTF-16 unit, each `ax` units wide, in the order given. */
+function glyphs(clusters: number[], ax = 500): ShapedGlyph[] {
+  return clusters.map((cl) => ({ g: String(cl + 1), cl, ax, ay: 0, dx: 0, dy: 0 }));
+}
+
+/** DOM word anchors, keyed by `"start-end"`. */
+function anchors(map: Record<string, number>) {
+  return (start: number, end: number) => map[`${start}-${end}`];
+}
+
+describe('positionLineGlyphs', () => {
+  test("an RTL line puts the logically first word at the right, where the browser's bidi put it", () => {
+    // "אב גד": the shaper returns words in logical order, each right to left.
+    const shaped = glyphs([1, 0, 4, 3]);
+    const { glyphs: placed } = positionLineGlyphs(shaped, 'אב גד', anchors({ '0-2': 1.25, '2-3': 1, '3-5': 0 }), 1000);
+    expect(placed.map((p) => [p.glyph.cl, p.xEm])).toEqual([
+      [1, 1.25],
+      [0, 1.75],
+      [4, 0],
+      [3, 0.5],
+    ]);
+  });
+
+  test('a Latin word opening an RTL line keeps its letters in order', () => {
+    // "Hi שלום" with dir=auto resolves LTR: "Hi" sits at the left, unreversed.
+    const shaped = glyphs([0, 1, 6, 5, 4, 3]);
+    const { glyphs: placed } = positionLineGlyphs(shaped, 'Hi שלום', anchors({ '0-2': 0, '3-7': 1.25 }), 1000);
+    expect(placed.slice(0, 2).map((p) => [p.glyph.cl, p.xEm])).toEqual([
+      [0, 0],
+      [1, 0.5],
+    ]);
+    expect(placed[2]!.xEm).toBe(1.25);
+  });
+
+  test('a word the DOM cannot measure continues from the previous one', () => {
+    const { glyphs: placed } = positionLineGlyphs(glyphs([0, 1, 2]), 'a b', anchors({ '0-1': 0 }), 1000);
+    expect(placed.map((p) => p.xEm)).toEqual([0, 0.5, 1]);
+  });
+
+  test('letter spacing goes between the clusters of a word, not before its first', () => {
+    const { glyphs: placed } = positionLineGlyphs(glyphs([0, 1, 3, 4]), 'ab cd', anchors({ '0-2': 0, '3-5': 2 }), 1000, 0.1);
+    expect(placed.map((p) => p.xEm)).toEqual([0, 0.6, 2, 2.6]);
+  });
+
+  test('offsets are y-down: a positive harfbuzz dy moves the glyph up', () => {
+    const shaped: ShapedGlyph[] = [{ g: '1', cl: 0, ax: 0, ay: 0, dx: 100, dy: 250 }];
+    const { glyphs: placed } = positionLineGlyphs(shaped, 'a', anchors({ '0-1': 1 }), 1000);
+    expect(placed[0]).toMatchObject({ xEm: 1.1, yEm: -0.25 });
+  });
+});
+
+describe('lineWords', () => {
+  const layout = (offsets: number[], widths: number[], lines: number[][]): TextLayout => ({
+    lines,
+    charOffsets: offsets,
+    charWidths: widths,
+  });
+
+  test('anchors each word at its leftmost grapheme, so an RTL word starts from its visual left', () => {
+    // "אב גד" right-aligned: the first word is at the right, each written right to left.
+    const words = lineWords(layout([1.75, 1.25, 1, 0.5, 0], [0.5, 0.5, 0.25, 0.5, 0.5], [[0, 1, 2, 3, 4]]), ['א', 'ב', ' ', 'ג', 'ד'], 0);
+    expect(words).toEqual([
+      { text: 'אב', leftEm: 1.25 },
+      { text: 'גד', leftEm: 0 },
+    ]);
+  });
+
+  test('zero-width graphemes join their word without moving its anchor', () => {
+    const words = lineWords(layout([0.3, 0, 0.5], [0.5, 0, 0.5], [[0, 1, 2]]), ['a', '\u200d', 'b'], 0);
+    expect(words).toEqual([{ text: 'a\u200db', leftEm: 0.3 }]);
+  });
+
+  test('reads only the requested line and drops its newline', () => {
+    const l = layout(
+      [0, 0, 0, 0.5],
+      [0.5, 0, 0.5, 0.5],
+      [
+        [0, 1],
+        [2, 3],
+      ],
+    );
+    expect(lineWords(l, ['a', '\n', 'b', 'c'], 1)).toEqual([{ text: 'bc', leftEm: 0 }]);
+  });
+});
