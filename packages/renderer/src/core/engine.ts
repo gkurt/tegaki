@@ -10,6 +10,7 @@ import {
 import { drawFallbackGlyph } from '../lib/drawFallbackGlyph.ts';
 import { drawGlyph } from '../lib/drawGlyph.ts';
 import {
+  effectInkMargin,
   findEffect,
   getEffectDefinition,
   hasRenderHooks,
@@ -19,6 +20,7 @@ import {
 } from '../lib/effects.ts';
 import { LETTER_SPACED_OFF_FEATURES } from '../lib/features.ts';
 import { ensureFont } from '../lib/font.ts';
+import { type CanvasOverflow, glyphInkBounds, inkOverflow, NO_OVERFLOW } from '../lib/inkBounds.ts';
 import type { BundleShaper, ShapeOptions } from '../lib/shaper.ts';
 import { type SubdividedStroke, subdivideStroke } from '../lib/strokeCache.ts';
 import { placementsToSvg, type SvgGlyphPlacement } from '../lib/svgExport.ts';
@@ -29,7 +31,7 @@ import { computeTimeline } from '../lib/timeline.ts';
 import { cssFontFamily, graphemes, lookupGlyphData } from '../lib/utils.ts';
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
-import { buildChildren, buildRootProps, domCreateElement } from './render-elements.ts';
+import { buildChildren, buildRootProps, canvasBoxStyle, domCreateElement } from './render-elements.ts';
 import { getShaperForBundle, registerShaper } from './shaper-registry.ts';
 import type { CreateElementFn, TegakiEngineOptions, TegakiQuality, TimeControlMode, TimeControlProp } from './types.ts';
 
@@ -55,6 +57,35 @@ function parsePercentage(s: string): number | null {
  * returns either `"normal"` (→ 0) or a resolved pixel length like `"2px"`.
  * Returns 0 for anything unparseable.
  */
+/**
+ * Where a timeline entry is drawn, in CSS px within the text box: `x` of its
+ * pen origin, `y` of its line's top, `glyphY` of the glyph frame's top
+ * (`drawGlyph`'s origin).
+ *
+ * Per-entry shaper offsets win when present (Arabic cursive attachment, mark
+ * positioning, contextual kerning), anchored to the line's measured left edge
+ * (`lineLefts`); the per-grapheme `charOffsets` are the fallback for the
+ * unshaped char-keyed render or a shaped glyph without a matching entry. The
+ * shaper's y-offset is harfbuzz's GPOS dy (negated, em y-down) — Arabic
+ * cursive lift and mark placement; zero for scripts without vertical GPOS.
+ */
+function entryOrigin(
+  entry: TimelineEntry,
+  layout: TextLayout,
+  lineIdx: number,
+  fontSize: number,
+  lineHeight: number,
+  halfLeading: number,
+): { x: number; y: number; glyphY: number } {
+  const y = lineIdx * lineHeight;
+  const lineLeftEm = layout.lineLefts?.[lineIdx];
+  const x =
+    entry.xOffsetEm !== undefined && lineLeftEm !== undefined
+      ? (lineLeftEm + entry.xOffsetEm) * fontSize
+      : (layout.charOffsets[entry.graphemeIndex] ?? 0) * fontSize;
+  return { x, y, glyphY: y + halfLeading + (entry.yOffsetEm ?? 0) * fontSize };
+}
+
 function parseLetterSpacing(value: string): number {
   if (!value || value === 'normal') return 0;
   const n = Number.parseFloat(value);
@@ -147,6 +178,8 @@ export class TegakiEngine {
   private _seed: number;
   private _timeline: Timeline = { entries: [] as TimelineEntry[], totalDuration: 0 };
   private _layout: TextLayout | null = null;
+  /** How far the canvas box currently extends past its default padding, per side. */
+  private _canvasOverflow: CanvasOverflow = NO_OVERFLOW;
   private _layoutKey = '';
   private _fontReady = false;
   private _shaper: BundleShaper | null = null;
@@ -360,9 +393,8 @@ export class TegakiEngine {
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"></svg>`;
     }
 
-    const padH = PADDING_H_EM * fontSize;
     const lineHeight = this._lineHeight;
-    const padV = Math.max(MIN_PADDING_V_EM * fontSize, (MIN_LINE_HEIGHT_EM * fontSize - lineHeight) / 2);
+    const { padH, padV } = this._canvasPadding(fontSize, lineHeight);
     const emHeightPx = ((font.ascender - font.descender) / font.unitsPerEm) * fontSize;
     const halfLeading = (lineHeight - emHeightPx) / 2;
     const scale = fontSize / font.unitsPerEm;
@@ -391,13 +423,7 @@ export class TegakiEngine {
       if (lineIdx < 0) continue;
       const glyph = (entry.glyphId !== undefined ? font.glyphDataById?.[entry.glyphId] : undefined) ?? lookupGlyphData(font, entry.char);
       if (!glyph) continue;
-      const y = lineIdx * lineHeight;
-      const lineLeftEm = layout.lineLefts?.[lineIdx];
-      const x =
-        entry.xOffsetEm !== undefined && lineLeftEm !== undefined
-          ? (lineLeftEm + entry.xOffsetEm) * fontSize
-          : (layout.charOffsets[charIdx] ?? 0) * fontSize;
-      const glyphY = y + halfLeading + (entry.yOffsetEm ?? 0) * fontSize;
+      const { x, glyphY } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
       placements.push({ glyph, ox: padH + x, oy: padV + glyphY, scale, ascender: font.ascender, offset: entry.offset });
     }
 
@@ -1076,6 +1102,71 @@ export class TegakiEngine {
   // Internal: Canvas rendering
   // =========================================================================
 
+  /**
+   * Where the text box sits in the canvas: the default padding plus whatever
+   * the canvas box was grown by on the left / top to fit the ink.
+   */
+  private _canvasPadding(fontSize: number, lineHeight: number): { padH: number; padV: number } {
+    const padV = Math.max(MIN_PADDING_V_EM * fontSize, (MIN_LINE_HEIGHT_EM * fontSize - lineHeight) / 2);
+    return { padH: PADDING_H_EM * fontSize + this._canvasOverflow.left, padV: padV + this._canvasOverflow.top };
+  }
+
+  /**
+   * Grow the canvas box on whichever side the strokes reach past its default
+   * padding — a stem running past its letter's advance (Caveat's d under
+   * negative letter-spacing), a wide script flourish, a glow — and shrink it
+   * back once they don't. Every glyph counts, drawn yet or not, so the box
+   * holds still while the text animates in. Restyles only on change.
+   */
+  private _fitCanvasToInk(): void {
+    const font = this._font;
+    const layout = this._layout;
+    const fontSize = this._fontSize;
+    const cur = this._canvasOverflow;
+    let next = NO_OVERFLOW;
+    if (font?.glyphData && layout && fontSize) {
+      const lineHeight = this._lineHeight;
+      const scale = fontSize / font.unitsPerEm;
+      const halfLeading = (lineHeight - ((font.ascender - font.descender) / font.unitsPerEm) * fontSize) / 2;
+      const clipText = this._quality?.clipText;
+      const strokeScale = typeof clipText === 'number' ? clipText : 1;
+      // +1px for antialiasing at the ink's edge.
+      const margin = effectInkMargin(this._resolvedEffects, fontSize, scale) + 1;
+      const graphemeToLine = new Map<number, number>();
+      layout.lines.forEach((line, li) => {
+        for (const charIdx of line) graphemeToLine.set(charIdx, li);
+      });
+      const ink = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+      for (const entry of this._timeline.entries) {
+        if (entry.char === '\n' || !entry.hasGlyph) continue;
+        const lineIdx = graphemeToLine.get(entry.graphemeIndex);
+        if (lineIdx === undefined) continue;
+        const glyph = (entry.glyphId !== undefined ? font.glyphDataById?.[entry.glyphId] : undefined) ?? lookupGlyphData(font, entry.char);
+        const bounds = glyph && glyphInkBounds(glyph);
+        if (!bounds) continue;
+        const { x, glyphY } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
+        const reach = bounds.reach * strokeScale * scale + margin;
+        ink.minX = Math.min(ink.minX, x + bounds.minX * scale - reach);
+        ink.maxX = Math.max(ink.maxX, x + bounds.maxX * scale + reach);
+        ink.minY = Math.min(ink.minY, glyphY + (bounds.minY + font.ascender) * scale - reach);
+        ink.maxY = Math.max(ink.maxY, glyphY + (bounds.maxY + font.ascender) * scale + reach);
+      }
+      // Into the default canvas box's frame: offset by its padding, sized
+      // as the current box less the overflow it already carries.
+      const { padH, padV } = this._canvasPadding(fontSize, lineHeight);
+      const dx = padH - cur.left;
+      const dy = padV - cur.top;
+      next = inkOverflow(
+        { minX: ink.minX + dx, maxX: ink.maxX + dx, minY: ink.minY + dy, maxY: ink.maxY + dy },
+        this._canvasEl.offsetWidth - cur.left - cur.right,
+        this._canvasEl.offsetHeight - cur.top - cur.bottom,
+      );
+    }
+    if (next.left === cur.left && next.top === cur.top && next.right === cur.right && next.bottom === cur.bottom) return;
+    this._canvasOverflow = next;
+    Object.assign(this._canvasEl.style, canvasBoxStyle(next));
+  }
+
   private _render(): void {
     const canvas = this._canvasEl;
     const font = this._font;
@@ -1088,6 +1179,7 @@ export class TegakiEngine {
     // quadratic cost in pixels filled.
     const pixelRatio = Math.max(this._quality?.pixelRatio ?? 1, 0);
     const effectiveDpr = dpr * pixelRatio;
+    this._fitCanvasToInk();
     const w = canvas.offsetWidth;
     const h = canvas.offsetHeight;
 
@@ -1107,9 +1199,8 @@ export class TegakiEngine {
     // run so stale pixels from the previous render don't linger.
     if (!font?.glyphData || !layout || !fontSize) return;
 
-    const padH = PADDING_H_EM * fontSize;
     const lineHeight = this._lineHeight;
-    const padV = Math.max(MIN_PADDING_V_EM * fontSize, (MIN_LINE_HEIGHT_EM * fontSize - lineHeight) / 2);
+    const { padH, padV } = this._canvasPadding(fontSize, lineHeight);
     ctx.translate(padH, padV);
 
     const color = this._currentColor || 'black';
@@ -1197,18 +1288,7 @@ export class TegakiEngine {
       const charIdx = entry.graphemeIndex;
       const lineIdx = graphemeToLine[charIdx] ?? -1;
       if (lineIdx < 0) continue;
-      const y = lineIdx * lineHeight;
-      // Prefer per-entry GPOS-positioned offsets when the shaper populated
-      // them (Arabic cursive attachment, mark positioning, contextual kerning).
-      // The legacy per-grapheme `charOffsets` path is the fallback for the
-      // unshaped char-keyed render or any shape glyph that lacks a matching
-      // entry. `lineLefts[lineIdx]` anchors the entry-relative xOffsetEm to
-      // the visual line's left edge measured from the DOM.
-      const lineLeftEm = layout.lineLefts?.[lineIdx];
-      const x =
-        entry.xOffsetEm !== undefined && lineLeftEm !== undefined
-          ? (lineLeftEm + entry.xOffsetEm) * fontSize
-          : (layout.charOffsets[charIdx] ?? 0) * fontSize;
+      const { x, y, glyphY } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
       const glyph = (entry.glyphId !== undefined ? font.glyphDataById?.[entry.glyphId] : undefined) ?? lookupGlyphData(font, entry.char);
 
       if (glyph && entry.hasGlyph) {
@@ -1217,10 +1297,6 @@ export class TegakiEngine {
         if (glyphEasing && entry.duration > 0) {
           localTime = glyphEasing(localTime / entry.duration) * entry.duration;
         }
-        // Apply HB's GPOS y-offset (negated dy, in em y-down). Encodes Arabic
-        // cursive lift and mark vertical placement; zero for scripts that
-        // don't use vertical GPOS, so behaviour for Latin/Caveat is unchanged.
-        const glyphY = y + halfLeading + (entry.yOffsetEm ?? 0) * fontSize;
         drawGlyph(
           ctx,
           glyph,

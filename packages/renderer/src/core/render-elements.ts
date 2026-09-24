@@ -1,10 +1,32 @@
 import { CSS_DURATION, CSS_PROGRESS, CSS_TIME } from '../lib/css-properties.ts';
+import { type CanvasOverflow, NO_OVERFLOW } from '../lib/inkBounds.ts';
 import { computeTimeline } from '../lib/timeline.ts';
 import { cssFontFamily } from '../lib/utils.ts';
 import { resolveBundle } from './bundle-registry.ts';
 import type { CreateElementFn, TegakiEngineOptions } from './types.ts';
 
 export const PAD_V_CSS = 'max(0.2em, 0.9em - 0.5lh)';
+
+/**
+ * The canvas's box: the text box padded by 0.2em horizontally and `PAD_V_CSS`
+ * vertically, grown per side by `overflow` px where the strokes reach further
+ * (a stem running past a letter's advance under negative letter-spacing, a
+ * glow).
+ */
+export function canvasBoxStyle(overflow: CanvasOverflow = NO_OVERFLOW): Record<string, string> {
+  const { left, top, right, bottom } = overflow;
+  const plus = (px: number) => (px ? ` + ${px}px` : '');
+  const minus = (px: number) => (px ? ` - ${px}px` : '');
+  // `inset` shorthand not supported by Safari < 14.1 — expand to longhand.
+  return {
+    top: `calc(-1 * ${PAD_V_CSS}${minus(top)})`,
+    right: right ? `calc(-0.2em${minus(right)})` : '-0.2em',
+    bottom: `calc(-1 * ${PAD_V_CSS}${minus(bottom)})`,
+    left: left ? `calc(-0.2em${minus(left)})` : '-0.2em',
+    width: `calc(100% + 0.4em${plus(left + right)})`,
+    height: `calc(100% + 2 * ${PAD_V_CSS}${plus(top + bottom)})`,
+  };
+}
 
 export function buildRootProps(options: TegakiEngineOptions): Record<string, any> {
   const text = options.text ?? '';
@@ -75,14 +97,8 @@ export function buildChildren<T>(options: TegakiEngineOptions, h: CreateElementF
         'data-tegaki': 'canvas',
         'aria-hidden': 'true',
         style: {
-          // `inset` shorthand not supported by Safari < 14.1 — expand to longhand.
           position: 'absolute',
-          top: `calc(-1 * ${PAD_V_CSS})`,
-          right: '-0.2em',
-          bottom: `calc(-1 * ${PAD_V_CSS})`,
-          left: '-0.2em',
-          width: 'calc(100% + 0.4em)',
-          height: `calc(100% + 2 * ${PAD_V_CSS})`,
+          ...canvasBoxStyle(),
           pointerEvents: 'none',
           overflow: 'visible',
         },

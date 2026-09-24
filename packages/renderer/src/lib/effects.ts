@@ -1,5 +1,6 @@
 import type { TegakiEffectConfigs, TegakiEffectName } from '../types.ts';
 import type { LayoutBBox, TextLayout } from './textLayout.ts';
+import { resolveCSSLength } from './utils.ts';
 
 export interface ResolvedEffect<K extends TegakiEffectName = TegakiEffectName> {
   effect: K;
@@ -158,4 +159,20 @@ export function hasRenderHooks(effects: ResolvedEffect[]): boolean {
     if (def?.beforeRender || def?.afterRender) return true;
   }
   return false;
+}
+
+/**
+ * How far effects paint past the strokes themselves, in CSS px: a glow's
+ * blur plus its offset, a wobble's displacement. `scale` converts font
+ * units (wobble amplitude, glow offsets) to px.
+ */
+export function effectInkMargin(effects: ResolvedEffect[], fontSize: number, scale: number): number {
+  let margin = 0;
+  for (const glow of findEffects(effects, 'glow')) {
+    const { radius = 8, offsetX = 0, offsetY = 0 } = glow.config;
+    margin = Math.max(margin, resolveCSSLength(radius, fontSize) + Math.max(Math.abs(offsetX), Math.abs(offsetY)) * scale);
+  }
+  const wobble = findEffect(effects, 'wobble');
+  if (wobble) margin += Math.abs(wobble.config.amplitude ?? 1.5) * scale;
+  return margin;
 }
