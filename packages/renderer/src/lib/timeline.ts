@@ -1,5 +1,5 @@
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
-import type { BundleShaper } from './shaper.ts';
+import type { BundleShaper, ShapeOptions } from './shaper.ts';
 import { graphemes, lookupGlyphData } from './utils.ts';
 
 export interface TimelineConfig {
@@ -133,9 +133,19 @@ export interface Timeline {
   totalDuration: number;
 }
 
-export function computeTimeline(text: string, font: TegakiBundle, config?: TimelineConfig, shaper?: BundleShaper | null): Timeline {
+/**
+ * `shapeOptions` must describe the text as it is laid out (letter-spaced or
+ * not) so the shaper picks the glyphs the DOM draws.
+ */
+export function computeTimeline(
+  text: string,
+  font: TegakiBundle,
+  config?: TimelineConfig,
+  shaper?: BundleShaper | null,
+  shapeOptions?: ShapeOptions,
+): Timeline {
   if (shaper && font.glyphDataById) {
-    return computeShapedTimeline(text, font, config, shaper);
+    return computeShapedTimeline(text, font, config, shaper, shapeOptions);
   }
   return computeGraphemeTimeline(text, font, config);
 }
@@ -477,7 +487,13 @@ function computeGraphemeTimeline(text: string, font: TegakiBundle, config?: Time
 // Shaped-path timeline (harfbuzz clusters).
 // ---------------------------------------------------------------------------
 
-function computeShapedTimeline(text: string, font: TegakiBundle, config: TimelineConfig | undefined, shaper: BundleShaper): Timeline {
+function computeShapedTimeline(
+  text: string,
+  font: TegakiBundle,
+  config: TimelineConfig | undefined,
+  shaper: BundleShaper,
+  shapeOptions: ShapeOptions | undefined,
+): Timeline {
   const glyphGap = config?.glyphGap ?? DEFAULTS.glyphGap;
   const wordGap = config?.wordGap ?? DEFAULTS.wordGap;
   const lineGap = config?.lineGap ?? DEFAULTS.lineGap;
@@ -516,7 +532,7 @@ function computeShapedTimeline(text: string, font: TegakiBundle, config: Timelin
 
     const lineText = text.slice(lineStart, i);
     if (lineText.length > 0) {
-      const shaped = shaper.shape(lineText);
+      const shaped = shaper.shape(lineText, shapeOptions);
       // Harfbuzz emits glyphs in visual order (left-to-right on screen) regardless
       // of script direction. Sort by cluster offset so animation follows the
       // logical / reading order — matching how each script is actually

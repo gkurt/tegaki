@@ -17,8 +17,9 @@ import {
   type ResolvedEffect,
   resolveEffects,
 } from '../lib/effects.ts';
+import { LETTER_SPACED_OFF_FEATURES } from '../lib/features.ts';
 import { ensureFont } from '../lib/font.ts';
-import type { BundleShaper } from '../lib/shaper.ts';
+import type { BundleShaper, ShapeOptions } from '../lib/shaper.ts';
 import { type SubdividedStroke, subdivideStroke } from '../lib/strokeCache.ts';
 import { placementsToSvg, type SvgGlyphPlacement } from '../lib/svgExport.ts';
 import type { TextLayout } from '../lib/textLayout.ts';
@@ -300,7 +301,7 @@ export class TegakiEngine {
    */
   computeTimeline(text: string): Timeline {
     if (!this._font) return { entries: [], totalDuration: 0 };
-    return computeTimeline(text, this._font, this._timing, this._shaper);
+    return computeTimeline(text, this._font, this._timing, this._shaper, this._shapeOptions());
   }
 
   get isPlaying(): boolean {
@@ -632,6 +633,26 @@ export class TegakiEngine {
     this._lineHeight = Number.isNaN(parsedLh) ? this._fallbackLineHeight(this._fontSize) : parsedLh;
     this._currentColor = styles.color;
     this._letterSpacing = parseLetterSpacing(styles.letterSpacing);
+    this._updateOverlayStyle();
+  }
+
+  /** How the overlay's text is laid out, for the shaper to match. */
+  private _shapeOptions(): ShapeOptions {
+    return { letterSpaced: this._letterSpacing !== 0 };
+  }
+
+  /**
+   * Adopt a new letter spacing. Browsers shape spaced text without ligatures
+   * or contextual alternates, so when spacing crosses zero the overlay's
+   * feature settings and the shaped timeline change with it. Callers
+   * recompute the layout afterwards, which re-fills the timeline's offsets.
+   */
+  private _setLetterSpacing(next: number): void {
+    const wasSpaced = this._letterSpacing !== 0;
+    this._letterSpacing = next;
+    if (wasSpaced === (next !== 0)) return;
+    this._updateOverlayStyle();
+    this._recomputeTimeline();
   }
 
   private _updateDom(): void {
@@ -669,9 +690,15 @@ export class TegakiEngine {
     // visible text outline) must match: disable every variant-producing
     // GSUB feature so the browser doesn't form ligatures, contextual
     // alternates, or Arabic positional forms the renderer can't draw.
-    this._overlayEl.style.fontFeatureSettings = this._shaperEnabled
-      ? ''
-      : "'liga' 0, 'calt' 0, 'clig' 0, 'rlig' 0, 'dlig' 0, 'init' 0, 'medi' 0, 'fina' 0, 'isol' 0";
+    //
+    // Letter-spaced text is shaped without the features browsers drop between
+    // spaced letters (see LETTER_SPACED_OFF_FEATURES); disable them outright so
+    // a browser that would keep some of them still draws what the shaper does.
+    this._overlayEl.style.fontFeatureSettings = !this._shaperEnabled
+      ? "'liga' 0, 'calt' 0, 'clig' 0, 'rlig' 0, 'dlig' 0, 'init' 0, 'medi' 0, 'fina' 0, 'isol' 0"
+      : this._letterSpacing !== 0
+        ? LETTER_SPACED_OFF_FEATURES.map((tag) => `'${tag}' 0`).join(', ')
+        : '';
   }
 
   private _updateSentinelTransition(): void {
@@ -719,7 +746,7 @@ export class TegakiEngine {
       changed = true;
     }
     if (newLetterSpacing !== this._letterSpacing) {
-      this._letterSpacing = newLetterSpacing;
+      this._setLetterSpacing(newLetterSpacing);
       layoutChanged = true;
       changed = true;
     }
@@ -755,7 +782,7 @@ export class TegakiEngine {
     if (e.propertyName === 'letter-spacing') {
       const newLetterSpacing = parseLetterSpacing(styles.letterSpacing);
       if (newLetterSpacing !== this._letterSpacing) {
-        this._letterSpacing = newLetterSpacing;
+        this._setLetterSpacing(newLetterSpacing);
         this._recomputeLayout();
         changed = true;
       }
@@ -862,7 +889,7 @@ export class TegakiEngine {
 
   private _recomputeTimeline(): void {
     if (this._font && this._text) {
-      this._timeline = computeTimeline(this._text, this._font, this._timing, this._shaper);
+      this._timeline = computeTimeline(this._text, this._font, this._timing, this._shaper, this._shapeOptions());
     } else {
       this._timeline = { entries: [] as TimelineEntry[], totalDuration: 0 };
     }

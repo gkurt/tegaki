@@ -33,3 +33,13 @@ export function toCssFeatureSettings(enabled: readonly string[]): string {
   if (explicit.length === 0) return 'normal';
   return explicit.map((f) => `'${f}' 1`).join(', ');
 }
+
+/**
+ * Features browsers switch off between letters spaced apart by a non-zero
+ * `letter-spacing`: the optional ligatures (CSS Text), plus contextual
+ * alternates, which Chrome drops too — Caveat's calt alternates vanish from
+ * the DOM at 1px of spacing, even with `'calt' 1` in the face's settings.
+ * The shaper drops them for spaced text (`ShapeOptions.letterSpaced`) and the
+ * engine disables them on the overlay explicitly, so every browser agrees.
+ */
+export const LETTER_SPACED_OFF_FEATURES: readonly string[] = ['liga', 'clig', 'dlig', 'hlig', 'calt'];

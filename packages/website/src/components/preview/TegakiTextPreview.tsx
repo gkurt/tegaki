@@ -285,6 +285,9 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     [useShaper, fontUrl, extraFontUrls, enabledFeatures],
   );
 
+  // Spaced text is shaped without ligatures or contextual alternates, as the
+  // renderer does, so it draws a different set of glyphs.
+  const letterSpaced = letterSpacingPx !== 0;
   useEffect(() => {
     if (!variantShaper) {
       setVariantData((prev) => (Object.keys(prev).length === 0 ? prev : {}));
@@ -297,7 +300,9 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       if (cancelled || !shaper) return;
       const optionsKey = `${fontCacheId(fontInfo)}:${JSON.stringify(options)}`;
       const variants: Record<string, TegakiGlyphData> = {};
-      for (const { key: variantKey, subsetIdx, gid, char: clusterChar } of collectShapedGlyphs(shaper, normalizedText)) {
+      for (const { key: variantKey, subsetIdx, gid, char: clusterChar } of collectShapedGlyphs(shaper, normalizedText, {
+        letterSpaced,
+      })) {
         // Process every glyph the shaper emits, including nominal forms
         // (where gid === font.charToGlyph(clusterChar).index). For Latin
         // clusters the nominal glyph is also reachable via glyphData[char],
@@ -335,7 +340,19 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     return () => {
       cancelled = true;
     };
-  }, [variantShaper, fontInfo, normalizedText, options, activeCache, geometry, geoKey, geometryOptions, geoCache, prepareGeometry]);
+  }, [
+    variantShaper,
+    fontInfo,
+    normalizedText,
+    letterSpaced,
+    options,
+    activeCache,
+    geometry,
+    geoKey,
+    geometryOptions,
+    geoCache,
+    prepareGeometry,
+  ]);
 
   const fontBundle = useMemo<TegakiBundle>(() => {
     const glyphData: TegakiBundle['glyphData'] = {};

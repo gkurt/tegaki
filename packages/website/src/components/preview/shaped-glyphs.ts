@@ -1,4 +1,4 @@
-import type { BundleShaper } from 'tegaki/core';
+import type { BundleShaper, ShapeOptions } from 'tegaki/core';
 
 /** A glyph the renderer's shaper draws, with what the pipeline needs to build its strokes. */
 export interface ShapedGlyphRef {
@@ -16,13 +16,14 @@ export interface ShapedGlyphRef {
  * the bundle's `glyphDataById` in step with what gets drawn: it shapes each
  * word in isolation, so contextual alternates (Caveat's calt) differ from a
  * line shaped whole, and any glyph missing here would be drawn with its base
- * letter's strokes under the alternate's clip mask.
+ * letter's strokes under the alternate's clip mask. `options` must match the
+ * renderer's (letter-spaced text drops ligatures and contextual alternates).
  */
-export function collectShapedGlyphs(shaper: BundleShaper, text: string): ShapedGlyphRef[] {
+export function collectShapedGlyphs(shaper: BundleShaper, text: string, options?: ShapeOptions): ShapedGlyphRef[] {
   const out: ShapedGlyphRef[] = [];
   const seen = new Set<string>();
   for (const line of text.split('\n')) {
-    for (const g of shaper.shape(line)) {
+    for (const g of shaper.shape(line, options)) {
       if (seen.has(g.g)) continue;
       const sep = g.g.indexOf(':');
       const subsetIdx = sep < 0 ? 0 : Number(g.g.slice(0, sep));

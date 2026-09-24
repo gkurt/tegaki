@@ -17,6 +17,16 @@ export interface ShapedGlyph {
   dy: number;
 }
 
+export interface ShapeOptions {
+  /**
+   * The text is drawn with non-zero `letter-spacing`. Browsers then drop
+   * optional ligatures and contextual alternates (CSS Text: no optional
+   * ligatures between spaced letters; Chrome drops `calt` too), so the
+   * shaper must drop them as well to pick the glyphs the DOM draws.
+   */
+  letterSpaced?: boolean;
+}
+
 export interface BundleShaper {
-  shape(text: string): ShapedGlyph[];
+  shape(text: string, options?: ShapeOptions): ShapedGlyph[];
 }

@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { isShapingWhitespace, splitForShaping, toHbFeatureString } from './index.ts';
+import type { ShapeOptions } from '../lib/shaper.ts';
+import type { TegakiBundle } from '../types.ts';
+import harfbuzzShaper, { isShapingWhitespace, splitForShaping, toHbFeatureString } from './index.ts';
 
 describe('toHbFeatureString', () => {
   test('returns empty string for empty list', () => {
@@ -147,6 +149,26 @@ describe('splitForShaping', () => {
         expect(s.offset).toBe(cursor);
         cursor += s.text.length;
       }
+    }
+  });
+});
+
+describe('letter-spaced shaping', () => {
+  const caveatUrl = new URL('../../fonts/caveat/caveat.ttf', import.meta.url).href;
+  const caveat = () => harfbuzzShaper({ fontUrl: caveatUrl, features: ['calt', 'liga'], glyphDataById: {} } as unknown as TegakiBundle)!;
+  const ids = (glyphs: { g: string }[]) => glyphs.map((g) => g.g);
+
+  test("Caveat's calt picks alternates in an unspaced word", async () => {
+    const shaper = await caveat();
+    const alone = [...'World'].flatMap((ch) => ids(shaper.shape(ch)));
+    expect(ids(shaper.shape('World'))).not.toEqual(alone);
+  });
+
+  test('spaced text drops contextual alternates and ligatures, as browsers do: each letter is drawn as it is alone', async () => {
+    const shaper = await caveat();
+    for (const word of ['World', 'Hello', 'office']) {
+      const alone = [...word].flatMap((ch) => ids(shaper.shape(ch)));
+      expect(ids(shaper.shape(word, { letterSpaced: true } satisfies ShapeOptions))).toEqual(alone);
     }
   });
 });

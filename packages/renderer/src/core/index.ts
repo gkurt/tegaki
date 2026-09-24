@@ -10,7 +10,7 @@ export {
   resolveEffects,
 } from '../lib/effects.ts';
 export { ensureFontFace } from '../lib/font.ts';
-export type { BundleShaper, ShapedGlyph } from '../lib/shaper.ts';
+export type { BundleShaper, ShapedGlyph, ShapeOptions } from '../lib/shaper.ts';
 export { computeLayoutBbox, computeTextLayout, type LayoutBBox, type TextLayout } from '../lib/textLayout.ts';
 export { type TextToSvgMode, type TextToSvgOptions, textToSvg } from '../lib/textToSvg.ts';
 export {

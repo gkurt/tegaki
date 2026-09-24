@@ -312,7 +312,7 @@ export function applyShaperPositions(
     // Word order comes from the browser; glyph order within a word from the
     // shaper. See positionLineGlyphs.
     const lineText = text.slice(lineStartU, lineEndU);
-    const shaped = shaper.shape(lineText);
+    const shaped = shaper.shape(lineText, { letterSpaced: letterSpacingEm !== 0 });
     if (shaped.length === 0) continue;
     const spanLeftEm = (start: number, end: number): number | undefined => {
       range.setStart(textNode, lineStartU + start);

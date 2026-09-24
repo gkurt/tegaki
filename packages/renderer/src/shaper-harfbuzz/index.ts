@@ -1,6 +1,7 @@
 import { Blob, Face, Feature, Font, Buffer as HbBuffer, shape } from 'harfbuzzjs';
 import type { ShaperFactory } from '../core/shaper-registry.ts';
-import type { BundleShaper, ShapedGlyph } from '../lib/shaper.ts';
+import { LETTER_SPACED_OFF_FEATURES } from '../lib/features.ts';
+import type { BundleShaper, ShapedGlyph, ShapeOptions } from '../lib/shaper.ts';
 import type { TegakiBundle } from '../types.ts';
 
 const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig', 'frac', 'numr', 'dnom']);
@@ -94,13 +95,20 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
     const codepoints = new Set<number>(face.collectUnicodes());
     return { font, face, blob, codepoints };
   });
-  const features = toHbFeatures(bundle.features ?? []);
+  const defaultFeatures = toHbFeatures(bundle.features ?? []);
+  // Spaced text: the same list with the features browsers drop between
+  // spaced letters switched off — explicitly, since harfbuzz applies
+  // liga/clig/calt by default.
+  const spacedFeatures = [
+    ...toHbFeatures((bundle.features ?? []).filter((tag) => !LETTER_SPACED_OFF_FEATURES.includes(tag))),
+    ...LETTER_SPACED_OFF_FEATURES.map((tag) => Feature.fromString(`-${tag}`)!),
+  ];
 
   // Shape `runText` with `subsetIdx`'s font, then prefix output glyph ids with
   // the subset index so lookups in `glyphDataById` pick the right entry.
   // Glyphs from subset 0 (primary) keep their bare numeric key for backward
   // compatibility with single-subset bundles.
-  const shapeRun = (subsetIdx: number, runText: string, runStart: number): ShapedGlyph[] => {
+  const shapeRun = (subsetIdx: number, runText: string, runStart: number, features: Feature[]): ShapedGlyph[] => {
     const subset = subsets[subsetIdx]!;
     const buffer = new HbBuffer();
     buffer.addText(runText);
@@ -133,15 +141,15 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
   // Shape a contiguous run that is already known not to cross a whitespace
   // or subset boundary. Returns glyphs with `cl` already offset to the
   // original text.
-  const shapeSegment = (segText: string, segOffset: number): ShapedGlyph[] => {
-    if (subsets.length === 1) return shapeRun(0, segText, segOffset);
+  const shapeSegment = (segText: string, segOffset: number, features: Feature[]): ShapedGlyph[] => {
+    if (subsets.length === 1) return shapeRun(0, segText, segOffset, features);
     const out: ShapedGlyph[] = [];
     let runStart = 0;
     let runSubset = -2;
     const flush = (endUtf16: number) => {
       if (endUtf16 === runStart) return;
       const effective = runSubset < 0 ? 0 : runSubset;
-      out.push(...shapeRun(effective, segText.slice(runStart, endUtf16), segOffset + runStart));
+      out.push(...shapeRun(effective, segText.slice(runStart, endUtf16), segOffset + runStart, features));
     };
     for (let i = 0; i < segText.length; ) {
       const cp = segText.codePointAt(i) ?? segText.charCodeAt(i);
@@ -169,8 +177,9 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
   };
 
   return {
-    shape(text: string): ShapedGlyph[] {
+    shape(text: string, options?: ShapeOptions): ShapedGlyph[] {
       if (!text) return [];
+      const features = options?.letterSpaced ? spacedFeatures : defaultFeatures;
       // Browsers tokenise at whitespace before shaping (each word is its
       // own HB run), so contextual features like `calt`, `liga`, and
       // `clig` never see characters across a space. Mirror that here:
@@ -193,7 +202,7 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
       for (let i = 0; i < segments.length; i++) {
         const seg = segments[i]!;
         if (!seg.isWhitespace) {
-          out.push(...shapeSegment(seg.text, seg.offset));
+          out.push(...shapeSegment(seg.text, seg.offset, features));
           continue;
         }
         // Prefer a preceding neighbour — for scripts whose contextual rules
@@ -217,7 +226,7 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
         }
         if (neighbourIdx < 0) {
           // All-whitespace input — no context to borrow, shape standalone.
-          out.push(...shapeSegment(seg.text, seg.offset));
+          out.push(...shapeSegment(seg.text, seg.offset, features));
           continue;
         }
         const neighbour = segments[neighbourIdx]!;
@@ -226,7 +235,7 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
         const compositeOffset = neighbourIdx < i ? neighbour.offset : seg.offset;
         const wsStart = seg.offset;
         const wsEnd = seg.offset + seg.text.length;
-        for (const g of shapeRun(subset, composite, compositeOffset)) {
+        for (const g of shapeRun(subset, composite, compositeOffset, features)) {
           if (g.cl >= wsStart && g.cl < wsEnd) out.push(g);
         }
       }
