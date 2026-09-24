@@ -30,6 +30,7 @@ import {
   toCompactStroke,
 } from 'tegaki-generator';
 import type { Pipeline } from './constants.ts';
+import { fontCacheId } from './font-cache-id.ts';
 import { collectShapedGlyphs } from './shaped-glyphs.ts';
 import { strokeOrderProviders } from './stroke-order-providers.ts';
 
@@ -84,7 +85,7 @@ export interface TegakiTextPreviewProps {
   className?: string;
   style?: React.CSSProperties;
   /**
-   * Optional shared cache keyed by `${char}:${JSON.stringify(options)}`. When
+   * Optional shared cache keyed by `${char}:${fontCacheId}:${JSON.stringify(options)}`. When
    * provided, glyph pipeline results are reused across renders and instances.
    */
   resultsCache?: React.RefObject<Map<string, PipelineResult>>;
@@ -213,11 +214,14 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // ── Geometry pipeline ────────────────────────────────────────────────
   // Unlike the raster pipeline it may need async work first (stroke-order
   // references for 'auto'/'dataset' ordering, the straight-skeleton wasm),
-  // so its char-keyed glyphs are built in an effect. Results are cached per
-  // font; `geoKey` covers every input besides the glyph itself.
+  // so its char-keyed glyphs are built in an effect. `geoKey` covers every
+  // input besides the glyph itself, the font included (see fontCacheId).
   const geometry = pipeline === 'geometry';
   const geoCache = useMemo(() => new Map<string, GeometryPipelineResult>(), []);
-  const geoKey = useMemo(() => JSON.stringify([geometryOptions, options.bezierTolerance]), [geometryOptions, options.bezierTolerance]);
+  const geoKey = useMemo(
+    () => JSON.stringify([fontCacheId(fontInfo), geometryOptions, options.bezierTolerance]),
+    [fontInfo, geometryOptions, options.bezierTolerance],
+  );
   const geoWanted = `${geoKey}:${normalizedText}`;
   const [geoGlyphs, setGeoGlyphs] = useState<{ key: string; data: TegakiBundle['glyphData'] } | null>(null);
   const prepareGeometry = useCallback(async () => {
@@ -290,7 +294,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       if (geometry) await prepareGeometry();
       const shaper = await variantShaper;
       if (cancelled || !shaper) return;
-      const optionsKey = JSON.stringify(options);
+      const optionsKey = `${fontCacheId(fontInfo)}:${JSON.stringify(options)}`;
       const variants: Record<string, TegakiGlyphData> = {};
       for (const { key: variantKey, subsetIdx, gid, char: clusterChar } of collectShapedGlyphs(shaper, normalizedText)) {
         // Process every glyph the shaper emits, including nominal forms
@@ -334,7 +338,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
 
   const fontBundle = useMemo<TegakiBundle>(() => {
     const glyphData: TegakiBundle['glyphData'] = {};
-    const optionsKey = JSON.stringify(options);
+    const optionsKey = `${fontCacheId(fontInfo)}:${JSON.stringify(options)}`;
 
     const seen = new Set<string>();
     if (geometry) Object.assign(glyphData, geoGlyphs?.data);

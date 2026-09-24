@@ -34,6 +34,7 @@ import {
   STAGES,
   type Stage,
 } from './constants.ts';
+import { fontCacheId } from './font-cache-id.ts';
 import { fetchFontFromCDN } from './font-cdn.ts';
 import { SelectOption, SliderOption } from './form-controls.tsx';
 import { AnimationControls, GeometryStageRenderer, StageRenderer } from './stage-views.tsx';
@@ -163,7 +164,12 @@ export function GeneratorApp() {
     return available;
   }, [fontInfo, chars]);
 
+  // Each load takes a ticket; a load that finishes after a newer one started
+  // (fonts fetch at very different speeds) is dropped rather than replacing
+  // the newer font.
+  const fontLoadSeq = useRef(0);
   const loadFont = useCallback(async (family: string) => {
+    const ticket = ++fontLoadSeq.current;
     setFontLoading(true);
     setFontError('');
     resultsCache.current.clear();
@@ -171,21 +177,24 @@ export function GeneratorApp() {
       const { primary, extra } = await fetchFontFromCDN(family);
       // Google Fonts' subsets carry no name table, so the family is passed in.
       const info = await parseFont(primary, extra.length > 0 ? extra : undefined, family);
+      if (ticket !== fontLoadSeq.current) return;
       setFontInfo(info);
       setFontBuffer(primary);
       setExtraFontBuffers(extra.length > 0 ? extra : undefined);
       setFontFamily(family);
     } catch (e) {
+      if (ticket !== fontLoadSeq.current) return;
       setFontError((e as Error).message);
       setFontInfo(null);
     } finally {
-      setFontLoading(false);
+      if (ticket === fontLoadSeq.current) setFontLoading(false);
     }
   }, []);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const ticket = ++fontLoadSeq.current;
     setFontLoading(true);
     setFontError('');
     resultsCache.current.clear();
@@ -194,15 +203,17 @@ export function GeneratorApp() {
       try {
         const buf = reader.result as ArrayBuffer;
         const info = await parseFont(buf);
+        if (ticket !== fontLoadSeq.current) return;
         setFontInfo(info);
         setFontBuffer(buf);
         setExtraFontBuffers(undefined);
         setFontFamily(info.family);
       } catch (err) {
+        if (ticket !== fontLoadSeq.current) return;
         setFontError((err as Error).message);
         setFontInfo(null);
       } finally {
-        setFontLoading(false);
+        if (ticket === fontLoadSeq.current) setFontLoading(false);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -215,7 +226,7 @@ export function GeneratorApp() {
       return;
     }
 
-    const cacheKey = `${selectedChar}:${JSON.stringify(options)}`;
+    const cacheKey = `${selectedChar}:${fontCacheId(fontInfo)}:${JSON.stringify(options)}`;
     const cached = resultsCache.current.get(cacheKey);
     if (cached) {
       setResult(cached);
@@ -265,7 +276,7 @@ export function GeneratorApp() {
       setProcessing(true);
       return;
     }
-    const cacheKey = `${selectedChar}:${options.bezierTolerance}:${JSON.stringify(geometryOptions)}:${refGlyphs.map((r) => r.source).join('+') || 'noref'}`;
+    const cacheKey = `${fontCacheId(fontInfo)}:${selectedChar}:${options.bezierTolerance}:${JSON.stringify(geometryOptions)}:${refGlyphs.map((r) => r.source).join('+') || 'noref'}`;
     const cached = geoResultsCache.current.get(cacheKey);
     if (cached) {
       setGeoResult(cached);
