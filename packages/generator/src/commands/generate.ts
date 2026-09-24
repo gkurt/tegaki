@@ -75,6 +75,13 @@ export const DEFAULT_OPTIONS: PipelineOptions = pipelineOptionsSchema.parse({});
 
 export const generateArgsSchema = pipelineOptionsSchema.extend({
   family: z.string().default(DEFAULT_FONT_FAMILY).describe('Google Fonts family name'),
+  pipeline: z
+    .enum(['geometry', 'raster'])
+    .default('geometry')
+    .describe(
+      'Stroke extraction: `geometry` traces strokes from the outline itself (ordered by KanjiVG / Hershey references where they match); `raster` rasterizes and skeletonizes, tuned by the bitmap options',
+    )
+    .meta({ flags: 'p' }),
   output: z.string().optional().describe('Output folder path for the font bundle').meta({ flags: 'o' }),
   chars: z
     .union([z.boolean(), z.string()])
@@ -82,7 +89,11 @@ export const generateArgsSchema = pipelineOptionsSchema.extend({
     .describe('Characters to process. `true` processes every glyph in the font, `false` uses the default character set.')
     .meta({ flags: 'c' }),
   force: z.boolean().default(false).describe('Re-download font even if cached').meta({ flags: 'f' }),
-  debug: z.boolean().default(false).describe('Output intermediate steps (bitmap, skeleton, trace, animation SVGs)').meta({ flags: 'd' }),
+  debug: z
+    .boolean()
+    .default(false)
+    .describe('Output intermediate steps (bitmap, skeleton, trace, animation SVGs; raster pipeline only)')
+    .meta({ flags: 'd' }),
 });
 
 export interface PipelineResult {
@@ -179,9 +190,9 @@ export interface ExtractBundleInput {
   /** Filename for the full font file (e.g. `caveat.ttf`). */
   fullFontFileName?: string;
   /**
-   * Stroke extraction: `'raster'` (default — rasterize + skeletonize, tuned
-   * by `options`) or the experimental outline-geometry pipeline (tuned by
-   * `geometryOptions`; `options.bezierTolerance` still applies).
+   * Stroke extraction: `'geometry'` (default — strokes traced from the
+   * outline, tuned by `geometryOptions`; `options.bezierTolerance` still
+   * applies) or `'raster'` (rasterize + skeletonize, tuned by `options`).
    */
   pipeline?: 'raster' | 'geometry';
   geometryOptions?: GeometryOptions;
@@ -459,7 +470,7 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
     subset = true,
     fullFontBuffer,
     fullFontFileName,
-    pipeline = 'raster',
+    pipeline = 'geometry',
     geometryOptions = DEFAULT_GEOMETRY_OPTIONS,
     strokeOrderProviders = [],
   } = input;

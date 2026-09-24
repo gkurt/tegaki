@@ -29,7 +29,7 @@ export const tegakiProgram = createPadrone('tegaki')
       .arguments(generateArgsSchema, { positional: ['family'] })
       .action(async (args, ctx) => {
         const progress = ctx.context.progress;
-        const { family, output, force, debug, chars, ...pipelineOptions } = args;
+        const { family, output, force, debug, chars, pipeline, ...pipelineOptions } = args;
 
         // chars: true → all glyphs in the font (skip &text= subsetting)
         // chars: false → DEFAULT_CHARS
@@ -79,6 +79,11 @@ export const tegakiProgram = createPadrone('tegaki')
           subset: isSubset,
           fullFontBuffer,
           fullFontFileName,
+          pipeline,
+          strokeOrderProviders:
+            pipeline === 'geometry'
+              ? [createKanjiVGProvider(createKanjiVGFileLoader()), createHersheyProvider(), createHersheySimplexProvider()]
+              : [],
           onProgress: (msg, p) => {
             if (p !== undefined) {
               progress?.update({ message: msg, progress: p });

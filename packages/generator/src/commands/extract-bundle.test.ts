@@ -37,8 +37,13 @@ describe('extractTegakiBundle', () => {
     }
   });
 
-  test('the raster pipeline stays the default', async () => {
+  test('the geometry pipeline is the default', async () => {
     const bundle = await extract();
+    expect(Object.keys(bundle.geometryResults ?? {}).sort()).toEqual(['a', 'b']);
+  });
+
+  test("pipeline 'raster' writes the raster pipeline's strokes", async () => {
+    const bundle = await extract('raster');
     expect(Object.keys(bundle.glyphResults).sort()).toEqual(['a', 'b']);
     expect(bundle.geometryResults).toBeUndefined();
   });
