@@ -16,8 +16,12 @@ describe('toHbFeatureString', () => {
     expect(toHbFeatureString(['calt', 'init', 'medi', 'fina', 'isol', 'rlig', 'liga'])).toBe('calt,liga');
   });
 
+  test('drops the fraction features, which the shaper applies around a fraction slash itself', () => {
+    expect(toHbFeatureString(['pnum', 'frac', 'numr', 'dnom', 'liga'])).toBe('pnum,liga');
+  });
+
   test('preserves order of input tags', () => {
-    expect(toHbFeatureString(['liga', 'calt', 'frac'])).toBe('liga,calt,frac');
+    expect(toHbFeatureString(['liga', 'calt', 'smcp'])).toBe('liga,calt,smcp');
   });
 });
 

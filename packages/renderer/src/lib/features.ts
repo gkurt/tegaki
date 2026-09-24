@@ -5,11 +5,18 @@
  * text range, which breaks the positional assignment — e.g. every Arabic
  * glyph collapses to the final form.
  *
+ * The fraction features (`frac`/`numr`/`dnom`) are the same kind: shapers
+ * apply them around a fraction slash on their own, and a blanket enable turns
+ * every digit into a numerator. It doesn't even do that consistently — a font
+ * may register them for one script only (Amiri: Arabic), so the browser, which
+ * shapes digits beside Arabic as Arabic, draws numerators where our per-word
+ * harfbuzz shaping, seeing bare digits, draws plain ones.
+ *
  * Trust the shaper's script defaults for these and never emit them as
  * explicit enables. (Explicit *disables* are fine — `-fina` suppressing the
  * automatic fina is exactly the user's intent.)
  */
-const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig']);
+const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig', 'frac', 'numr', 'dnom']);
 
 /**
  * Build a CSS `font-feature-settings` value from bundle features. Same

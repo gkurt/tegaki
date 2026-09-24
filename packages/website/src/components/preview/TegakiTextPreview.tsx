@@ -38,8 +38,9 @@ TegakiEngine.registerShaper(harfbuzzShaper);
 
 // Must mirror the set in `packages/renderer/src/shaper-harfbuzz/index.ts` and the
 // generator's `hb-shaper.ts`. Explicit enables of these features override
-// harfbuzz's contextual positional assignment.
-const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig']);
+// harfbuzz's contextual positional assignment (and, for the fraction ones,
+// turn every digit into a numerator).
+const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig', 'frac', 'numr', 'dnom']);
 
 /** A pipeline result (either pipeline) as the bundle's compact glyph entry. */
 function toCompactGlyph(res: PipelineResult | GeometryPipelineResult): TegakiGlyphData {

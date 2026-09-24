@@ -3,7 +3,7 @@ import type { ShaperFactory } from '../core/shaper-registry.ts';
 import type { BundleShaper, ShapedGlyph } from '../lib/shaper.ts';
 import type { TegakiBundle } from '../types.ts';
 
-const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig']);
+const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig', 'frac', 'numr', 'dnom']);
 
 /**
  * Whitespace boundaries split shaping runs (see `BundleShaper.shape`).

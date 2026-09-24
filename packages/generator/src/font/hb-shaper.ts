@@ -63,8 +63,10 @@ export interface HbShaper {
 // script. Passing them in the explicit enable list makes HB apply them
 // unconditionally across the whole text range, which breaks positional
 // assignment — e.g. every Arabic glyph collapses to the `fina` variant.
-// Leave these to HB's script defaults.
-const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig']);
+// Likewise the fraction features, which HB applies around a fraction slash
+// and which, enabled globally, turn every digit into a numerator. Leave these
+// to HB's script defaults (see `packages/renderer/src/lib/features.ts`).
+const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig', 'frac', 'numr', 'dnom']);
 
 export async function createHbShaper(fontBuffer: ArrayBuffer, features: string[] = []): Promise<HbShaper> {
   const blob = new Blob(fontBuffer);
