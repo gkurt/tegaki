@@ -377,13 +377,21 @@ export function processGlyphGeometry(
   );
 }
 
+/** The one character a variant glyph draws, with its stroke-order references (see `VariantGlyph.letter`). */
+export interface VariantLetter {
+  char: string;
+  reference?: ReferenceGlyph | ReferenceGlyph[] | null;
+}
+
 /**
  * Run the geometry pipeline for a variant glyph identified by its opentype
  * index — the geometry counterpart of {@link processGlyphById} (same
- * `subsetIndex` / `rtl` semantics). Variant glyphs have no source character
- * to look up a stroke-order reference by, so ordering is heuristic;
- * `headlineLast`, like `rtl`, comes from the cluster that produced the variant
- * (see `isHeadlineScriptChar`).
+ * `subsetIndex` / `rtl` semantics). `headlineLast`, like `rtl`, comes from
+ * the cluster that produced the variant (see `isHeadlineScriptChar`). A
+ * variant that draws one character — its nominal glyph as the shaper emits
+ * it, or a contextual form of it — passes that `letter`: its references
+ * order the strokes as they do the char-keyed glyph, and its script picks
+ * the ordering rules. Without one, ordering is heuristic.
  */
 export function processGlyphGeometryById(
   fontInfo: ParsedFontInfo,
@@ -393,14 +401,17 @@ export function processGlyphGeometryById(
   subsetIndex = 0,
   rtl = false,
   headlineLast = false,
+  letter?: VariantLetter,
 ): GeometryPipelineResult | null {
   const font = subsetIndex === 0 ? fontInfo.font : fontInfo.extraFonts?.[subsetIndex - 1];
   if (!font) return null;
   const rawGlyph = extractGlyphById(font, glyphId);
   if (!rawGlyph) return null;
+  const reference = letter?.reference;
+  const hasReference = Array.isArray(reference) ? reference.length > 0 : reference != null;
   return runGeometryPipeline(
     {
-      char: rawGlyph.char,
+      char: letter?.char ?? rawGlyph.char,
       unicode: rawGlyph.unicode,
       advanceWidth: rawGlyph.advanceWidth,
       boundingBox: rawGlyph.boundingBox,
@@ -410,6 +421,7 @@ export function processGlyphGeometryById(
       unitsPerEm: fontInfo.unitsPerEm,
       rtl,
       headlineLast,
+      ...(hasReference && reference ? { reference } : {}),
     },
     rawGlyph,
     geometryOptions,
@@ -660,11 +672,12 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
     const variantIds = enumerateVariantGlyphIds(fontInfo.font, chars);
     const total = variantIds.size;
     let i = 0;
-    for (const { gid, clusterChar } of variantIds.values()) {
+    for (const { gid, clusterChar, letter } of variantIds.values()) {
       const rtl = isRtlChar(clusterChar);
       i++;
       if (geometry) {
-        // Variants carry no char, so stroke order is heuristic.
+        // A glyph drawing one letter is ordered by that letter's references,
+        // like its char-keyed copy — the renderer prefers this one when shaping.
         const result = processGlyphGeometryById(
           fontInfo,
           gid,
@@ -673,6 +686,7 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
           0,
           rtl,
           isHeadlineScriptChar(clusterChar),
+          letter === undefined ? undefined : { char: letter, reference: await geometryReferences(letter) },
         );
         if (!result) continue;
         geometryResultsById[String(gid)] = result;

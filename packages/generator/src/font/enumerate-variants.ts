@@ -5,6 +5,14 @@ export interface VariantGlyph {
   gid: number;
   /** First cluster char observed producing this variant — used for RTL detection. */
   clusterChar: string;
+  /**
+   * The one character this glyph draws, when it draws one: its own cmap
+   * char, or a char it is reached from through single / alternate
+   * substitutions only (a contextual or stylistic form of that letter).
+   * Unset for ligatures and decompositions, which draw several or part of
+   * one. Stroke-order references are looked up by it.
+   */
+  letter?: string;
 }
 
 /**
@@ -30,10 +38,12 @@ export interface VariantGlyph {
  */
 export function enumerateVariantGlyphIds(font: opentype.Font, chars: readonly string[]): Map<number, VariantGlyph> {
   const ancestor = new Map<number, string>();
+  const letters = new Map<number, string>();
   for (const ch of chars) {
     const gid = font.charToGlyphIndex(ch);
     if (gid === 0) continue;
     if (!ancestor.has(gid)) ancestor.set(gid, ch);
+    if (!letters.has(gid) && [...ch].length === 1) letters.set(gid, ch);
   }
 
   const gsub = (font.tables as { gsub?: GsubTable }).gsub;
@@ -43,7 +53,7 @@ export function enumerateVariantGlyphIds(font: opentype.Font, chars: readonly st
       changed = false;
       for (const lookup of gsub.lookups) {
         for (const subtable of lookup.subtables ?? []) {
-          if (walkSubtable(lookup.lookupType, subtable, ancestor)) changed = true;
+          if (walkSubtable(lookup.lookupType, subtable, ancestor, letters)) changed = true;
         }
       }
     }
@@ -52,7 +62,8 @@ export function enumerateVariantGlyphIds(font: opentype.Font, chars: readonly st
   const variants = new Map<number, VariantGlyph>();
   for (const [gid, clusterChar] of ancestor) {
     if (gid === 0) continue;
-    variants.set(gid, { gid, clusterChar });
+    const letter = letters.get(gid);
+    variants.set(gid, letter === undefined ? { gid, clusterChar } : { gid, clusterChar, letter });
   }
   return variants;
 }
@@ -117,20 +128,28 @@ function setAncestor(ancestor: Map<number, string>, gid: number, ch: string): bo
   return true;
 }
 
+/** A 1:1 substitution's output draws the same letter as its input. */
+function inheritLetter(letters: Map<number, string>, inGid: number, outGid: number): boolean {
+  const letter = letters.get(inGid);
+  if (outGid === 0 || letter === undefined || letters.has(outGid)) return false;
+  letters.set(outGid, letter);
+  return true;
+}
+
 /** Returns true if any ancestor mapping changed. */
-function walkSubtable(lookupType: number, st: GsubSubtable, ancestor: Map<number, string>): boolean {
+function walkSubtable(lookupType: number, st: GsubSubtable, ancestor: Map<number, string>, letters: Map<number, string>): boolean {
   // Type 7: extension wraps another subtable type.
   if (lookupType === 7 && st.extension && st.extensionLookupType !== undefined) {
-    return walkSubtable(st.extensionLookupType, st.extension, ancestor);
+    return walkSubtable(st.extensionLookupType, st.extension, ancestor, letters);
   }
 
   switch (lookupType) {
     case 1:
-      return walkSingleSub(st, ancestor);
+      return walkSingleSub(st, ancestor, letters);
     case 2:
       return walkMultipleSub(st, ancestor);
     case 3:
-      return walkAlternateSub(st, ancestor);
+      return walkAlternateSub(st, ancestor, letters);
     case 4:
       return walkLigatureSub(st, ancestor);
     default:
@@ -141,7 +160,7 @@ function walkSubtable(lookupType: number, st: GsubSubtable, ancestor: Map<number
 }
 
 /** Type 1 — Single substitution. One input gid → one output gid. */
-function walkSingleSub(st: GsubSubtable, ancestor: Map<number, string>): boolean {
+function walkSingleSub(st: GsubSubtable, ancestor: Map<number, string>, letters: Map<number, string>): boolean {
   let changed = false;
   const cov = st.coverage;
   if (!cov) return false;
@@ -156,7 +175,9 @@ function walkSingleSub(st: GsubSubtable, ancestor: Map<number, string>): boolean
       const idx = coverageIndex(cov, inGid);
       outGid = st.substitute[idx];
     }
-    if (outGid !== undefined && setAncestor(ancestor, outGid, cp)) changed = true;
+    if (outGid === undefined) continue;
+    if (setAncestor(ancestor, outGid, cp)) changed = true;
+    if (inheritLetter(letters, inGid, outGid)) changed = true;
   }
   return changed;
 }
@@ -180,7 +201,7 @@ function walkMultipleSub(st: GsubSubtable, ancestor: Map<number, string>): boole
 }
 
 /** Type 3 — Alternate substitution. One input gid → choice of output gids. */
-function walkAlternateSub(st: GsubSubtable, ancestor: Map<number, string>): boolean {
+function walkAlternateSub(st: GsubSubtable, ancestor: Map<number, string>, letters: Map<number, string>): boolean {
   let changed = false;
   const cov = st.coverage;
   if (!cov || !st.alternateSets) return false;
@@ -192,6 +213,7 @@ function walkAlternateSub(st: GsubSubtable, ancestor: Map<number, string>): bool
     if (!alts) continue;
     for (const outGid of alts) {
       if (setAncestor(ancestor, outGid, cp)) changed = true;
+      if (inheritLetter(letters, inGid, outGid)) changed = true;
     }
   }
   return changed;

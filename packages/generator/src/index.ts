@@ -24,6 +24,7 @@ export {
   processGlyphGeometryById,
   type TegakiBundleOutput,
   toCompactStroke,
+  type VariantLetter,
 } from './commands/generate.ts';
 export {
   formatStrokeOrderSummary,

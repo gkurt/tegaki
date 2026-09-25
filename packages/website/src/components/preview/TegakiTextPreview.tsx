@@ -301,7 +301,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       if (cancelled || !shaper) return;
       const optionsKey = `${fontCacheId(fontInfo)}:${JSON.stringify(options)}`;
       const variants: Record<string, TegakiGlyphData> = {};
-      for (const { key: variantKey, subsetIdx, gid, char: clusterChar } of collectShapedGlyphs(shaper, normalizedText, {
+      for (const { key: variantKey, subsetIdx, gid, char: clusterChar, letter } of collectShapedGlyphs(shaper, normalizedText, {
         letterSpaced,
       })) {
         // Process every glyph the shaper emits, including nominal forms
@@ -318,10 +318,27 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
         const headline = isHeadlineScriptChar(clusterChar);
         let res: PipelineResult | GeometryPipelineResult | undefined;
         if (geometry) {
-          const cacheKey = `#${subsetIdx}:${gid}:${rtl ? 'r' : 'l'}${headline ? 'h' : ''}:${geoKey}`;
+          // A glyph drawing one letter takes that letter's stroke-order
+          // references, like its char-keyed copy (the renderer draws this one).
+          const refs =
+            letter === undefined || geometryOptions.strokeOrder === 'heuristic'
+              ? []
+              : await collectReferences(letter, strokeOrderProviders).catch(() => []);
+          if (cancelled) return;
+          const letterKey = letter === undefined ? '' : `:${letter}:${refs.map((r) => r.source).join('+') || 'noref'}`;
+          const cacheKey = `#${subsetIdx}:${gid}:${rtl ? 'r' : 'l'}${headline ? 'h' : ''}${letterKey}:${geoKey}`;
           res = geoCache.get(cacheKey);
           if (!res) {
-            const geoRes = processGlyphGeometryById(fontInfo, gid, geometryOptions, options.bezierTolerance, subsetIdx, rtl, headline);
+            const geoRes = processGlyphGeometryById(
+              fontInfo,
+              gid,
+              geometryOptions,
+              options.bezierTolerance,
+              subsetIdx,
+              rtl,
+              headline,
+              letter === undefined ? undefined : { char: letter, reference: refs },
+            );
             if (geoRes) geoCache.set(cacheKey, geoRes);
             res = geoRes ?? undefined;
           }

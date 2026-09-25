@@ -32,6 +32,19 @@ describe('collectShapedGlyphs', () => {
     expect(d).toMatchObject({ subsetIdx: 0, key: String(d.gid) });
   });
 
+  test("an alternate still draws its one letter: World's d is the letter d", async () => {
+    const shaper = await caveatShaper();
+    const d = collectShapedGlyphs(shaper, 'World').find((g) => g.char === 'd')!;
+    expect(d.letter).toBe('d');
+  });
+
+  test('a glyph of a cluster of several characters draws no single letter (e + combining acute)', async () => {
+    const shaper = await caveatShaper();
+    const glyphs = collectShapedGlyphs(shaper, 'e\u0301');
+    expect(glyphs.length).toBeGreaterThan(0);
+    for (const g of glyphs) expect(g.letter).toBeUndefined();
+  });
+
   test('each glyph is listed once', async () => {
     const shaper = await caveatShaper();
     const keys = collectShapedGlyphs(shaper, 'dd dd\ndd').map((g) => g.key);

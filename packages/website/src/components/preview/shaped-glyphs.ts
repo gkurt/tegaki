@@ -8,6 +8,13 @@ export interface ShapedGlyphRef {
   gid: number;
   /** First character of the glyph's cluster (drives RTL detection). */
   char: string;
+  /**
+   * The one character the glyph draws — set when it is the only glyph of a
+   * one-character cluster (the letter's nominal glyph or a contextual form),
+   * not for ligatures or decompositions. Stroke-order references are looked
+   * up by it, as for the char-keyed glyph.
+   */
+  letter?: string;
 }
 
 /**
@@ -23,7 +30,11 @@ export function collectShapedGlyphs(shaper: BundleShaper, text: string, options?
   const out: ShapedGlyphRef[] = [];
   const seen = new Set<string>();
   for (const line of text.split('\n')) {
-    for (const g of shaper.shape(line, options)) {
+    const shaped = shaper.shape(line, options);
+    const starts = [...new Set(shaped.map((g) => g.cl))].sort((a, b) => a - b);
+    const glyphsPerCluster = new Map<number, number>();
+    for (const g of shaped) glyphsPerCluster.set(g.cl, (glyphsPerCluster.get(g.cl) ?? 0) + 1);
+    for (const g of shaped) {
       if (seen.has(g.g)) continue;
       const sep = g.g.indexOf(':');
       const subsetIdx = sep < 0 ? 0 : Number(g.g.slice(0, sep));
@@ -31,7 +42,9 @@ export function collectShapedGlyphs(shaper: BundleShaper, text: string, options?
       const char = line[g.cl];
       if (gid === 0 || !char) continue;
       seen.add(g.g);
-      out.push({ key: g.g, subsetIdx, gid, char });
+      const cluster = line.slice(g.cl, starts.find((c) => c > g.cl) ?? line.length);
+      const letter = glyphsPerCluster.get(g.cl) === 1 && [...cluster].length === 1 ? cluster : undefined;
+      out.push(letter === undefined ? { key: g.g, subsetIdx, gid, char } : { key: g.g, subsetIdx, gid, char, letter });
     }
   }
   return out;
