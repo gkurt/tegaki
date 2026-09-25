@@ -87,6 +87,10 @@ export const geometryOptionsSchema = z.object({
     .describe(
       'Geometry: draw order — `auto` uses a KanjiVG/Hershey reference when it matches cleanly, `dataset` forces it, `heuristic` ignores it',
     ),
+  hanLocale: z
+    .enum(['ja', 'zh'])
+    .default(G.hanLocale)
+    .describe('Geometry: stroke-order convention for Han characters — `ja` (KanjiVG) or `zh` (Make Me a Hanzi, PRC order)'),
   inkSampleRatio: z
     .number()
     .default(G.inkSampleRatio)

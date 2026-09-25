@@ -246,6 +246,7 @@ export function GeneratorApp() {
     return () => clearTimeout(id);
   }, [fontInfo, selectedChar, options]);
 
+  const hanLocale = geometryOptions.hanLocale;
   // Fetch the stroke-order reference variants for the selected char (memoized
   // per character by each provider). Failures (offline, rate limit) degrade to
   // "no reference" and the pipeline falls back to heuristic ordering.
@@ -253,7 +254,7 @@ export function GeneratorApp() {
     if (pipeline !== 'geometry' || previewMode !== 'glyph' || !selectedChar) return;
     let cancelled = false;
     setRefGlyphs(undefined);
-    collectReferences(selectedChar, strokeOrderProviders)
+    collectReferences(selectedChar, strokeOrderProviders(hanLocale))
       .then((refs) => {
         if (!cancelled) setRefGlyphs(refs);
       })
@@ -263,7 +264,7 @@ export function GeneratorApp() {
     return () => {
       cancelled = true;
     };
-  }, [pipeline, previewMode, selectedChar]);
+  }, [pipeline, previewMode, selectedChar, hanLocale]);
 
   // Process glyph through the geometry pipeline (only when that pipeline is active)
   useEffect(() => {
@@ -465,7 +466,7 @@ export function GeneratorApp() {
         subset: false,
         pipeline,
         geometryOptions,
-        strokeOrderProviders,
+        strokeOrderProviders: strokeOrderProviders(geometryOptions.hanLocale),
       });
 
       const encoder = new TextEncoder();
@@ -912,6 +913,28 @@ export function GeneratorApp() {
                       onClick={() => updateGeometryOption('strokeOrder', mode)}
                     >
                       {mode === 'auto' ? 'Auto' : mode === 'dataset' ? 'Dataset' : 'Heuristic'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span
+                  className="text-gray-600"
+                  title="Stroke-order convention for Han characters: Japanese (KanjiVG) or Chinese (Make Me a Hanzi, PRC order)"
+                >
+                  Han order
+                </span>
+                <div className="flex rounded overflow-hidden border border-gray-300">
+                  {(['ja', 'zh'] as const).map((locale) => (
+                    <button
+                      key={locale}
+                      type="button"
+                      className={`px-2 py-1 text-xs cursor-pointer ${
+                        geometryOptions.hanLocale === locale ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'
+                      }`}
+                      onClick={() => updateGeometryOption('hanLocale', locale)}
+                    >
+                      {locale === 'ja' ? 'Japanese' : 'Chinese'}
                     </button>
                   ))}
                 </div>

@@ -242,7 +242,10 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       for (const char of normalizedText) {
         if (seen.has(char) || char === ' ' || char === '\n') continue;
         seen.add(char);
-        const refs = geometryOptions.strokeOrder === 'heuristic' ? [] : await collectReferences(char, strokeOrderProviders).catch(() => []);
+        const refs =
+          geometryOptions.strokeOrder === 'heuristic'
+            ? []
+            : await collectReferences(char, strokeOrderProviders(geometryOptions.hanLocale)).catch(() => []);
         if (cancelled) return;
         const cacheKey = `${char}:${geoKey}:${refs.map((r) => r.source).join('+') || 'noref'}`;
         let res = geoCache.get(cacheKey);
@@ -323,7 +326,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
           const refs =
             letter === undefined || geometryOptions.strokeOrder === 'heuristic'
               ? []
-              : await collectReferences(letter, strokeOrderProviders).catch(() => []);
+              : await collectReferences(letter, strokeOrderProviders(geometryOptions.hanLocale)).catch(() => []);
           if (cancelled) return;
           const letterKey = letter === undefined ? '' : `:${letter}:${refs.map((r) => r.source).join('+') || 'noref'}`;
           const cacheKey = `#${subsetIdx}:${gid}:${rtl ? 'r' : 'l'}${headline ? 'h' : ''}${letterKey}:${geoKey}`;

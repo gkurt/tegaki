@@ -196,6 +196,16 @@ export interface GeometryOptions {
    */
   strokeOrder: 'auto' | 'dataset' | 'heuristic';
   /**
+   * Which national stroke-order convention Han characters follow — the
+   * reference dataset consulted first for them: 'ja' (default) takes KanjiVG,
+   * 'zh' takes Make Me a Hanzi (PRC order). The two disagree on some shared
+   * characters (以, 那, 着, the 阝 radical), so they are never mixed as
+   * best-fit variants; the other dataset only fills characters the first
+   * lacks (kana for 'zh', simplified-only hanzi for 'ja'). Read where
+   * references are collected (`createReferenceSet`), not by the pipeline.
+   */
+  hanLocale: 'ja' | 'zh';
+  /**
    * How strokes are extracted from the outline:
    * - 'ink-graph' (default): triangulate the ink once, read the stroke
    *   topology off the triangles (tips / sleeves / junctions), prune spurs by
@@ -238,6 +248,7 @@ export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
   // measures against, so defaults stay consistent with the join ranking.
   medialMethod: 'straight-skeleton',
   strokeOrder: 'auto',
+  hanLocale: 'ja',
   extraction: 'ink-graph',
   inkSampleRatio: 0.006,
   // A round pen pokes (√2−1)·r ≈ 0.41·r short of a square outer corner; such

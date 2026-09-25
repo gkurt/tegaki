@@ -165,6 +165,7 @@ const GEO_OPTION_KEYS: Record<keyof GeometryOptions, string> = {
   resampleSpacingRatio: 'grs',
   medialMethod: 'gmm',
   strokeOrder: 'gso',
+  hanLocale: 'ghl',
   extraction: 'gx',
   inkSampleRatio: 'gis',
   inkSpurTolerance: 'gip',
@@ -175,6 +176,7 @@ const GEO_OPTION_KEYS: Record<keyof GeometryOptions, string> = {
 const MEDIAL_METHODS: readonly GeometryOptions['medialMethod'][] = ['chain', 'voronoi', 'straight-skeleton'];
 const STROKE_ORDER_MODES: readonly GeometryOptions['strokeOrder'][] = ['auto', 'dataset', 'heuristic'];
 const EXTRACTION_MODES: readonly GeometryOptions['extraction'][] = ['partition', 'ink-graph'];
+const HAN_LOCALES: readonly GeometryOptions['hanLocale'][] = ['ja', 'zh'];
 
 const REVERSE_GEO_OPTION_KEYS = Object.fromEntries(Object.entries(GEO_OPTION_KEYS).map(([k, v]) => [v, k])) as Record<
   string,
@@ -263,7 +265,7 @@ export function parseUrlState(search: string | URLSearchParams = window.location
     }
   }
 
-  // Geometry options — numeric, except the enum-valued medialMethod / strokeOrder / extraction and boolean inkSerifs.
+  // Geometry options — numeric, except the enum-valued medialMethod / strokeOrder / hanLocale / extraction and boolean inkSerifs.
   for (const [short, long] of Object.entries(REVERSE_GEO_OPTION_KEYS)) {
     if (!p.has(short)) continue;
     const raw = p.get(short)!;
@@ -274,6 +276,10 @@ export function parseUrlState(search: string | URLSearchParams = window.location
     if (long === 'strokeOrder') {
       if ((STROKE_ORDER_MODES as readonly string[]).includes(raw))
         state.geometryOptions.strokeOrder = raw as GeometryOptions['strokeOrder'];
+      continue;
+    }
+    if (long === 'hanLocale') {
+      state.geometryOptions.hanLocale = parseEnum(raw, HAN_LOCALES, DEFAULT_GEOMETRY_OPTIONS.hanLocale);
       continue;
     }
     if (long === 'extraction') {

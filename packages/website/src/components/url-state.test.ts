@@ -64,3 +64,17 @@ describe('clip-to-text default follows the pipeline', () => {
     expect(parseUrlState(buildUrlParams(state)).quality.clipText).toBe(1.5);
   });
 });
+
+describe('Han locale', () => {
+  test('the Chinese convention round-trips as ghl=zh; the Japanese default stays out of the URL', () => {
+    const zh = { ...URL_DEFAULTS, geometryOptions: { ...URL_DEFAULTS.geometryOptions, hanLocale: 'zh' as const } };
+    const params = buildUrlParams(zh);
+    expect(params.get('ghl')).toBe('zh');
+    expect(parseUrlState(params).geometryOptions.hanLocale).toBe('zh');
+    expect(buildUrlParams(URL_DEFAULTS).has('ghl')).toBe(false);
+  });
+
+  test('an unknown locale falls back to the default', () => {
+    expect(parseUrlState('?ghl=ko').geometryOptions.hanLocale).toBe(URL_DEFAULTS.geometryOptions.hanLocale);
+  });
+});

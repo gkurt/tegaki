@@ -75,7 +75,12 @@ export {
   parseMakeMeAHanziJson,
 } from './stroke-order/makemeahanzi.ts';
 export { matchStrokes, type StrokeMatchPair, type StrokeMatchResult } from './stroke-order/match.ts';
-export { collectReferences } from './stroke-order/providers.ts';
+export {
+  collectReferences,
+  createReferenceSet,
+  firstMatchProvider,
+  type HanReferenceProviders,
+} from './stroke-order/providers.ts';
 export { referenceBBox, registerReference } from './stroke-order/register.ts';
 export type {
   ReferenceGlyph,
