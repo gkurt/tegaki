@@ -43,6 +43,17 @@ export {
   summarizeStrokeOrderReports,
 } from './commands/stroke-order-report.ts';
 export { DEFAULT_CHARS, EXAMPLE_FONTS, type SkeletonMethod } from './constants.ts';
+export {
+  buildGsubGraph,
+  type FindExamplesOptions,
+  type FormExample,
+  findFormExamples,
+  type GlyphForm,
+  type GlyphFormKind,
+  type GsubGraph,
+  glyphFormsOf,
+  type ShapeFn,
+} from './font/glyph-forms.ts';
 export { createHbShaper, type HbShaper, type ShapedGlyph } from './font/hb-shaper.ts';
 export { enumerateFontChars } from './font/parse.ts';
 export { initStraightSkeleton, isStraightSkeletonReady } from './geometry/face-straight-skeleton.ts';
