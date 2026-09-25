@@ -1,10 +1,11 @@
 import { zipSync } from 'fflate';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TegakiRendererHandle } from 'tegaki';
-import { extractTegakiBundle, type PipelineResult } from 'tegaki-generator';
+import { CHARSET_PRESETS, extractTegakiBundle, type PipelineResult } from 'tegaki-generator';
 import { DEFAULT_EXAMPLE_FONT_TEXT, EXAMPLE_FONT_TEXTS, type Pipeline } from '../preview/constants.ts';
 import { strokeOrderProviders } from '../preview/stroke-order-providers.ts';
 import { defaultClipText } from '../url-state.ts';
+import { type CharsetInfo, charsetCoverage, fontHasChar, recommendCharset } from './charsets.ts';
 import { ExportMenu } from './ExportMenu.tsx';
 import { FontPicker } from './FontPicker.tsx';
 import { GlyphWorkspace } from './GlyphWorkspace.tsx';
@@ -28,10 +29,24 @@ export function Studio() {
   const rendererRef = useRef<TegakiRendererHandle>(null);
   const playbackRef = useRef<TextPlaybackHandle>(null);
 
-  const { font, loading, error, loadFamily, loadFile } = useFontLoader((family) => {
+  // A font the user picks switches the charset to the one it's made for, unless
+  // the current set was edited by hand. Fonts restored from the URL keep the
+  // URL's charset.
+  const adoptRecommendedCharset = useRef(false);
+  const { font, loading, error, loadFamily, loadFile } = useFontLoader((loaded) => {
     resultsCache.current.clear();
-    set('fontFamily', family);
+    set('fontFamily', loaded.info.family);
+    if (adoptRecommendedCharset.current) {
+      adoptRecommendedCharset.current = false;
+      const recommended = recommendCharset(charsetCoverage(fontHasChar(loaded.info)));
+      if (recommended) set('chars', (chars) => (CHARSET_PRESETS.some((p) => p.chars === chars) ? recommended.chars : chars));
+    }
   });
+  const charsets = useMemo<CharsetInfo | null>(() => {
+    if (!font) return null;
+    const coverage = charsetCoverage(fontHasChar(font.info));
+    return { coverage, recommended: recommendCharset(coverage) };
+  }, [font]);
 
   // Load the URL's font once on mount.
   const initialFamily = useRef(settings.fontFamily);
@@ -115,10 +130,14 @@ export function Studio() {
               loading={loading}
               error={error}
               onPickFamily={(family, featured) => {
+                adoptRecommendedCharset.current = true;
                 loadFamily(family);
                 if (featured) set('previewText', EXAMPLE_FONT_TEXTS[family] ?? DEFAULT_EXAMPLE_FONT_TEXT);
               }}
-              onPickFile={loadFile}
+              onPickFile={(file) => {
+                adoptRecommendedCharset.current = true;
+                loadFile(file);
+              }}
             />
           </div>
 
@@ -183,7 +202,14 @@ export function Studio() {
                 playbackRef={playbackRef}
               />
             ) : (
-              <GlyphWorkspace font={font} settings={settings} set={set} resultsCache={resultsCache} onPipelineChange={switchPipeline} />
+              <GlyphWorkspace
+                font={font}
+                charsets={charsets}
+                settings={settings}
+                set={set}
+                resultsCache={resultsCache}
+                onPipelineChange={switchPipeline}
+              />
             )}
           </main>
           {showInspector && (
@@ -192,6 +218,7 @@ export function Studio() {
               settings={settings}
               set={set}
               fontInfo={font?.info ?? null}
+              charsets={charsets}
               onPipelineChange={switchPipeline}
               onClose={isDesktop ? undefined : () => setInspectorOpen(false)}
               className={cx(

@@ -35,9 +35,9 @@ export function SVGView({ svg }: { svg: string }) {
   );
 }
 
-export function StageRenderer({ result, stage, animTime }: { result: PipelineResult; stage: Stage; animTime: number }) {
+/** Raster-pipeline stage renderer. The 'final' stage is drawn by the real renderer, in the studio. */
+export function StageRenderer({ result, stage, animTime }: { result: PipelineResult; stage: Exclude<Stage, 'final'>; animTime: number }) {
   if (stage === 'animation') return <AnimationView result={result} time={animTime} />;
-  if (stage === 'final') return <FinalView result={result} time={animTime} />;
 
   const rendered = renderStage(result, stage as VisualizationStage);
   if (rendered instanceof Uint8Array) {
@@ -53,7 +53,7 @@ export function GeometryStageRenderer({
   animTime,
 }: {
   result: GeometryPipelineResult;
-  stage: GeometryStageKey;
+  stage: Exclude<GeometryStageKey, 'final'>;
   animTime: number;
 }) {
   if (stage === 'animation') return <GeometryAnimationView result={result} time={animTime} />;
@@ -193,83 +193,5 @@ function AnimationView({ result, time }: { result: PipelineResult; time: number 
         );
       })}
     </svg>
-  );
-}
-
-function FinalView({ result, time }: { result: PipelineResult; time: number }) {
-  const { strokesFontUnits, lineCap, bitmapWidth: bw, bitmapHeight: bh, transform, ascender, descender, advanceWidth } = result;
-
-  // Container matches the content-box display size (same as bitmap-based stages)
-  const { width: dw, height: dh } = fitSize(bw, bh, 600);
-
-  // Em-square viewBox (matches production SVG output)
-  const ew = advanceWidth;
-  const eh = ascender - descender;
-
-  // Content-box in font units
-  const cx = transform.offsetX;
-  const cy = transform.offsetY;
-  const cw = bw / transform.scaleX;
-  const ch = bh / transform.scaleY;
-
-  // Scale the SVG so the content region fills exactly (dw, dh)
-  const svgW = (dw * ew) / cw;
-  const svgH = (dh * eh) / ch;
-
-  // Offset to align the content region with the container's top-left
-  const ox = (cx * dw) / cw;
-  const oy = ((cy + ascender) * dh) / ch;
-
-  return (
-    <div className="border border-gray-200 overflow-hidden relative" style={{ width: dw, height: dh }}>
-      <svg
-        viewBox={`0 ${-ascender} ${ew} ${eh}`}
-        style={{ position: 'absolute', left: -ox, top: -oy, width: svgW, height: svgH, overflow: 'visible' }}
-      >
-        <rect x={cx} y={cy} width={cw} height={ch} fill="white" />
-        {strokesFontUnits.map((stroke, i) => {
-          const avgWidth = stroke.points.reduce((s, p) => s + p.width, 0) / stroke.points.length;
-          const localTime = time - stroke.delay;
-
-          if (localTime < 0) return null;
-
-          if (stroke.points.length === 1) {
-            const p = stroke.points[0]!;
-            const size = Math.max(avgWidth, 0.5);
-            return lineCap === 'round' ? (
-              <circle key={i} cx={p.x} cy={p.y} r={size / 2} fill="currentColor" />
-            ) : (
-              <rect key={i} x={p.x - size / 2} y={p.y - size / 2} width={size} height={size} fill="currentColor" />
-            );
-          }
-
-          const d = stroke.points.map((p, j) => `${j === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-          let pathLen = 0;
-          for (let j = 1; j < stroke.points.length; j++) {
-            const dx = stroke.points[j]!.x - stroke.points[j - 1]!.x;
-            const dy = stroke.points[j]!.y - stroke.points[j - 1]!.y;
-            pathLen += Math.sqrt(dx * dx + dy * dy);
-          }
-
-          const progress = stroke.animationDuration > 0 ? Math.min(localTime / stroke.animationDuration, 1) : 1;
-          const dashLen = pathLen + avgWidth;
-          const dashOffset = dashLen * (1 - progress);
-
-          return (
-            <path
-              key={i}
-              d={d}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={Math.max(avgWidth, 0.5)}
-              strokeLinecap={lineCap}
-              strokeLinejoin="round"
-              strokeDasharray={dashLen}
-              strokeDashoffset={dashOffset}
-            />
-          );
-        })}
-      </svg>
-    </div>
   );
 }

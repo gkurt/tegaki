@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ParsedFontInfo } from 'tegaki-generator';
 import type { Pipeline, PreviewMode } from '../../preview/constants.ts';
 import type { UrlState } from '../../url-state.ts';
+import type { CharsetInfo } from '../charsets.ts';
 import { CloseIcon } from '../icons.tsx';
 import type { SetSetting } from '../state.ts';
 import { cx, IconButton } from '../ui.tsx';
@@ -26,6 +27,7 @@ export function Inspector({
   settings,
   set,
   fontInfo,
+  charsets,
   onPipelineChange,
   onClose,
   className,
@@ -34,6 +36,7 @@ export function Inspector({
   settings: UrlState;
   set: SetSetting;
   fontInfo: ParsedFontInfo | null;
+  charsets: CharsetInfo | null;
   onPipelineChange: (p: Pipeline) => void;
   onClose?: () => void;
   className?: string;
@@ -76,7 +79,9 @@ export function Inspector({
       <div className="studio-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain" role="tabpanel">
         {tab === 'style' && <StylePanel settings={settings} set={set} />}
         {tab === 'motion' && <MotionPanel settings={settings} set={set} />}
-        {tab === 'pipeline' && <PipelinePanel settings={settings} set={set} fontInfo={fontInfo} onPipelineChange={onPipelineChange} />}
+        {tab === 'pipeline' && (
+          <PipelinePanel settings={settings} set={set} fontInfo={fontInfo} charsets={charsets} onPipelineChange={onPipelineChange} />
+        )}
       </div>
     </aside>
   );

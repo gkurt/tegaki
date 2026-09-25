@@ -1,5 +1,6 @@
-import type { TegakiEffects, TimelineStaggerConfig } from 'tegaki';
-import type { CustomEffect, EffectsState } from '../url-state.ts';
+import type { TegakiEffects, TimelineConfig, TimelineStaggerConfig } from 'tegaki';
+import type { CustomEffect, EffectsState, UrlState } from '../url-state.ts';
+import { getEasingFn } from './constants.ts';
 
 /**
  * Convert the string-form previewer inputs into a `TimelineStaggerConfig`.
@@ -63,4 +64,20 @@ export function buildEffects(effectsState: EffectsState, customEffects: CustomEf
     if (custom.enabled) result[custom.key] = { effect: custom.effect, ...custom.config };
   }
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/** Compose the renderer's `timing` prop from the URL-serialized easing / dots / stagger settings (undefined when all default). */
+export function buildTimingConfig(
+  s: Pick<UrlState, 'strokeEasing' | 'glyphEasing' | 'deferDots' | 'staggerEnabled' | 'staggerAdvance' | 'staggerDuration'>,
+): TimelineConfig | undefined {
+  const strokeFn = getEasingFn(s.strokeEasing);
+  const glyphFn = getEasingFn(s.glyphEasing);
+  const staggerConfig = s.staggerEnabled ? parseStaggerInputs(s.staggerAdvance, s.staggerDuration) : undefined;
+  if (strokeFn === undefined && glyphFn === undefined && s.deferDots && !staggerConfig) return undefined;
+  return {
+    ...(strokeFn !== undefined ? { strokeEasing: strokeFn } : {}),
+    ...(glyphFn !== undefined ? { glyphEasing: glyphFn } : {}),
+    ...(s.deferDots ? {} : { deferDots: false }),
+    ...(staggerConfig ? { stagger: staggerConfig } : {}),
+  };
 }

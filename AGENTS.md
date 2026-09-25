@@ -157,6 +157,8 @@ packages/website/
 Dev server: `bun dev` → Astro at `http://localhost:4321/tegaki/`. Two preview routes share the same URL-state schema:
 
 - `/tegaki/studio/` — the interactive UI (`Studio`): Text / Glyphs modes, font picker + Export in the top bar, and an inspector (Style / Motion / Pipeline) docked right on desktop, a bottom sheet below 1024px. Controls are [DialKit](https://github.com/joshpuckett/dialkit) components (`Slider`, `Toggle`, `SelectControl`, …) inside a themed `DialScope` ([dial.tsx](packages/website/src/components/studio/inspector/dial.tsx)); light/dark follows the docs' theme.
+
+Glyphs mode inspects one character through the pipeline stages; the last stage, **Final**, is the real renderer (`TegakiTextPreview`) drawing the glyph with the Style / Motion settings. The glyph list's header picks the character set: `charsetCoverage` / `recommendCharset` ([charsets.ts](packages/website/src/components/studio/charsets.ts)) star the preset that fits the font, and picking a font in the studio adopts that preset when the current set is an unedited preset (a font restored from the URL keeps its `ch`).
 - `/tegaki/preview/` — a chrome-free standalone text renderer (`StandaloneTextPreview`) that reads the same URL state and renders only the text. Use this for screenshots / snapshots — no UI to crop out, and `window.__tegakiPreviewReady` / `body[data-tegaki-ready]` are set once the bundle is built so tooling can wait deterministically.
 
 The studio's Text mode has an "open in new tab" icon button next to the text field that opens the current state in `/preview` (just swaps `/studio` → `/preview` in the URL).
@@ -174,6 +176,7 @@ Common keys (non-exhaustive — `url-state.ts` is the source of truth):
 | `pl` | Stroke pipeline: `geometry` (default, ink-graph extraction) or `raster`. Also picks the Clip to text default (×1.2 for geometry, off for raster; `ct_=0` turns it off) and the pipeline Download Bundle uses | `pl=raster` |
 | `g`  | Selected glyph (glyph mode)                                    | `g=A`                |
 | `s`  | Active pipeline stage (`outline`/`skeleton`/`final`/...)       | `s=skeleton`         |
+| `gs` | Active geometry-pipeline stage (`contours`/.../`animation`/`final`) | `gs=final`     |
 | `m`  | Preview mode: `glyph` or `text`                                | `m=text`             |
 | `t`  | Preview text                                                   | `t=Hello`            |
 | `tm` | Time mode: `controlled` / `uncontrolled` / `css`               | `tm=controlled`      |

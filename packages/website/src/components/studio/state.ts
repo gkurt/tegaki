@@ -36,7 +36,7 @@ export interface LoadedFont {
  * a ticket; a load that finishes after a newer one started (fonts fetch at very
  * different speeds) is dropped rather than replacing the newer font.
  */
-export function useFontLoader(onLoaded: (family: string) => void) {
+export function useFontLoader(onLoaded: (font: LoadedFont) => void) {
   const [font, setFont] = useState<LoadedFont | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -52,7 +52,7 @@ export function useFontLoader(onLoaded: (family: string) => void) {
       const loaded = await load();
       if (ticket !== seq.current) return;
       setFont(loaded);
-      onLoadedRef.current(loaded.info.family);
+      onLoadedRef.current(loaded);
     } catch (e) {
       if (ticket !== seq.current) return;
       setError((e as Error).message);

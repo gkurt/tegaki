@@ -12,6 +12,7 @@ import {
 } from 'tegaki-generator';
 import { type Pipeline, SKELETON_METHODS } from '../../preview/constants.ts';
 import { URL_DEFAULTS, type UrlState } from '../../url-state.ts';
+import type { CharsetInfo } from '../charsets.ts';
 import type { SetSetting } from '../state.ts';
 import { Chip, Hint, Section, Segmented } from '../ui.tsx';
 import { DialScope } from './dial.tsx';
@@ -52,11 +53,13 @@ export function PipelinePanel({
   settings,
   set,
   fontInfo,
+  charsets,
   onPipelineChange,
 }: {
   settings: UrlState;
   set: SetSetting;
   fontInfo: ParsedFontInfo | null;
+  charsets: CharsetInfo | null;
   onPipelineChange: (p: Pipeline) => void;
 }) {
   const { options, geometryOptions: geo, pipeline } = settings;
@@ -68,6 +71,7 @@ export function PipelinePanel({
   const features = fontInfo?.features ?? [];
   const disabled = options.disabledFeatures;
   const charCount = [...segmenter.segment(settings.chars)].length;
+  const rec = charsets?.recommended ?? null;
 
   return (
     <>
@@ -374,11 +378,21 @@ export function PipelinePanel({
 
       <Section title="Characters" modified={settings.chars !== URL_DEFAULTS.chars} onReset={() => set('chars', URL_DEFAULTS.chars)}>
         <div className="flex flex-wrap gap-1">
-          {CHARSET_PRESETS.map((p) => (
-            <Chip key={p.name} selected={settings.chars === p.chars} onClick={() => set('chars', p.chars)}>
-              {p.name}
-            </Chip>
-          ))}
+          {CHARSET_PRESETS.map((p) => {
+            const cov = charsets?.coverage.find((c) => c.name === p.name);
+            const recommended = charsets?.recommended?.name === p.name;
+            return (
+              <Chip
+                key={p.name}
+                selected={settings.chars === p.chars}
+                onClick={() => set('chars', p.chars)}
+                title={cov ? `${cov.covered}/${cov.total} in this font${recommended ? ' · recommended' : ''}` : undefined}
+              >
+                {p.name}
+                {recommended && <span className="ml-1 text-amber-500">★</span>}
+              </Chip>
+            );
+          })}
           {fontInfo && (
             <Chip
               onClick={() => set('chars', enumerateFontChars(fontInfo.font, fontInfo.extraFonts))}
@@ -404,7 +418,28 @@ export function PipelinePanel({
             set('chars', unique.join(''));
           }}
         />
-        <Hint>{charCount} characters go into the downloaded bundle and the glyph list.</Hint>
+        <Hint>
+          {charCount} characters go into the downloaded bundle and the glyph list.
+          {rec && fontInfo && (
+            <>
+              {' '}
+              <span className="text-amber-500">★</span> {rec.name} is recommended for {fontInfo.family} ({rec.covered}/{rec.total} mapped)
+              {settings.chars !== rec.chars && (
+                <>
+                  {' — '}
+                  <button
+                    type="button"
+                    className="font-medium text-zinc-900 underline dark:text-zinc-100"
+                    onClick={() => set('chars', rec.chars)}
+                  >
+                    use it
+                  </button>
+                </>
+              )}
+              .
+            </>
+          )}
+        </Hint>
       </Section>
 
       <Section

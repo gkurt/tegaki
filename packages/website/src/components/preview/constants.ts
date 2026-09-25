@@ -32,8 +32,8 @@ export const STAGES: { key: Stage; label: string }[] = [
   { key: 'final', label: 'Final' },
 ];
 
-/** Geometry-pipeline stages, including a client-rendered animation view. */
-export type GeometryStageKey = GeometryStage | 'animation';
+/** Geometry-pipeline stages, plus the client-rendered animation and final (real renderer) views. */
+export type GeometryStageKey = GeometryStage | 'animation' | 'final';
 
 export const GEOMETRY_STAGES: { key: GeometryStageKey; label: string }[] = [
   { key: 'contours', label: 'Contours' },
@@ -45,6 +45,7 @@ export const GEOMETRY_STAGES: { key: GeometryStageKey; label: string }[] = [
   { key: 'order', label: 'Order' },
   { key: 'reference', label: 'Reference' },
   { key: 'animation', label: 'Animation' },
+  { key: 'final', label: 'Final' },
 ];
 
 /**

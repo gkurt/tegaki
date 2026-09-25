@@ -122,3 +122,10 @@ html {
   --dial-dropdown-bg: var(--color-zinc-800);
   --dial-glass-bg: var(--color-zinc-900);
 }
+
+/* The pipeline's diagnostic stage art (generator visualizers) is drawn in fixed
+   light colours; invert it for dark mode, rotating hues back so the stroke
+   colours keep their identity. */
+[data-theme="dark"] .studio-stage-art {
+  filter: invert(0.92) hue-rotate(180deg);
+}

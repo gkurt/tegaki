@@ -1,9 +1,9 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TegakiBundle, TegakiRendererHandle, TimeControlProp } from 'tegaki';
 import type { PipelineResult } from 'tegaki-generator';
-import { getEasingFn, TEXT_PRESETS } from '../preview/constants.ts';
+import { TEXT_PRESETS } from '../preview/constants.ts';
 import { TegakiTextPreview } from '../preview/TegakiTextPreview.tsx';
-import { buildEffects, parseStaggerInputs } from '../preview/utils.ts';
+import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
 import type { UrlState } from '../url-state.ts';
 import { ChevronDownIcon, ExternalLinkIcon, RestartIcon } from './icons.tsx';
 import type { LoadedFont, SetSetting } from './state.ts';
@@ -167,18 +167,10 @@ export function TextWorkspace({
         : 'css';
 
   const { strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration } = settings;
-  const timingConfig = useMemo(() => {
-    const strokeFn = getEasingFn(strokeEasing);
-    const glyphFn = getEasingFn(glyphEasing);
-    const staggerConfig = staggerEnabled ? parseStaggerInputs(staggerAdvance, staggerDuration) : undefined;
-    if (strokeFn === undefined && glyphFn === undefined && deferDots && !staggerConfig) return undefined;
-    return {
-      ...(strokeFn !== undefined ? { strokeEasing: strokeFn } : {}),
-      ...(glyphFn !== undefined ? { glyphEasing: glyphFn } : {}),
-      ...(deferDots ? {} : { deferDots: false }),
-      ...(staggerConfig ? { stagger: staggerConfig } : {}),
-    };
-  }, [strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration]);
+  const timingConfig = useMemo(
+    () => buildTimingConfig({ strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration }),
+    [strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration],
+  );
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">

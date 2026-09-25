@@ -1,6 +1,8 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  CHARSET_PRESETS,
   collectReferences,
+  enumerateFontChars,
   type GeometryPipelineResult,
   initStraightSkeleton,
   type PipelineResult,
@@ -12,14 +14,20 @@ import { GEOMETRY_STAGES, type Pipeline, STAGES } from '../preview/constants.ts'
 import { fontCacheId } from '../preview/font-cache-id.ts';
 import { GeometryStageRenderer, StageRenderer } from '../preview/stage-views.tsx';
 import { strokeOrderProviders } from '../preview/stroke-order-providers.ts';
+import { TegakiTextPreview } from '../preview/TegakiTextPreview.tsx';
+import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
 import type { UrlState } from '../url-state.ts';
-import { WarningIcon } from './icons.tsx';
+import type { CharsetInfo } from './charsets.ts';
+import { CheckIcon, ChevronDownIcon, WarningIcon } from './icons.tsx';
 import type { LoadedFont, SetSetting } from './state.ts';
 import { Transport } from './Transport.tsx';
-import { cx, isTypingTarget, Segmented, Spinner } from './ui.tsx';
+import { cx, isTypingTarget, Popover, Segmented, Spinner } from './ui.tsx';
 import { ZoomStage } from './ZoomStage.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/** Font size of the Final stage's live render — ZoomStage scales it to fit anyway. */
+const FINAL_FONT_SIZE = 320;
 
 /** Registers the loaded font buffers as FontFaces so the glyph list renders in the font itself. */
 function useFontFaceFamily(font: LoadedFont | null): string | undefined {
@@ -46,12 +54,14 @@ function useFontFaceFamily(font: LoadedFont | null): string | undefined {
 
 export function GlyphWorkspace({
   font,
+  charsets,
   settings,
   set,
   resultsCache,
   onPipelineChange,
 }: {
   font: LoadedFont | null;
+  charsets: CharsetInfo | null;
   settings: UrlState;
   set: SetSetting;
   resultsCache: RefObject<Map<string, PipelineResult>>;
@@ -84,6 +94,13 @@ export function GlyphWorkspace({
     }
     return available;
   }, [fontInfo, chars]);
+
+  // A new charset or font can leave the selection behind — move it to the first drawable glyph.
+  useEffect(() => {
+    if (!fontInfo || availableChars.has(selectedChar)) return;
+    const first = chars.find((c) => availableChars.has(c));
+    if (first) set('selectedChar', first);
+  }, [fontInfo, chars, availableChars, selectedChar, set]);
 
   // Raster pipeline
   useEffect(() => {
@@ -182,12 +199,19 @@ export function GlyphWorkspace({
     }
   }
 
-  const totalDuration = useMemo(() => {
+  const strokeDuration = useMemo(() => {
     const last = animResult?.strokesFontUnits.at(-1);
     return last ? last.delay + last.animationDuration : 0;
   }, [animResult]);
 
-  const animStageActive = pipeline === 'geometry' ? geometryStage === 'animation' : activeStage === 'animation' || activeStage === 'final';
+  // The Final stage is the real renderer drawing the glyph, so its timeline
+  // (with the Motion easings and stagger) comes from the renderer itself.
+  const stageValue = pipeline === 'raster' ? activeStage : geometryStage;
+  const finalActive = stageValue === 'final';
+  const [renderedDuration, setRenderedDuration] = useState(0);
+  const totalDuration = finalActive && renderedDuration > 0 ? renderedDuration : strokeDuration;
+
+  const animStageActive = stageValue === 'animation' || finalActive;
 
   useEffect(() => {
     if (!animPlaying || !animStageActive || totalDuration <= 0) return;
@@ -237,12 +261,21 @@ export function GlyphWorkspace({
   }, [animStageActive, playPause, chars, availableChars, fontInfo, selectedChar, set]);
 
   const stages = pipeline === 'raster' ? STAGES : GEOMETRY_STAGES;
-  const stageValue = pipeline === 'raster' ? activeStage : geometryStage;
   const activeResult = pipeline === 'raster' ? result : geoResult;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
       <GlyphList
+        header={
+          <CharsetPicker
+            value={settings.chars}
+            charsets={charsets}
+            font={font}
+            count={fontInfo ? chars.filter((c) => availableChars.has(c)).length : chars.length}
+            total={chars.length}
+            onChange={(c) => set('chars', c)}
+          />
+        }
         chars={chars}
         selected={selectedChar}
         available={fontInfo ? availableChars : null}
@@ -303,11 +336,31 @@ export function GlyphWorkspace({
             />
           }
         >
-          <div className="text-zinc-900">
-            {pipeline === 'raster'
-              ? result && !processing && <StageRenderer result={result} stage={activeStage} animTime={animTime} />
-              : geoResult && !processing && <GeometryStageRenderer result={geoResult} stage={geometryStage} animTime={animTime} />}
-          </div>
+          {finalActive ? (
+            font &&
+            activeResult &&
+            !processing && (
+              <FinalStage
+                font={font}
+                char={selectedChar}
+                settings={settings}
+                time={animTime}
+                resultsCache={resultsCache}
+                onDuration={setRenderedDuration}
+              />
+            )
+          ) : (
+            // The diagnostic stages draw fixed light-theme art; dark mode inverts it (see studio.css).
+            <div className="studio-stage-art text-zinc-900">
+              {pipeline === 'raster'
+                ? result &&
+                  !processing &&
+                  activeStage !== 'final' && <StageRenderer result={result} stage={activeStage} animTime={animTime} />
+                : geoResult &&
+                  !processing &&
+                  geometryStage !== 'final' && <GeometryStageRenderer result={geoResult} stage={geometryStage} animTime={animTime} />}
+            </div>
+          )}
         </ZoomStage>
 
         {animStageActive && animResult && (
@@ -329,6 +382,168 @@ export function GlyphWorkspace({
 
         <GlyphStats pipeline={pipeline} result={result} geoResult={geoResult} />
       </div>
+    </div>
+  );
+}
+
+/** The glyph as the shipped renderer draws it, with the Style and Motion settings applied. */
+function FinalStage({
+  font,
+  char,
+  settings,
+  time,
+  resultsCache,
+  onDuration,
+}: {
+  font: LoadedFont;
+  char: string;
+  settings: UrlState;
+  time: number;
+  resultsCache: RefObject<Map<string, PipelineResult>>;
+  onDuration: (d: number) => void;
+}) {
+  const { effectsState, customEffects, strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration } = settings;
+  const effects = useMemo(() => buildEffects(effectsState, customEffects), [effectsState, customEffects]);
+  const timing = useMemo(
+    () => buildTimingConfig({ strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration }),
+    [strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration],
+  );
+  // Size the artboard to the glyph's advance so the fit-to-view zoom frames it.
+  const advance = useMemo(() => {
+    const fonts = [font.info.font, ...(font.info.extraFonts ?? [])];
+    const glyph = fonts.map((f) => f.charToGlyph(char)).find((g) => (g?.index ?? 0) !== 0);
+    return (glyph?.advanceWidth ?? font.info.unitsPerEm) / font.info.unitsPerEm;
+  }, [font, char]);
+  const onReady = useCallback((info: { totalDuration: number }) => onDuration(info.totalDuration), [onDuration]);
+
+  return (
+    <div className="overflow-hidden rounded-sm bg-white p-8 text-zinc-900 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-800">
+      <TegakiTextPreview
+        style={{ width: Math.ceil(Math.max(advance, 0.5) * FINAL_FONT_SIZE * 1.1) }}
+        fontInfo={font.info}
+        fontBuffer={font.buffer}
+        extraFontBuffers={font.extraBuffers}
+        text={char}
+        options={settings.options}
+        pipeline={settings.pipeline}
+        geometryOptions={settings.geometryOptions}
+        time={time}
+        effects={effects}
+        timing={timing}
+        quality={settings.quality}
+        fontSizePx={FINAL_FONT_SIZE}
+        lineHeightRatio={1.15}
+        resultsCache={resultsCache}
+        onReady={onReady}
+        useShaper={settings.useShaper}
+      />
+    </div>
+  );
+}
+
+/** Which character set the glyph list shows, with the font's recommended preset starred. */
+function CharsetPicker({
+  value,
+  charsets,
+  font,
+  count,
+  total,
+  onChange,
+}: {
+  value: string;
+  charsets: CharsetInfo | null;
+  font: LoadedFont | null;
+  count: number;
+  total: number;
+  onChange: (chars: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const fontInfo = font?.info ?? null;
+  const allInFont = useMemo(() => (fontInfo ? enumerateFontChars(fontInfo.font, fontInfo.extraFonts) : ''), [fontInfo]);
+  const allCount = useMemo(() => [...segmenter.segment(allInFont)].length, [allInFont]);
+  const preset = CHARSET_PRESETS.find((p) => p.chars === value);
+  const label = preset?.name ?? (allInFont && value === allInFont ? 'All in font' : 'Custom');
+  const rec = charsets?.recommended ?? null;
+  const pick = (chars: string) => {
+    onChange(chars);
+    setOpen(false);
+  };
+
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+      <Popover
+        open={open}
+        onOpenChange={setOpen}
+        panelClassName="w-64"
+        trigger={({ open: isOpen, toggle }) => (
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={isOpen}
+            title="Character set"
+            className={cx(
+              '-ml-1.5 flex h-7 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs font-semibold text-zinc-900 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800',
+              isOpen && 'bg-zinc-100 dark:bg-zinc-800',
+            )}
+          >
+            <span className="truncate">{label}</span>
+            {rec && preset?.name === rec.name && <span className="text-amber-500">★</span>}
+            <ChevronDownIcon size={12} className="shrink-0 text-zinc-400" />
+          </button>
+        )}
+      >
+        <div className="p-1">
+          <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium text-zinc-400">Character set</div>
+          {CHARSET_PRESETS.map((p) => {
+            const cov = charsets?.coverage.find((c) => c.name === p.name);
+            const isRec = rec?.name === p.name;
+            return (
+              <button
+                type="button"
+                key={p.name}
+                onClick={() => pick(p.chars)}
+                className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                <span className="min-w-0 truncate">{p.name}</span>
+                {isRec && (
+                  <span className="shrink-0 rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                    Recommended
+                  </span>
+                )}
+                <span className="ml-auto shrink-0 font-mono text-[11px] text-zinc-400">{cov ? `${cov.covered}/${cov.total}` : ''}</span>
+                <CheckIcon size={14} className={cx('shrink-0', p.chars === value ? 'text-zinc-900 dark:text-zinc-100' : 'invisible')} />
+              </button>
+            );
+          })}
+          {fontInfo && (
+            <button
+              type="button"
+              onClick={() => pick(allInFont)}
+              className="flex h-8 w-full items-center gap-2 border-t border-zinc-100 px-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              <span className="min-w-0 truncate">All in font</span>
+              <span className="ml-auto shrink-0 font-mono text-[11px] text-zinc-400">{allCount}</span>
+              <CheckIcon size={14} className={cx('shrink-0', label === 'All in font' ? 'text-zinc-900 dark:text-zinc-100' : 'invisible')} />
+            </button>
+          )}
+        </div>
+        <p className="border-t border-zinc-200 px-3 py-2 text-[11px] leading-snug text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+          {rec ? `${rec.name} is recommended for ${fontInfo?.family}. ` : ''}Edit the characters in Pipeline › Characters.
+        </p>
+      </Popover>
+      {rec && preset?.name !== rec.name && (
+        <button
+          type="button"
+          onClick={() => onChange(rec.chars)}
+          title={`Recommended for ${fontInfo?.family} — ${rec.covered}/${rec.total} mapped`}
+          className="h-6 shrink-0 truncate rounded-md bg-amber-100 px-1.5 text-[11px] font-medium text-amber-700 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:hover:bg-amber-500/25"
+        >
+          ★ {rec.name}
+        </button>
+      )}
+      <span className="ml-auto shrink-0 font-mono text-[11px] text-zinc-400">
+        {count}/{total}
+      </span>
     </div>
   );
 }
@@ -370,12 +585,14 @@ function StageStatus({
 }
 
 function GlyphList({
+  header,
   chars,
   selected,
   available,
   family,
   onSelect,
 }: {
+  header: React.ReactNode;
   chars: string[];
   selected: string;
   available: Set<string> | null;
@@ -387,20 +604,14 @@ function GlyphList({
   useEffect(() => {
     selectedRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [selected]);
-  const count = available ? chars.filter((c) => available.has(c)).length : chars.length;
   return (
     <div className="flex shrink-0 flex-col border-zinc-200 bg-white max-lg:border-b lg:w-60 lg:border-r dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex h-11 shrink-0 items-center justify-between px-3 max-lg:hidden">
-        <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Glyphs</span>
-        <span className="font-mono text-[11px] text-zinc-400">
-          {count}/{chars.length}
-        </span>
-      </div>
+      <div className="flex h-11 shrink-0 items-center px-3 max-lg:h-9">{header}</div>
       <div
         className={cx(
           'studio-scroll studio-scroll-x grid gap-1 p-2',
           'max-lg:auto-cols-[2.5rem] max-lg:grid-flow-col max-lg:grid-rows-1 max-lg:overflow-x-auto',
-          'lg:min-h-0 lg:flex-1 lg:auto-rows-[2.5rem] lg:grid-cols-[repeat(auto-fill,minmax(2.5rem,1fr))] lg:content-start lg:overflow-y-auto lg:pt-0',
+          'max-lg:pt-0 lg:min-h-0 lg:flex-1 lg:auto-rows-[2.5rem] lg:grid-cols-[repeat(auto-fill,minmax(2.5rem,1fr))] lg:content-start lg:overflow-y-auto lg:pt-0',
         )}
       >
         {chars.map((c, i) => {
