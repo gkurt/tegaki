@@ -63,6 +63,13 @@ const CASES: PreviewCase[] = [
     params: { t: 'Hello', tm: 'controlled', ct: 0.5, fs: 96, w: 600, h: 200 },
   },
   {
+    // Regression (gkurt/tegaki#27): top-to-bottom order drew an accent before
+    // its letter. Mid-word, `ô` is drawn and its circumflex is not — marks
+    // wait for the end of the word, like an i's dot.
+    name: 'accent-after-letter',
+    params: { t: 'côte', tm: 'controlled', ct: 1.2, fs: 128, w: 400, h: 220 },
+  },
+  {
     // Within-word `calt` must still fire — Caveat substitutes the second `s`
     // of "ss" with a contextual variant. Canary against an over-aggressive
     // word-split that would suppress all contextual lookups.
