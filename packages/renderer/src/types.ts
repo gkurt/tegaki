@@ -186,7 +186,7 @@ export interface TegakiBundle {
    * that actually contains its glyphs — required for positional forms in
    * Arabic, conjuncts in Indic, etc.
    */
-  extraFontUrls?: string[];
+  extraFontUrls?: readonly string[];
   /**
    * CSS `unicode-range` for each `extraFontUrls` face: the characters it has
    * that neither the primary nor an earlier subset does, which is where the
@@ -195,7 +195,7 @@ export interface TegakiBundle {
    * strokes (an unmirrorable bracket in Arabic text). An empty range means
    * the subset adds nothing, so it isn't registered for DOM text.
    */
-  extraFontRanges?: string[];
+  extraFontRanges?: readonly string[];
   /** URL to the full (non-subsetted) font file bundled for fallback rendering. */
   fullFontUrl?: string;
   fontFaceCSS: string;

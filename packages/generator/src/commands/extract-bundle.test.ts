@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import * as opentype from 'opentype.js';
+import { subsetFont } from '../font/subset.ts';
 import { DEFAULT_GEOMETRY_OPTIONS } from '../geometry/types.ts';
 import { DEFAULT_OPTIONS, extractTegakiBundle, generateArgsSchema, parseFont, pickGeometryOptions } from './generate.ts';
 
@@ -47,6 +49,49 @@ describe('extractTegakiBundle', () => {
     const bundle = await extract('raster');
     expect(Object.keys(bundle.glyphResults).sort()).toEqual(['a', 'b']);
     expect(bundle.geometryResults).toBeUndefined();
+  });
+});
+
+describe('extractTegakiBundle with extra font subsets', () => {
+  const amiriPath = new URL('../../../renderer/fonts/amiri/amiri.ttf', import.meta.url);
+  // Split like Fontsource's subsets: both have "(", only the Latin one ")".
+  const split = (async () => {
+    const amiri = readFileSync(amiriPath);
+    const latin = (await subsetFont(amiri, 'a()')).slice().buffer as ArrayBuffer;
+    const arabic = (await subsetFont(amiri, '(ل')).slice().buffer as ArrayBuffer;
+    const bundle = await extractTegakiBundle({
+      fontBuffer: latin,
+      fontFileName: 'amiri.ttf',
+      extraFontBuffers: [arabic],
+      requestedFamily: 'Amiri',
+      chars: 'a(ل',
+      options: DEFAULT_OPTIONS,
+      subset: false,
+    });
+    const file = (path: string) => bundle.files.find((f) => f.path === path)?.content;
+    return { latin: opentype.parse(latin), arabic: opentype.parse(arabic), arabicBuffer: arabic, bundle, file };
+  })();
+
+  test('each extra subset ships as its own file beside the primary', async () => {
+    const { arabicBuffer, file } = await split;
+    expect(file('amiri-1.ttf')).toEqual(new Uint8Array(arabicBuffer));
+  });
+
+  test('bundle.ts registers the extra subset for only the characters it draws — not the primary\'s "("', async () => {
+    const { file } = await split;
+    const module = file('bundle.ts') as string;
+    expect(module).toContain(`import extraFontUrl1 from './amiri-1.ttf' with { type: 'url' };`);
+    expect(module).toContain('  extraFontUrls: [extraFontUrl1],');
+    expect(module).toContain('  extraFontRanges: ["U+644"],');
+    expect(module).toContain(`@font-face { font-family: 'Amiri'; src: url(\${extraFontUrl1}); unicode-range: U+644; }`);
+  });
+
+  test('variants of characters an extra subset draws are keyed "<subset>:<gid>", as the shaper reports them', async () => {
+    const { latin, arabic, file } = await split;
+    const byId = JSON.parse(file('glyphDataById.json') as string);
+    expect(byId[`1:${arabic.charToGlyphIndex('ل')}`]).toBeDefined();
+    expect(byId[String(latin.charToGlyphIndex('('))]).toBeDefined();
+    expect(byId[`1:${arabic.charToGlyphIndex('(')}`]).toBeUndefined();
   });
 });
 

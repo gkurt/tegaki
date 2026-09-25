@@ -235,6 +235,8 @@ The `generate` command writes a bundle directory containing three files:
   bundle.ts           # Auto-generated module: imports the font + JSON and exports a TegakiBundle
 ```
 
+A font that comes in several subset files (Fontsource's per-script subsets in the studio's Download Bundle, a multi-file Google Fonts response) also gets `<family>-1.ttf`, `<family>-2.ttf`, … — one per extra subset, listed in `extraFontUrls` with the `unicode-range` each draws in `extraFontRanges`; their variant glyphs are keyed `"<subset>:<gid>"` in `glyphDataById.json`.
+
 `glyphData.json` uses compact keys (decoded by the renderer as `TegakiGlyphData` — see [packages/renderer/src/types.ts](packages/renderer/src/types.ts)):
 
 ```json

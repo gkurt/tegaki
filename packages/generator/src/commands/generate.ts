@@ -22,6 +22,7 @@ import {
 import { enumerateVariantGlyphIds } from '../font/enumerate-variants.ts';
 import { getGsubFeatures } from '../font/hb-shaper.ts';
 import { extractGlyph, extractGlyphById, inferLineCap } from '../font/parse.ts';
+import { claimedCodepoints, fontCodepoints, toUnicodeRange } from '../font/unicode-range.ts';
 import { initStraightSkeleton } from '../geometry/face-straight-skeleton.ts';
 import { isHeadlineScriptChar } from '../geometry/ordering.ts';
 import { runGeometryPipeline } from '../geometry/pipeline.ts';
@@ -611,6 +612,9 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
       : await collectReferences(char, strokeOrderProviders).catch(() => []);
 
   const lineCap: LineCap = options.lineCap === 'auto' ? fontInfo.lineCap : options.lineCap;
+  const subsetFonts = [fontInfo.font, ...(fontInfo.extraFonts ?? [])];
+  // What each extra subset draws: the characters no earlier font has (see `pickSubset` in the shaper).
+  const claimedBySubset = claimedCodepoints(subsetFonts.map(fontCodepoints));
 
   onProgress?.(`Processing ${fontInfo.family} ${fontInfo.style} (${fontInfo.unitsPerEm} units/em, ${lineCap} caps)`, 0);
 
@@ -701,10 +705,18 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
   const bundleFeatures = fontInfo.features.filter((f) => !options.disabledFeatures.includes(f));
   if (bundleFeatures.length > 0) {
     onProgress?.(`Discovering ligature/alternate glyphs...`);
-    const variantIds = enumerateVariantGlyphIds(fontInfo.font, chars);
-    const total = variantIds.size;
+    // The renderer shapes each character with the first subset that has it,
+    // so an extra subset's variants grow from the characters it claims, and
+    // are keyed `<subsetIndex>:<gid>` as the shaper reports them.
+    const claimed = claimedBySubset.map((cps) => new Set(cps));
+    const variantIds = subsetFonts.flatMap((font, subsetIndex) => {
+      const own = subsetIndex === 0 ? chars : chars.filter((ch) => claimed[subsetIndex - 1]!.has(ch.codePointAt(0)!));
+      return [...enumerateVariantGlyphIds(font, own).values()].map((v) => ({ ...v, subsetIndex }));
+    });
+    const total = variantIds.length;
     let i = 0;
-    for (const { gid, clusterChar, letter, components } of variantIds.values()) {
+    for (const { gid, clusterChar, letter, components, subsetIndex } of variantIds) {
+      const key = subsetIndex === 0 ? String(gid) : `${subsetIndex}:${gid}`;
       const rtl = isRtlChar(clusterChar);
       i++;
       if (geometry) {
@@ -715,7 +727,7 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
           gid,
           geometryOptions,
           options.bezierTolerance,
-          0,
+          subsetIndex,
           rtl,
           isHeadlineScriptChar(clusterChar),
           letter === undefined ? undefined : { char: letter, reference: await geometryReferences(letter) },
@@ -727,15 +739,15 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
             )),
         );
         if (!result) continue;
-        geometryResultsById[String(gid)] = result;
-        variantCompact[String(gid)] = toCompactGlyph(result);
+        geometryResultsById[key] = result;
+        variantCompact[key] = toCompactGlyph(result);
       } else {
-        const result = processGlyphById(fontInfo, gid, options, 0, rtl);
+        const result = processGlyphById(fontInfo, gid, options, subsetIndex, rtl);
         if (!result) continue;
-        glyphResultsById[String(gid)] = result;
-        variantCompact[String(gid)] = toCompactGlyph(result);
+        glyphResultsById[key] = result;
+        variantCompact[key] = toCompactGlyph(result);
       }
-      onProgress?.(`Processing variant glyph #${gid}`, total === 0 ? undefined : i / total);
+      onProgress?.(`Processing variant glyph #${key}`, total === 0 ? undefined : i / total);
     }
   }
 
@@ -743,6 +755,14 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
   const files: BundleFile[] = [];
 
   files.push({ path: fontFileName, content: new Uint8Array(fontBuffer) });
+  // Extra subsets ship beside the primary: the shaper draws their characters
+  // from them, and the browser only with them limited to those characters.
+  const extraFonts = (extraFontBuffers ?? []).map((buffer, i) => ({
+    fileName: extraFontFileName(fontFileName, i + 1),
+    range: toUnicodeRange(claimedBySubset[i]!),
+    buffer,
+  }));
+  for (const { fileName, buffer } of extraFonts) files.push({ path: fileName, content: new Uint8Array(buffer) });
 
   // Compact glyph data: short keys, points as [x, y, width] tuples
   const glyphDataMap: Record<string, CompactGlyph> = {};
@@ -778,6 +798,7 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
       fontFamily: bundleFamily,
       fullFamily,
       fullFontFileName: subset && fullFontFileName ? fullFontFileName : undefined,
+      extraFonts: extraFonts.map(({ fileName, range }) => ({ fileName, range })),
       lineCap,
       unitsPerEm: fontInfo.unitsPerEm,
       ascender: fontInfo.ascender,
@@ -797,11 +818,19 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
   };
 }
 
-function generateGlyphsModule(args: {
+/** `amiri.ttf` → `amiri-1.ttf`: the file an extra font subset takes in the bundle. */
+export function extraFontFileName(fontFileName: string, subsetIndex: number): string {
+  const dot = fontFileName.lastIndexOf('.');
+  return dot > 0 ? `${fontFileName.slice(0, dot)}-${subsetIndex}${fontFileName.slice(dot)}` : `${fontFileName}-${subsetIndex}.ttf`;
+}
+
+export function generateGlyphsModule(args: {
   fontFileName: string;
   fontFamily: string;
   fullFamily: string | undefined;
   fullFontFileName: string | undefined;
+  /** Extra subset files, in subset order, with the `unicode-range` each draws. */
+  extraFonts: { fileName: string; range: string }[];
   lineCap: LineCap;
   unitsPerEm: number;
   ascender: number;
@@ -809,16 +838,33 @@ function generateGlyphsModule(args: {
   hasVariants: boolean;
   features: string[] | undefined;
 }): string {
-  const { fontFileName, fontFamily, fullFamily, fullFontFileName, lineCap, unitsPerEm, ascender, descender, hasVariants, features } = args;
+  const {
+    fontFileName,
+    fontFamily,
+    fullFamily,
+    fullFontFileName,
+    extraFonts,
+    lineCap,
+    unitsPerEm,
+    ascender,
+    descender,
+    hasVariants,
+    features,
+  } = args;
   const esc = (s: string) => s.replace(/'/g, "\\'");
   const hasFull = fullFamily && fullFontFileName;
 
   const imports = [`import fontUrl from './${fontFileName}' with { type: 'url' };`];
   if (hasFull) imports.push(`import fullFontUrl from './${fullFontFileName}' with { type: 'url' };`);
+  imports.push(...extraFonts.map(({ fileName }, i) => `import extraFontUrl${i + 1} from './${fileName}' with { type: 'url' };`));
   imports.push(`import glyphData from './glyphData.json' with { type: 'json' };`);
   if (hasVariants) imports.push(`import glyphDataById from './glyphDataById.json' with { type: 'json' };`);
 
   const fontFaceRules = [`@font-face { font-family: '${esc(fontFamily)}'; src: url(\${fontUrl}); }`];
+  extraFonts.forEach(({ range }, i) => {
+    if (range)
+      fontFaceRules.push(`@font-face { font-family: '${esc(fontFamily)}'; src: url(\${extraFontUrl${i + 1}}); unicode-range: ${range}; }`);
+  });
   if (hasFull) fontFaceRules.push(`@font-face { font-family: '${esc(fullFamily)}'; src: url(\${fullFontUrl}); }`);
 
   const props = [
@@ -828,6 +874,12 @@ function generateGlyphsModule(args: {
     `  lineCap: '${lineCap}',`,
     `  fontUrl,`,
     ...(hasFull ? [`  fullFontUrl,`] : []),
+    ...(extraFonts.length
+      ? [
+          `  extraFontUrls: [${extraFonts.map((_, i) => `extraFontUrl${i + 1}`).join(', ')}],`,
+          `  extraFontRanges: ${JSON.stringify(extraFonts.map((f) => f.range))},`,
+        ]
+      : []),
     `  fontFaceCSS: \`${fontFaceRules.join(' ')}\`,`,
     `  unitsPerEm: ${unitsPerEm},`,
     `  ascender: ${ascender},`,

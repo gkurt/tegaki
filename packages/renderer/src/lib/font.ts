@@ -29,7 +29,7 @@ export function ensureFont(
   family: string,
   url: string,
   features?: readonly string[],
-  extraFontUrls?: string[],
+  extraFontUrls?: readonly string[],
   extraFontRanges?: readonly string[],
 ): Promise<void> | null {
   if (typeof document === 'undefined') return Promise.resolve();
