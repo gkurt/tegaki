@@ -102,6 +102,37 @@ describe('computeTimeline (shaper path)', () => {
   });
 });
 
+describe('computeTimeline soft breaks', () => {
+  // Dancing Script's "wr": one w_r ligature shaped whole; a plain w and a
+  // plain r when the layout wraps the word between them.
+  const bundle = makeBundle({
+    glyphData: { w: glyph(617, 1), r: glyph(348, 0.5) },
+    glyphDataById: { w_r: glyph(966, 1.4) },
+  });
+  const shaper = scriptedShaper({
+    wr: [{ g: 'w_r', cl: 0, ax: 966 }],
+    w: [{ g: 'w', cl: 0, ax: 617 }],
+    r: [{ g: 'r', cl: 0, ax: 348 }],
+  });
+
+  test('a word shaped whole draws its ligature', () => {
+    expect(computeTimeline('wr', bundle, undefined, shaper).entries.map((e) => e.glyphId)).toEqual(['w_r']);
+  });
+
+  test('a wrap inside the word shapes each side on its own, as the browser draws it', () => {
+    const tl = computeTimeline('wr', bundle, undefined, shaper, undefined, [1]);
+    expect(tl.entries.map((e) => [e.char, e.glyphId, e.graphemeIndex])).toEqual([
+      ['w', 'w', 0],
+      ['r', 'r', 1],
+    ]);
+  });
+
+  test('the word carries on across the wrap without a line pause', () => {
+    const wrapped = computeTimeline('wr', bundle, { glyphGap: 0.1, lineGap: 5 }, shaper, undefined, [1]);
+    expect(wrapped.totalDuration).toBeCloseTo(1 + 0.1 + 0.5);
+  });
+});
+
 describe('computeTimeline (stagger mode)', () => {
   // A bundle where each letter has a distinct bundled duration, so we can
   // tell whether an advance is being computed off the *previous* letter's

@@ -137,7 +137,10 @@ export interface Timeline {
 
 /**
  * `shapeOptions` must describe the text as it is laid out (letter-spaced or
- * not) so the shaper picks the glyphs the DOM draws.
+ * not) so the shaper picks the glyphs the DOM draws. So must `softBreaks`:
+ * the UTF-16 offsets where the layout wraps a line inside a word (see
+ * `midWordBreaks`). The browser shapes each side of such a break on its own —
+ * no ligature or contextual form spans it — and so does the timeline.
  */
 export function computeTimeline(
   text: string,
@@ -145,9 +148,10 @@ export function computeTimeline(
   config?: TimelineConfig,
   shaper?: BundleShaper | null,
   shapeOptions?: ShapeOptions,
+  softBreaks?: readonly number[],
 ): Timeline {
   if (shaper && font.glyphDataById) {
-    return computeShapedTimeline(text, font, config, shaper, shapeOptions);
+    return computeShapedTimeline(text, font, config, shaper, shapeOptions, softBreaks);
   }
   return computeGraphemeTimeline(text, font, config);
 }
@@ -501,6 +505,7 @@ function computeShapedTimeline(
   config: TimelineConfig | undefined,
   shaper: BundleShaper,
   shapeOptions: ShapeOptions | undefined,
+  softBreaks: readonly number[] = [],
 ): Timeline {
   const glyphGap = config?.glyphGap ?? DEFAULTS.glyphGap;
   const wordGap = config?.wordGap ?? DEFAULTS.wordGap;
@@ -531,12 +536,14 @@ function computeShapedTimeline(
     : null;
   const sched = staggerSched ? null : new Scheduler(glyphGap, wordGap, lineGap);
 
-  // Shape each newline-delimited line separately so shaping never crosses a
-  // break. This matches the DOM layout, which also breaks at `\n`.
+  // Shape each line separately so shaping never crosses a break: the DOM
+  // layout breaks at `\n`, and wraps words it can't fit (`softBreaks`).
+  const wraps = new Set(softBreaks);
   let lineStart = 0;
   for (let i = 0; i <= text.length; i++) {
     const atEnd = i === text.length;
-    if (!atEnd && text[i] !== '\n') continue;
+    const wrap = !atEnd && i > lineStart && wraps.has(i);
+    if (!atEnd && text[i] !== '\n' && !wrap) continue;
 
     const lineText = text.slice(lineStart, i);
     if (lineText.length > 0) {
@@ -598,7 +605,9 @@ function computeShapedTimeline(
       }
     }
 
-    if (!atEnd) {
+    // A wrap inside a word continues the word on the next line, with no pause.
+    if (wrap) lineStart = i;
+    else if (!atEnd) {
       if (staggerSched) staggerSched.separator('line');
       else sched!.separate('line');
       lineStart = i + 1;

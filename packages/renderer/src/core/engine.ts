@@ -35,7 +35,7 @@ import {
   type SvgTextRun,
 } from '../lib/svgExport.ts';
 import type { TextLayout } from '../lib/textLayout.ts';
-import { applyShaperPositions, computeLayoutBbox, computeTextLayout, lineWords } from '../lib/textLayout.ts';
+import { applyShaperPositions, computeLayoutBbox, computeTextLayout, lineWords, midWordBreaks } from '../lib/textLayout.ts';
 import type { Timeline, TimelineConfig, TimelineEntry } from '../lib/timeline.ts';
 import { computeTimeline } from '../lib/timeline.ts';
 import { cssFontFamily, drawsFallbackGlyphs, graphemes, lookupGlyphData } from '../lib/utils.ts';
@@ -220,6 +220,8 @@ export class TegakiEngine {
   private _seed: number;
   private _timeline: Timeline = { entries: [] as TimelineEntry[], totalDuration: 0 };
   private _layout: TextLayout | null = null;
+  /** Where the layout last wrapped `text` inside a word — the timeline shapes each side on its own. */
+  private _softBreaks: { text: string; offsets: number[] } | null = null;
   /** How far the canvas box currently extends past its default padding, per side. */
   private _canvasOverflow: CanvasOverflow = NO_OVERFLOW;
   private _layoutKey = '';
@@ -1133,7 +1135,8 @@ export class TegakiEngine {
 
   private _recomputeTimeline(): void {
     if (this._font && this._text) {
-      this._timeline = computeTimeline(this._text, this._font, this._timing, this._shaper, this._shapeOptions());
+      const softBreaks = this._softBreaks?.text === this._text ? this._softBreaks.offsets : undefined;
+      this._timeline = computeTimeline(this._text, this._font, this._timing, this._shaper, this._shapeOptions(), softBreaks);
     } else {
       this._timeline = { entries: [] as TimelineEntry[], totalDuration: 0 };
     }
@@ -1173,6 +1176,16 @@ export class TegakiEngine {
       this._layoutKey = key;
       let layout = computeTextLayout(this._overlayEl, this._fontSize);
       if (this._shaper && this._font) {
+        // A word wrapped inside is shaped in two pieces, as the browser draws
+        // it: a ligature across the wrap splits back into its letters. The
+        // timeline was shaped without knowing the wraps, so reshape it when
+        // they change.
+        const breaks = midWordBreaks(layout, this._text);
+        const known = this._softBreaks?.text === this._text ? this._softBreaks.offsets : [];
+        if (breaks.join() !== known.join()) {
+          this._softBreaks = { text: this._text, offsets: breaks };
+          this._recomputeTimeline();
+        }
         // Replace DOM-measured per-grapheme offsets with shaper-accumulated
         // advances so stroke positions match the glyph ids the shaper chose.
         // Also fills in per-entry GPOS x/y offsets on the (already-computed)

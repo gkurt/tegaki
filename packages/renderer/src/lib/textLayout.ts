@@ -97,6 +97,36 @@ export function lineWords(layout: TextLayout, characters: readonly string[], lin
 }
 
 /**
+ * The UTF-16 offsets of `text` where the layout wraps a line inside a word —
+ * a word too long for the line, broken by `overflow-wrap: break-word`. The
+ * browser shapes each side of the break on its own: Dancing Script's `wr`
+ * ligature broken as `Handw` / `riting` draws a plain w and a plain r. Wraps
+ * at whitespace and `\n` aren't listed; the shaper never shapes across those.
+ */
+export function midWordBreaks(layout: TextLayout, text: string): number[] {
+  const chars = graphemes(text);
+  const startU: number[] = [];
+  let u = 0;
+  for (const char of chars) {
+    startU.push(u);
+    u += char.length;
+  }
+  const breaks: number[] = [];
+  let prev: number | undefined;
+  for (const line of layout.lines) {
+    const first = line[0];
+    if (first === undefined) continue;
+    const before = prev === undefined ? undefined : chars[prev];
+    const after = chars[first];
+    if (before !== undefined && after !== undefined && !WHITESPACE_RE.test(before) && !WHITESPACE_RE.test(after)) {
+      breaks.push(startU[first]!);
+    }
+    prev = line[line.length - 1];
+  }
+  return breaks;
+}
+
+/**
  * Axis-aligned bounding box of the laid-out text in the ctx coordinate space
  * used by the engine's glyph loop (i.e. after `padH`/`padV` translation).
  * `width` is the max line advance; `height` is `lines.length * lineHeight`.
