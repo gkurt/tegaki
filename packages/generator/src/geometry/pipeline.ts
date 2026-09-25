@@ -26,6 +26,7 @@ import { extractInkRegion, regionScale, simplifyKeepingNibs } from './ink/extrac
 import { carryNibs } from './ink/nib.ts';
 import { SegmentIndex } from './ink/spatial.ts';
 import { extendUnpairedEnds, routeJunctionPaths } from './junction-routing.ts';
+import { findMarkStrokes, hasCombiningMarks } from './marks.ts';
 import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { type OrderPlan, orderAndTimeStrokes } from './ordering.ts';
 import { classifyFaces, dissolvePartitionDebris, partitionFaces } from './partition.ts';
@@ -459,6 +460,18 @@ export function hasCanonicalStrokeOrder(char: string): boolean {
   return CANONICAL_STROKE_ORDER.test(char);
 }
 
+/** The outline box of a set of strokes: their points padded by the pen radius. */
+function strokesBBox(strokes: GeoStroke[]): BBox {
+  const box = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
+  for (const p of strokes.flatMap((s) => s.points)) {
+    box.x1 = Math.min(box.x1, p.x - p.width / 2);
+    box.y1 = Math.min(box.y1, p.y - p.width / 2);
+    box.x2 = Math.max(box.x2, p.x + p.width / 2);
+    box.y2 = Math.max(box.y2, p.y + p.width / 2);
+  }
+  return box;
+}
+
 /**
  * A region's ink as the pieces to extract, each at its resolution (see
  * `regionScale`): the letter-sized components together at the default step,
@@ -595,12 +608,22 @@ export function runGeometryPipeline(
   let plan: OrderPlan | undefined;
   let strokeOrderSource: GeometryPipelineResult['strokeOrderSource'] = 'heuristic';
   let strokeOrderRegrouped = false;
-  let outStrokes = geoStrokes;
   const referenceVariants = input.reference ? (Array.isArray(input.reference) ? input.reference : [input.reference]) : [];
+  // An accented letter's marks draw after its body, and the body alone
+  // meets the reference — the base letter's, unless the character has its
+  // own (see marks.ts).
+  const marks =
+    hasCombiningMarks(input.char) && !referenceVariants.some((r) => r.char === input.char)
+      ? findMarkStrokes(geoStrokes)
+      : geoStrokes.map(() => false);
+  const markStrokes = geoStrokes.filter((_, i) => marks[i]).map((s) => ({ ...s, mark: true }));
+  const bodyStrokes = markStrokes.length > 0 ? geoStrokes.filter((_, i) => !marks[i]) : geoStrokes;
+  const bodyBBox = markStrokes.length > 0 ? strokesBBox(bodyStrokes) : pathBBox;
+  let outStrokes = bodyStrokes;
   if (referenceVariants.length > 0) {
-    reference = registerReference(referenceVariants[0]!, pathBBox);
-    if (geometryOptions.strokeOrder !== 'heuristic' && geoStrokes.length > 0) {
-      const glyphDiag = Math.hypot(pathBBox.x2 - pathBBox.x1, pathBBox.y2 - pathBBox.y1);
+    reference = registerReference(referenceVariants[0]!, bodyBBox);
+    if (geometryOptions.strokeOrder !== 'heuristic' && bodyStrokes.length > 0) {
+      const glyphDiag = Math.hypot(bodyBBox.x2 - bodyBBox.x1, bodyBBox.y2 - bodyBBox.y1);
       // Matched pairs (0.01–0.06 measured on Klee One) sit far below
       // wrong-stroke assignments (≥ ~0.15); between them a generous margin.
       const AUTO_MAX_MEAN_COST = 0.15;
@@ -622,7 +645,7 @@ export function runGeometryPipeline(
         const index = outlineIndex;
         return simplifyKeepingNibs(points, simplifyEps, (p) => index.nearest(p));
       };
-      const totalInk = geoStrokes.reduce(
+      const totalInk = bodyStrokes.reduce(
         (sum, g) => sum + g.points.reduce((len, p, i) => (i > 0 ? len + dist(g.points[i - 1]!, p) : len), 0),
         0,
       );
@@ -634,20 +657,20 @@ export function runGeometryPipeline(
       // m (one trajectory) on a cursive font, and the reverse on a print
       // font. Only the winner's warnings surface.
       const evals = referenceVariants.map((variant) => {
-        const registered = registerReference(variant, pathBBox);
+        const registered = registerReference(variant, bodyBBox);
         const refPolylines = registered.strokes.map((s) => s.points);
         let match = matchStrokes(
-          geoStrokes.map((g) => g.points),
+          bodyStrokes.map((g) => g.points),
           refPolylines,
           glyphDiag,
         );
         let clean = isClean(match);
-        let variantStrokes = geoStrokes;
+        let variantStrokes = bodyStrokes;
         let regrouped = false;
         let rankCost = match.meanCost;
         const variantWarnings: string[] = [];
         if (!clean) {
-          const proposal = regroupStrokesByReference(geoStrokes, refPolylines, {
+          const proposal = regroupStrokesByReference(bodyStrokes, refPolylines, {
             spacing: resolved.resampleSpacing,
             minRunLength: resolved.resampleSpacing * 3,
             glyphDiag,
@@ -655,7 +678,7 @@ export function runGeometryPipeline(
           });
           if (proposal) {
             const candidate = carryNibs(
-              geoStrokes,
+              bodyStrokes,
               proposal.strokes.map((gs) => ({ ...gs, points: simplifyRegrouped(gs.points) })),
             );
             // Lifted extras sit at the END of the proposal and have no
@@ -685,14 +708,14 @@ export function runGeometryPipeline(
             // never lifted — Caveat's one-stroke W re-cut into KanjiVG's four
             // print strokes, its last stroke left with just the tip; A's leg
             // cut at the crossbar.
-            const retracedSplit = chains.length > geoStrokes.length && proposal.retraces > 0 && !hasCanonicalStrokeOrder(input.char);
+            const retracedSplit = chains.length > bodyStrokes.length && proposal.retraces > 0 && !hasCanonicalStrokeOrder(input.char);
             if (retracedSplit) {
               variantWarnings.push(
-                `stroke order: dataset re-grouping rejected (${geoStrokes.length} extracted strokes split into ${chains.length} by retracing)`,
+                `stroke order: dataset re-grouping rejected (${bodyStrokes.length} extracted strokes split into ${chains.length} by retracing)`,
               );
             } else if (rematch.extractedCount === rematch.referenceCount && rematchCost <= AUTO_MAX_MEAN_COST) {
               variantWarnings.push(
-                `stroke order: re-grouped ${geoStrokes.length} extracted strokes into ${chains.length} matching the dataset (${proposal.splits} split, ${proposal.merges} merged${proposal.retraces > 0 ? `, ${proposal.retraces} retraced` : ''}${proposal.pruned > 0 ? `, ${Math.round(proposal.pruned)} units of duplicated ink pruned` : ''}${proposal.extras > 0 ? `; ${proposal.extras} leftover stroke${proposal.extras === 1 ? '' : 's'} appended after the dataset order` : ''})`,
+                `stroke order: re-grouped ${bodyStrokes.length} extracted strokes into ${chains.length} matching the dataset (${proposal.splits} split, ${proposal.merges} merged${proposal.retraces > 0 ? `, ${proposal.retraces} retraced` : ''}${proposal.pruned > 0 ? `, ${Math.round(proposal.pruned)} units of duplicated ink pruned` : ''}${proposal.extras > 0 ? `; ${proposal.extras} leftover stroke${proposal.extras === 1 ? '' : 's'} appended after the dataset order` : ''})`,
               );
               variantStrokes = candidate;
               match = rematch;
@@ -760,6 +783,15 @@ export function runGeometryPipeline(
         }
       }
     }
+  }
+
+  if (markStrokes.length > 0) {
+    if (plan)
+      plan = {
+        sequence: [...plan.sequence, ...markStrokes.map((_, k) => outStrokes.length + k)],
+        reverse: [...plan.reverse, ...markStrokes.map(() => false)],
+      };
+    outStrokes = [...outStrokes, ...markStrokes];
   }
 
   const strokesFontUnits = orderAndTimeStrokes(

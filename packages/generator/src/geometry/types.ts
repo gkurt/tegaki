@@ -148,6 +148,8 @@ export interface GeoStroke {
   isLoop: boolean;
   /** Segment indices merged into this stroke, in draw order. */
   segmentIndices: number[];
+  /** A combining mark (an accent): drawn after the letter's body, in the dot tier (see marks.ts). */
+  mark?: boolean;
 }
 
 /** User-tunable knobs, resolution-independent (ratios are × unitsPerEm). */

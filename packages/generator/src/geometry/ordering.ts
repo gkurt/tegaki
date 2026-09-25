@@ -282,10 +282,12 @@ export function orderAndTimeStrokes(strokes: GeoStroke[], params: OrderTimingPar
   if (strokes.length === 0) return [];
   const { drawingSpeed, strokePause, rtl, headlineLast = false, topEntry = false, yTolerance } = params;
 
-  const oriented = plan
-    ? strokes.map((s, i) => (plan.reverse[i] ? [...s.points].reverse() : s.points))
-    : strokes.map((s) => orient(s.points, s.isLoop, rtl, topEntry));
-  const priorities = oriented.map(() => 0);
+  // Marks (accents) sit outside any reference plan: oriented like any
+  // heuristic stroke, and drawn in the dot tier after the letter.
+  const oriented = strokes.map((s, i) =>
+    plan && !s.mark ? (plan.reverse[i] ? [...s.points].reverse() : s.points) : orient(s.points, s.isLoop, rtl, topEntry),
+  );
+  const priorities = strokes.map((s): number => (s.mark ? -1 : 0));
   let order: number[];
   if (plan) {
     order = plan.sequence;
