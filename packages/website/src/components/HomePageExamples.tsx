@@ -23,6 +23,7 @@ const FONT_IMPORTS = {
   Atma: () => import('tegaki/fonts/atma'),
   'Klee One': () => import('tegaki/fonts/klee-one'),
   'Nanum Pen Script': () => import('tegaki/fonts/nanum-pen-script'),
+  'LXGW WenKai': () => import('tegaki/fonts/lxgw-wenkai'),
 } as const;
 
 const FONT_NAMES = Object.keys(FONT_IMPORTS) as (keyof typeof FONT_IMPORTS)[];
@@ -45,6 +46,9 @@ const SHOWCASE_TEXTS: Partial<Record<keyof typeof FONT_IMPORTS, string>> = {
   // 씨(U+C528) are all confirmed in-set.
   'Nanum Pen Script': '한국어 손글씨',
   Atma: 'হাতের লেখা সুন্দর',
+  // LXGW WenKai ships the 1000 most frequent hanzi; 手写字真美 ("handwriting
+  // is really beautiful") is all in-set.
+  'LXGW WenKai': '手写字真美',
 };
 
 function FontCard({ name, bundle, text }: { name: string; bundle: TegakiBundle | null; text: string }) {

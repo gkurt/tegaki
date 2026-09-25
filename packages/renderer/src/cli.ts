@@ -24,6 +24,7 @@ const FONTS: Record<string, string> = {
   tillana: 'Tillana (Devanagari + Latin)',
   'klee-one': 'Klee One (Japanese + Latin)',
   'nanum-pen-script': 'Nanum Pen Script (Korean + Latin)',
+  'lxgw-wenkai': 'LXGW WenKai (Simplified Chinese + Latin)',
 };
 
 /** Fonts whose scripts need shaping the headless CLI does not apply (RTL / complex GPOS). */

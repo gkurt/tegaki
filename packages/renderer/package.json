@@ -163,6 +163,13 @@
       "types": "./dist/fonts/atma/bundle.d.mts",
       "node": "./dist/fonts/atma/bundle.mjs",
       "default": "./dist/fonts/atma/bundle.mjs"
+    },
+    "./fonts/lxgw-wenkai": {
+      "tegaki@dev": "./fonts/lxgw-wenkai/bundle.ts",
+      "source": "./fonts/lxgw-wenkai/bundle.ts",
+      "types": "./dist/fonts/lxgw-wenkai/bundle.d.mts",
+      "node": "./dist/fonts/lxgw-wenkai/bundle.mjs",
+      "default": "./dist/fonts/lxgw-wenkai/bundle.mjs"
     }
   },
   "files": [

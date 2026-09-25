@@ -63,6 +63,12 @@ All fonts are licensed under the [SIL Open Font License, Version 1.1](https://op
 - **Copyright**: Copyright 2015 The Atma Project Authors (www.black-foundry.com)
 - **License**: SIL Open Font License, Version 1.1
 
+## LXGW WenKai
+
+- **Designer**: LXGW, derived from Klee One by Fontworks Inc.
+- **Copyright**: Copyright 2021-2026 LXGW (https://github.com/lxgw/LxgwWenKai); Copyright 2020 The Klee Project Authors (https://github.com/fontworks-fonts/Klee)
+- **License**: SIL Open Font License, Version 1.1
+
 ---
 
 ## SIL Open Font License, Version 1.1
