@@ -78,6 +78,7 @@ export const TegakiRenderer = forwardRef(function TegakiRendererInner<const E ex
     showOverlay,
     direction,
     shaper,
+    fallbackFont,
     editable,
     onTextChange,
     ...elementProps
@@ -108,6 +109,7 @@ export const TegakiRenderer = forwardRef(function TegakiRendererInner<const E ex
     showOverlay,
     direction,
     shaper,
+    fallbackFont,
     onComplete,
     onChangeTimeline,
   };

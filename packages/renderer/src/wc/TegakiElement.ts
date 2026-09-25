@@ -19,6 +19,7 @@ import type { TegakiBundle } from '../types.ts';
  * - `show-overlay`: show debug overlay
  * - `direction`: text direction (`"ltr"` or `"rtl"`)
  * - `no-shaper`: disable text shaping for this instance (use the char-keyed grapheme path)
+ * - `fallback-font`: CSS font-family list for characters the bundle has no glyph for
  *
  * The `easing` option is not exposed as an attribute (it takes a function);
  * set it via the `time` JS property for full uncontrolled-mode configuration.
@@ -39,6 +40,7 @@ const OBSERVED_ATTRS = [
   'show-overlay',
   'direction',
   'no-shaper',
+  'fallback-font',
 ] as const;
 
 export class TegakiElement extends HTMLElement {
@@ -207,6 +209,7 @@ export class TegakiElement extends HTMLElement {
       showOverlay: this.hasAttribute('show-overlay'),
       direction: directionAttr === 'rtl' || directionAttr === 'ltr' ? directionAttr : undefined,
       shaper: this.hasAttribute('no-shaper') ? false : undefined,
+      fallbackFont: this.getAttribute('fallback-font') ?? undefined,
       onComplete: this._onComplete,
       onChangeTimeline: this._onChangeTimeline,
     };

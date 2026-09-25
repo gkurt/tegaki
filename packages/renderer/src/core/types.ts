@@ -157,6 +157,15 @@ export interface TegakiEngineOptions {
   /** Text direction. When set, applies the CSS `direction` property to the container. */
   direction?: 'ltr' | 'rtl';
   /**
+   * CSS font-family list for characters the bundle has no glyph for, placed
+   * after the bundle's own families (e.g. `'"Noto Serif SC", serif'`). Such
+   * characters appear without a handwriting animation, in the first font of
+   * the stack that covers them. Bundles that ship their full font try it
+   * first; the rest (CJK bundles ship only the generated subset) fall straight
+   * through to this list, or to the browser's default font without it.
+   */
+  fallbackFont?: string;
+  /**
    * Whether this engine instance uses the globally-registered shaper. When
    * `false`, the engine ignores the shaper factory and renders via the
    * char-keyed grapheme path — useful for opting one renderer out of shaping

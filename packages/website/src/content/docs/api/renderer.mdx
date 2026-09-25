@@ -70,6 +70,20 @@ Style object or string applied to the container. Use `fontSize` to control the t
 
 Whether this instance uses the globally-registered harfbuzz shaper. Set to `false` to opt one renderer out of shaping (e.g. side-by-side comparisons) without unregistering the shaper for the whole process. Has no effect when no shaper is registered. See [Text Shaping](/tegaki/guides/shaping/).
 
+### `fallbackFont`
+
+**Type:** `string` (a CSS font-family list)
+
+The font for characters the bundle has no stroke data for. They appear without a handwriting animation, in the first font of this stack that covers them:
+
+```tsx
+<TegakiRenderer font={lxgwWenKai} fallbackFont='"Noto Serif SC", serif'>
+  你好，世界
+</TegakiRenderer>
+```
+
+The list goes after the bundle's own fonts. A bundle that ships its full font (all built-in bundles except `lxgw-wenkai`) tries that first. The full font loads only once the text contains a character outside the generated set, so it costs nothing for text inside the set. A subset-only bundle goes straight to `fallbackFont`, or to the browser's default font without it. Load any web font you name here yourself, for example with an `@font-face` rule.
+
 ### `onComplete`
 
 **Type:** `() => void`

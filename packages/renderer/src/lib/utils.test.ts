@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
-import { lookupGlyphData } from './utils.ts';
+import { computeTimeline } from './timeline.ts';
+import { cssFontFamily, drawsFallbackGlyphs, lookupGlyphData } from './utils.ts';
 
 const stroke = (d: number, a: number) => ({ p: [[0, 0, 1] as [number, number, number]], d, a });
 const glyph = (w: number, t: number): TegakiGlyphData => ({ w, t, s: [stroke(0, t)] });
@@ -69,5 +70,37 @@ describe('lookupGlyphData', () => {
     const bundle = makeBundle({ é: glyph(500, 1), e: glyph(450, 0.9) });
     expect(lookupGlyphData(bundle, 'é'.normalize('NFC'))?.w).toBe(500);
     expect(lookupGlyphData(bundle, 'é'.normalize('NFD'))?.w).toBe(450);
+  });
+});
+
+describe('cssFontFamily', () => {
+  test('a subset bundle falls back to its full family', () => {
+    expect(cssFontFamily({ ...makeBundle({}), fullFamily: 'Test Full' })).toBe("'test', 'Test Full'");
+  });
+
+  test("the caller's fallbackFont list follows the bundle's families, verbatim", () => {
+    expect(cssFontFamily({ ...makeBundle({}), fullFamily: 'Test Full' }, '"Noto Serif SC", serif')).toBe(
+      `'test', 'Test Full', "Noto Serif SC", serif`,
+    );
+  });
+
+  test('a bundle without a full family goes straight to the fallbackFont list', () => {
+    expect(cssFontFamily(makeBundle({}), 'serif')).toBe("'test', serif");
+  });
+
+  test('a blank fallbackFont adds nothing', () => {
+    expect(cssFontFamily(makeBundle({}), '  ')).toBe("'test'");
+  });
+});
+
+describe('drawsFallbackGlyphs', () => {
+  const bundle = makeBundle({ 中: glyph(1000, 1), 文: glyph(1000, 1) });
+
+  test('text within the bundle draws no fallback glyphs, spaces and line breaks included', () => {
+    expect(drawsFallbackGlyphs(computeTimeline('中文 中\n文', bundle).entries)).toBe(false);
+  });
+
+  test('a character the bundle lacks is drawn from a fallback font', () => {
+    expect(drawsFallbackGlyphs(computeTimeline('中文字', bundle).entries)).toBe(true);
   });
 });

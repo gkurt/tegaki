@@ -17,6 +17,7 @@ const props = defineProps<{
   onChangeTimeline?: (timeline: Timeline) => void;
   direction?: 'ltr' | 'rtl';
   shaper?: boolean;
+  fallbackFont?: string;
 }>();
 
 defineOptions({ inheritAttrs: false });
@@ -34,6 +35,7 @@ const engineOptions = computed<TegakiEngineOptions>(() => ({
   showOverlay: props.showOverlay,
   direction: props.direction,
   shaper: props.shaper,
+  fallbackFont: props.fallbackFont,
   onComplete: props.onComplete,
   onChangeTimeline: props.onChangeTimeline,
 }));

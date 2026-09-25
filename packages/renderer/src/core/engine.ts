@@ -28,7 +28,7 @@ import type { TextLayout } from '../lib/textLayout.ts';
 import { applyShaperPositions, computeLayoutBbox, computeTextLayout, lineWords } from '../lib/textLayout.ts';
 import type { Timeline, TimelineConfig, TimelineEntry } from '../lib/timeline.ts';
 import { computeTimeline } from '../lib/timeline.ts';
-import { cssFontFamily, graphemes, lookupGlyphData } from '../lib/utils.ts';
+import { cssFontFamily, drawsFallbackGlyphs, graphemes, lookupGlyphData } from '../lib/utils.ts';
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
 import { buildChildren, buildRootProps, canvasBoxStyle, domCreateElement } from './render-elements.ts';
@@ -112,14 +112,18 @@ const warnedFontFailures = new Set<string>();
  * `node_modules/.vite/deps/`, which breaks its relative `.ttf` URL — the dev
  * server then answers with `index.html` and the browser rejects it as a font.
  */
-export function warnFontLoadFailure(bundle: TegakiBundle, error: unknown): void {
-  if (warnedFontFailures.has(bundle.fontUrl)) return;
-  warnedFontFailures.add(bundle.fontUrl);
-  const viteHint = bundle.fontUrl.includes('/.vite/deps/')
+export function warnFontLoadFailure(
+  bundle: TegakiBundle,
+  error: unknown,
+  face: { family: string; url: string } = { family: bundle.family, url: bundle.fontUrl },
+): void {
+  if (warnedFontFailures.has(face.url)) return;
+  warnedFontFailures.add(face.url);
+  const viteHint = face.url.includes('/.vite/deps/')
     ? " This URL points into Vite's pre-bundle cache: add `optimizeDeps: { exclude: ['tegaki'] }` to your vite.config and restart the dev server."
     : '';
   console.warn(
-    `[tegaki] Failed to load font "${bundle.family}" from ${bundle.fontUrl}. ` +
+    `[tegaki] Failed to load font "${face.family}" from ${face.url}. ` +
       `Rendering with the fallback font's layout, so spacing may be off.${viteHint} ` +
       'See https://gkurt.com/tegaki/guides/bundlers/',
     error,
@@ -172,6 +176,7 @@ export class TegakiEngine {
   private _onComplete: (() => void) | undefined;
   private _onChangeTimeline: ((timeline: Timeline) => void) | undefined;
   private _direction: 'ltr' | 'rtl' | undefined;
+  private _fallbackFont: string | undefined;
 
   // --- Derived / cached ---
   private _resolvedEffects: ResolvedEffect[] = resolveEffects(undefined);
@@ -593,6 +598,12 @@ export class TegakiEngine {
       dirtyRender = true;
     }
 
+    if ('fallbackFont' in options && options.fallbackFont !== this._fallbackFont) {
+      this._fallbackFont = options.fallbackFont;
+      dirtyLayout = true;
+      dirtyRender = true;
+    }
+
     if ('direction' in options && options.direction !== this._direction) {
       this._direction = options.direction;
       dirtyLayout = true;
@@ -683,7 +694,7 @@ export class TegakiEngine {
 
   private _updateDom(): void {
     // Font family
-    this._rootEl.style.fontFamily = this._font ? cssFontFamily(this._font) : '';
+    this._rootEl.style.fontFamily = this._font ? cssFontFamily(this._font, this._fallbackFont) : '';
 
     // Direction
     this._rootEl.style.direction = this._direction ?? '';
@@ -920,12 +931,37 @@ export class TegakiEngine {
       this._timeline = { entries: [] as TimelineEntry[], totalDuration: 0 };
     }
     this._onChangeTimeline?.(this._timeline);
+    this._loadFullFontIfNeeded();
+  }
+
+  /**
+   * Load the bundle's full font once the text draws a character the bundle
+   * has no glyph for, and only then: a CJK full font is megabytes, and text
+   * that stays within the generated set never needs it. The overlay lays such
+   * characters out in the root's font stack and the canvas draws them as
+   * plain text in it, so both re-run once the face arrives.
+   */
+  private _loadFullFontIfNeeded(): void {
+    const font = this._font;
+    if (!font?.fullFamily || !font.fullFontUrl || !drawsFallbackGlyphs(this._timeline.entries)) return;
+    const face = { family: font.fullFamily, url: font.fullFontUrl };
+    const pending = ensureFont(face.family, face.url, font.features);
+    if (pending === null) return;
+    pending.then(
+      () => {
+        if (this._font !== font || this._destroyed) return;
+        this._layoutKey = '';
+        this._recomputeLayout();
+        this._render();
+      },
+      (error) => warnFontLoadFailure(font, error, face),
+    );
   }
 
   private _recomputeLayout(): void {
     if (this._fontReady && this._font?.family && this._fontSize && this._containerWidth && this._text) {
       const shaperId = this._shaper ? '1' : '0';
-      const key = `${this._text}\0${this._font.family}\0${this._fontSize}\0${this._lineHeight}\0${this._containerWidth}\0${this._direction ?? ''}\0${shaperId}\0${this._letterSpacing}`;
+      const key = `${this._text}\0${this._font.family}\0${this._fallbackFont ?? ''}\0${this._fontSize}\0${this._lineHeight}\0${this._containerWidth}\0${this._direction ?? ''}\0${shaperId}\0${this._letterSpacing}`;
       if (key === this._layoutKey) return;
       this._layoutKey = key;
       let layout = computeTextLayout(this._overlayEl, this._fontSize);
@@ -1322,7 +1358,17 @@ export class TegakiEngine {
         );
       } else if (!entry.hasGlyph && currentTime >= entry.offset + entry.duration) {
         const baseline = y + halfLeading + (font.ascender / font.unitsPerEm) * fontSize;
-        drawFallbackGlyph(ctx, entry.char, x, baseline, fontSize, cssFontFamily(font), color, this._resolvedEffects, this._seed + charIdx);
+        drawFallbackGlyph(
+          ctx,
+          entry.char,
+          x,
+          baseline,
+          fontSize,
+          cssFontFamily(font, this._fallbackFont),
+          color,
+          this._resolvedEffects,
+          this._seed + charIdx,
+        );
       }
     }
 
@@ -1353,7 +1399,7 @@ export class TegakiEngine {
       maskCtx.setTransform(effectiveDpr, 0, 0, effectiveDpr, 0, 0);
       maskCtx.clearRect(0, 0, w, h);
       maskCtx.translate(padH, padV);
-      maskCtx.font = `${fontSize}px ${cssFontFamily(font)}`;
+      maskCtx.font = `${fontSize}px ${cssFontFamily(font, this._fallbackFont)}`;
       maskCtx.textBaseline = 'alphabetic';
       // Draw each word where the DOM put it, as a single string so the
       // browser's shaper sees the whole word — per-character fillText would

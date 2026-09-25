@@ -31,7 +31,7 @@ export function canvasBoxStyle(overflow: CanvasOverflow = NO_OVERFLOW): Record<s
 export function buildRootProps(options: TegakiEngineOptions): Record<string, any> {
   const text = options.text ?? '';
   const font = resolveBundle(options.font);
-  const fontFamily = font ? cssFontFamily(font) : undefined;
+  const fontFamily = font ? cssFontFamily(font, options.fallbackFont) : undefined;
 
   const duration = text && font ? computeTimeline(text, font, options.timing).totalDuration : 0;
   const timeObj = typeof options.time === 'object' ? options.time : null;

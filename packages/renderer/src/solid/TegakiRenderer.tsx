@@ -63,6 +63,7 @@ export function TegakiRenderer(props: TegakiRendererProps) {
     'showOverlay',
     'direction',
     'shaper',
+    'fallbackFont',
     'ref',
   ]);
 
@@ -79,6 +80,7 @@ export function TegakiRenderer(props: TegakiRendererProps) {
     showOverlay: local.showOverlay,
     direction: local.direction,
     shaper: local.shaper,
+    fallbackFont: local.fallbackFont,
     onComplete: local.onComplete,
     onChangeTimeline: local.onChangeTimeline,
   }));

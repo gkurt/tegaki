@@ -23,6 +23,12 @@ describe('warnFontLoadFailure', () => {
     expect(warn.mock.calls[0][0]).toContain("optimizeDeps: { exclude: ['tegaki'] }");
   });
 
+  test("a bundle's full font is named by its own family and URL", () => {
+    const bundle = { ...bundleAt('https://example.com/subset.ttf'), fullFamily: 'Test Full', fullFontUrl: 'https://example.com/full.ttf' };
+    warnFontLoadFailure(bundle, new Error('x'), { family: 'Test Full', url: 'https://example.com/full.ttf' });
+    expect(warn.mock.calls[0][0]).toContain('"Test Full" from https://example.com/full.ttf');
+  });
+
   test('other URLs get no Vite hint', () => {
     warnFontLoadFailure(bundleAt('https://cdn.example.com/caveat.ttf'), new Error('x'));
     expect(warn.mock.calls[0][0]).not.toContain('optimizeDeps');

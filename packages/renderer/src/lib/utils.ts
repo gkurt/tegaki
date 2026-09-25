@@ -19,12 +19,24 @@ export function graphemes(text: string): string[] {
 }
 
 /**
- * Build the CSS `font-family` value for a bundle, including the full
- * (non-subsetted) family as fallback when the bundle was generated from a subset.
+ * Build the CSS `font-family` value for a bundle: its own family, then the
+ * full (non-subsetted) family when the bundle was generated from a subset,
+ * then the caller's `fallbackFont` — a CSS font-family list, used as-is — for
+ * characters neither covers.
  */
-export function cssFontFamily(bundle: TegakiBundle): string {
-  if (bundle.fullFamily) return `'${bundle.family}', '${bundle.fullFamily}'`;
-  return `'${bundle.family}'`;
+export function cssFontFamily(bundle: TegakiBundle, fallbackFont?: string): string {
+  const families = [`'${bundle.family}'`];
+  if (bundle.fullFamily) families.push(`'${bundle.fullFamily}'`);
+  if (fallbackFont?.trim()) families.push(fallbackFont.trim());
+  return families.join(', ');
+}
+
+/**
+ * Whether a timeline draws any character from a fallback font: a grapheme
+ * the bundle has no glyph for, other than whitespace (which draws nothing).
+ */
+export function drawsFallbackGlyphs(entries: readonly { char: string; hasGlyph: boolean }[]): boolean {
+  return entries.some((e) => !e.hasGlyph && /\S/u.test(e.char));
 }
 
 /**
