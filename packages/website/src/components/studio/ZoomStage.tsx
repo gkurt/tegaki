@@ -11,7 +11,7 @@ const PAD = 24;
 /**
  * Pan/zoom viewport for the glyph stage. Starts fitted to the viewport (and
  * refits on resize) until the user zooms; ⌘/Ctrl + wheel (or a trackpad pinch)
- * zooms around the centre, and the corner controls (or +/−, 0, 1) zoom, fit, or reset to 100%.
+ * zooms around the centre, and the corner controls zoom, fit, or reset to 100% (+/− and 0 zoom and fit too).
  * While fitted it never scrolls — only a zoom the user picked can overflow.
  */
 export function ZoomStage({ children, contentKey, overlay }: { children: ReactNode; contentKey: string; overlay?: ReactNode }) {
@@ -104,7 +104,6 @@ export function ZoomStage({ children, contentKey, overlay }: { children: ReactNo
     if (key === '+' || key === '=') zoomBy(1.25);
     else if (key === '-' || key === '_') zoomBy(1 / 1.25);
     else if (key === '0') fit();
-    else if (key === '1') actualSize();
     else return false;
     return true;
   });
@@ -135,7 +134,7 @@ export function ZoomStage({ children, contentKey, overlay }: { children: ReactNo
           type="button"
           className="h-7 min-w-12 rounded-md px-1 font-mono text-[11px] text-zinc-500 tabular-nums hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
           onClick={actualSize}
-          title="Reset to 100% (1)"
+          title="Reset to 100%"
         >
           {Math.round(scale * 100)}%
         </button>

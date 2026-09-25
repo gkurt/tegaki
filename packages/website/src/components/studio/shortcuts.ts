@@ -21,11 +21,11 @@ export const SHORTCUT_GROUPS: { title: string; items: { keys: string[][]; label:
     items: [
       { keys: [['Space']], label: 'Play / pause' },
       { keys: [['Home'], ['End']], label: 'Jump to start / end' },
-      { keys: [[','], ['.']], label: 'Step back / forward a frame' },
+      { keys: [['←'], ['→']], label: 'Step back / forward a frame' },
       {
         keys: [
-          ['Shift', ','],
-          ['Shift', '.'],
+          ['Shift', '←'],
+          ['Shift', '→'],
         ],
         label: 'Step back / forward ten frames',
       },
@@ -34,16 +34,16 @@ export const SHORTCUT_GROUPS: { title: string; items: { keys: string[][]; label:
   {
     title: 'Glyphs',
     items: [
-      { keys: [['←'], ['→']], label: 'Previous / next glyph' },
+      { keys: [['↑'], ['↓']], label: 'Previous / next glyph' },
+      { keys: [['1'], ['…'], ['9']], label: 'Pick a form (1 is the default)' },
       { keys: [['['], [']']], label: 'Previous / next stage' },
       { keys: [['+'], ['−']], label: 'Zoom in / out' },
       { keys: [['0']], label: 'Fit to view' },
-      { keys: [['1']], label: 'Zoom to 100%' },
     ],
   },
 ];
 
-/** One playback step for `,` / `.` — a frame at 30 fps. */
+/** One playback step for ← / → — a frame at 30 fps. */
 export const FRAME_STEP = 1 / 30;
 
 /**
@@ -74,10 +74,12 @@ const TEXT_INPUT_TYPES = new Set([
 /**
  * Keys a focused slider, list or menu moves itself with natively. (Radio
  * groups aren't here: a segmented control that arrows through its options
- * cancels the key itself, which the listener already respects.)
+ * cancels the key itself, which the listener already respects. Nor is the
+ * timeline scrubber: its native step is a sliver, where ← / → step frames.)
  */
 const NAV_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
-const NAV_OWNERS = 'input[type="range"], [role="slider"], [role="separator"], [role="listbox"], [role="menu"], select';
+const NAV_OWNERS =
+  'input[type="range"]:not(.studio-scrubber), [role="slider"], [role="separator"], [role="listbox"], [role="menu"], select';
 /**
  * Controls Space toggles or picks — where it isn't "play". A radio isn't: the
  * one Space would pick is the one already checked (by the click that focused it).
@@ -126,9 +128,8 @@ export function useShortcuts(onKey: (key: string, e: KeyboardEvent) => boolean |
 }
 
 /**
- * The playback keys — Space, Home/End, and `,`/`.` stepping (ten frames with
- * Shift, which some layouts report as `<`/`>`) — for a transport with a
- * seekable time. Seeking pauses, as dragging the scrubber does. Returns
+ * The playback keys — Space, Home/End, and ← / → stepping a frame (ten
+ * with Shift) — for a transport with a seekable time. Seeking pauses, as dragging the scrubber does. Returns
  * whether the key was one of them.
  */
 export function playbackShortcut(
@@ -140,8 +141,8 @@ export function playbackShortcut(
   if (key === 'Space') p.playPause();
   else if (key === 'Home') p.seek(0);
   else if (key === 'End') p.seek(p.duration);
-  else if (key === ',' || key === '.' || key === '<' || key === '>') {
-    const frames = (key === ',' || key === '<' ? -1 : 1) * (e.shiftKey || key === '<' || key === '>' ? 10 : 1);
+  else if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    const frames = (key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 1);
     p.seek(Math.min(p.duration, Math.max(0, p.time + frames * FRAME_STEP)));
   } else return false;
   return true;

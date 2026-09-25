@@ -304,16 +304,23 @@ export function GlyphWorkspace({
     setAnimPlaying(false);
   };
 
-  // Keyboard: the playback keys on the animated stages, ←/→ through the glyph list, [/] through the stages.
+  // Keyboard: the playback keys (←/→ step) on the animated stages, ↑/↓ through the glyph list,
+  // 1–9 through the Forms strip (1 is the default glyph), [/] through the stages.
   useShortcuts((key, e) => {
     if (animStageActive && animResult && playbackShortcut(key, e, { time: animTime, duration: totalDuration, playPause, seek: seekAnim })) {
       return true;
     }
-    if (key === 'ArrowRight' || key === 'ArrowLeft') {
+    if (key === 'ArrowDown' || key === 'ArrowUp') {
       const pickable = chars.filter((c) => !fontInfo || availableChars.has(c));
-      const next = pickable[pickable.indexOf(selectedChar) + (key === 'ArrowRight' ? 1 : -1)];
+      const next = pickable[pickable.indexOf(selectedChar) + (key === 'ArrowDown' ? 1 : -1)];
       if (!next) return false;
       selectChar(next);
+      return true;
+    }
+    if (/^[1-9]$/.test(key) && forms.length > 1) {
+      const picked = forms[Number(key) - 1];
+      if (!picked) return false;
+      set('selectedForm', picked.kind === 'default' ? null : formKey(formSubset, picked.gid));
       return true;
     }
     if (key === '[' || key === ']') {

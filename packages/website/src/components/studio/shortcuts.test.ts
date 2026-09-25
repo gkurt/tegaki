@@ -52,19 +52,19 @@ describe('playbackShortcut', () => {
     expect(calls).toEqual([0, 2]);
   });
 
-  test('"." steps one frame; Shift (or the ">" it types) steps ten', () => {
+  test('→ steps one frame forward, Shift+→ ten; ← steps back', () => {
     const { calls, p } = transport(1);
-    playbackShortcut('.', { shiftKey: false }, p);
-    playbackShortcut('.', { shiftKey: true }, p);
-    playbackShortcut('>', { shiftKey: true }, p);
-    expect(calls).toEqual([1 + FRAME_STEP, 1 + 10 * FRAME_STEP, 1 + 10 * FRAME_STEP]);
+    playbackShortcut('ArrowRight', { shiftKey: false }, p);
+    playbackShortcut('ArrowRight', { shiftKey: true }, p);
+    playbackShortcut('ArrowLeft', { shiftKey: false }, p);
+    expect(calls).toEqual([1 + FRAME_STEP, 1 + 10 * FRAME_STEP, 1 - FRAME_STEP]);
   });
 
   test('stepping stops at the ends instead of seeking out of the timeline', () => {
     const { calls, p } = transport(0.01);
-    playbackShortcut('<', { shiftKey: true }, p);
+    playbackShortcut('ArrowLeft', { shiftKey: true }, p);
     const end = transport(1.99);
-    playbackShortcut('>', { shiftKey: true }, end.p);
+    playbackShortcut('ArrowRight', { shiftKey: true }, end.p);
     expect([...calls, ...end.calls]).toEqual([0, 2]);
   });
 

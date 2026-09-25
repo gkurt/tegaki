@@ -211,7 +211,7 @@ export function FormStrip({
       aria-label="Glyph forms"
     >
       <span className="shrink-0 px-1 text-[11px] font-medium text-zinc-400">Forms</span>
-      {forms.map((form) => {
+      {forms.map((form, i) => {
         const isDefault = form.kind === 'default';
         const isSelected = isDefault ? selected === null : selected === form.gid;
         const example = examples?.get(form.gid);
@@ -223,7 +223,8 @@ export function FormStrip({
             role="radio"
             aria-checked={isSelected}
             onClick={() => onSelect(isDefault ? null : form.gid)}
-            title={`${formTitle(form)}\n${examples === null ? 'Looking for a text that draws it…' : formStatus(form, example, disabledFeatures)}`}
+            // The first nine answer to the number keys (see GlyphWorkspace's shortcuts).
+            title={`${formTitle(form)}${i < 9 ? ` (${i + 1})` : ''}\n${examples === null ? 'Looking for a text that draws it…' : formStatus(form, example, disabledFeatures)}`}
             className={cx(
               'flex h-11 min-w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md px-1.5 transition-colors',
               isSelected
