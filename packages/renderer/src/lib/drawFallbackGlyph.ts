@@ -3,10 +3,11 @@ import { resolveCSSLength } from './utils.ts';
 
 /**
  * Draw a fallback glyph (plain text) with applicable effects (glow, strokeGradient, wobble).
+ * `text` may be a run of characters, drawn in `direction` from its left edge `x`.
  */
 export function drawFallbackGlyph(
   ctx: CanvasRenderingContext2D,
-  char: string,
+  text: string,
   x: number,
   baseline: number,
   fontSize: number,
@@ -14,6 +15,7 @@ export function drawFallbackGlyph(
   color: string,
   effects: ResolvedEffect[] = [],
   seed = 0,
+  direction: CanvasDirection = 'ltr',
 ) {
   const glowEffects = findEffects(effects, 'glow');
   const wobbleEffect = findEffect(effects, 'wobble');
@@ -49,9 +51,10 @@ export function drawFallbackGlyph(
   ctx.save();
   ctx.font = `${fontSize}px ${fontFamily}`;
   ctx.textBaseline = 'alphabetic';
-  // `x` is the glyph's left edge. The default 'start' alignment would take it
+  // `x` is the text's left edge. The default 'start' alignment would take it
   // as the right edge on a canvas inheriting an RTL paragraph's direction.
   ctx.textAlign = 'left';
+  ctx.direction = direction;
 
   // Glow passes
   for (const glow of glowEffects) {
@@ -61,13 +64,13 @@ export function drawFallbackGlyph(
     ctx.shadowOffsetX = glow.config.offsetX ?? 0;
     ctx.shadowOffsetY = glow.config.offsetY ?? 0;
     ctx.fillStyle = glow.config.color ?? color;
-    ctx.fillText(char, drawX, drawY);
+    ctx.fillText(text, drawX, drawY);
     ctx.restore();
   }
 
   // Main text
   ctx.fillStyle = fillColor;
-  ctx.fillText(char, drawX, drawY);
+  ctx.fillText(text, drawX, drawY);
 
   ctx.restore();
 }

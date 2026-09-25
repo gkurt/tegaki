@@ -19,6 +19,7 @@ import {
   type ResolvedEffect,
   resolveEffects,
 } from '../lib/effects.ts';
+import { fallbackRuns } from '../lib/fallbackRuns.ts';
 import { LETTER_SPACED_OFF_FEATURES } from '../lib/features.ts';
 import { ensureFont, ensureFontFace } from '../lib/font.ts';
 import { type CanvasOverflow, glyphInkBounds, inkOverflow, NO_OVERFLOW } from '../lib/inkBounds.ts';
@@ -104,6 +105,21 @@ function resolveTimeControl(prop: TimeControlProp): TimeControlMode[keyof TimeCo
   }
   return prop;
 }
+
+/** How a fallback character in a run is drawn — see `TegakiEngine._fallbackRunClips`. */
+interface FallbackClip {
+  text: string;
+  /** Left edge of the run's text, in CSS px. */
+  x: number;
+  /** The character's box, in CSS px; an outer edge of the run is left open. */
+  left: number;
+  right: number;
+  direction: 'ltr' | 'rtl';
+  seed: number;
+}
+
+/** Far enough past any canvas edge to leave a clip rectangle's side open (canvas rects take no Infinity). */
+const CLIP_REACH = 1e6;
 
 const warnedFontFailures = new Set<string>();
 
@@ -947,6 +963,60 @@ export class TegakiEngine {
     });
   }
 
+  /**
+   * Where each fallback character (one the bundle has no glyph for) is drawn
+   * from, by timeline entry. Characters are drawn in runs of consecutive ones
+   * (`fallbackRuns`): the run's whole text, shaped together as the DOM shapes
+   * it — alone, an Arabic letter would lose its joining form — at the run's
+   * left edge, clipped to the character's own box so each still appears when
+   * its time comes. The run's outer edges aren't clipped: ink reaching past
+   * the advance boxes (a swash, a final tail) belongs to the end letters.
+   * The run shares one effect seed, so a wobble moves it as one piece.
+   * A character with several entries (a cluster of code points the font
+   * lacks) is drawn by its first; the rest map to `null`.
+   */
+  private _fallbackRunClips(
+    layout: TextLayout,
+    characters: readonly string[],
+    graphemeToLine: Int32Array,
+    fontSize: number,
+  ): Map<number, FallbackClip | null> {
+    const clips = new Map<number, FallbackClip | null>();
+    const entries = this._timeline.entries;
+    const { runs } = fallbackRuns(entries, characters, (g) => graphemeToLine[g] ?? -1);
+    for (const run of runs) {
+      if (run.entries.length < 2) continue;
+      const first = entries[run.entries[0]!]!;
+      // One box per character, where the layout measured it.
+      const boxes: { ei: number; left: number; right: number }[] = [];
+      let lastGrapheme = -1;
+      for (const ei of run.entries) {
+        const g = entries[ei]!.graphemeIndex;
+        if (g === lastGrapheme) {
+          clips.set(ei, null);
+          continue;
+        }
+        lastGrapheme = g;
+        const left = (layout.charOffsets[g] ?? 0) * fontSize;
+        boxes.push({ ei, left, right: left + (layout.charWidths[g] ?? 0) * fontSize });
+      }
+      const runLeft = Math.min(...boxes.map((b) => b.left));
+      const runRight = Math.max(...boxes.map((b) => b.right));
+      const direction = run.direction ?? layout.direction ?? 'ltr';
+      for (const box of boxes) {
+        clips.set(box.ei, {
+          text: run.text,
+          x: runLeft,
+          left: box.left === runLeft ? -CLIP_REACH : box.left,
+          right: box.right === runRight ? CLIP_REACH : box.right,
+          direction,
+          seed: this._seed + first.graphemeIndex,
+        });
+      }
+    }
+    return clips;
+  }
+
   // =========================================================================
   // Internal: Recomputation
   // =========================================================================
@@ -1344,6 +1414,7 @@ export class TegakiEngine {
       const lineIndices = layout.lines[li]!;
       for (const charIdx of lineIndices) graphemeToLine[charIdx] = li;
     }
+    const fallbackClips = this._fallbackRunClips(layout, characters, graphemeToLine, fontSize);
 
     for (let ei = 0; ei < this._timeline.entries.length; ei++) {
       const entry = this._timeline.entries[ei]!;
@@ -1385,17 +1456,29 @@ export class TegakiEngine {
         );
       } else if (!entry.hasGlyph && currentTime >= entry.offset + entry.duration) {
         const baseline = y + halfLeading + (font.ascender / font.unitsPerEm) * fontSize;
+        // A character in a run is drawn as the whole run, shaped together,
+        // clipped to its own box — see `_fallbackRunClips`.
+        const clip = fallbackClips.get(ei);
+        if (clip === null) continue;
+        if (clip) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(clip.left, -CLIP_REACH, clip.right - clip.left, 2 * CLIP_REACH);
+          ctx.clip();
+        }
         drawFallbackGlyph(
           ctx,
-          entry.char,
-          x,
+          clip?.text ?? entry.char,
+          clip?.x ?? x,
           baseline,
           fontSize,
           cssFontFamily(font, this._fallbackFont),
           color,
           this._resolvedEffects,
-          this._seed + charIdx,
+          clip?.seed ?? this._seed + charIdx,
+          clip?.direction ?? layout.direction ?? 'ltr',
         );
+        if (clip) ctx.restore();
       }
     }
 
