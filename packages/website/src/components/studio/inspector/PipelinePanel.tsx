@@ -75,7 +75,15 @@ export function PipelinePanel({
 
   return (
     <>
-      <Section title="Pipeline" modified={differs(options, SHARED_KEYS)} onReset={() => set('options', (o) => resetKeys(o, SHARED_KEYS))}>
+      <Section
+        title="Pipeline"
+        defaultOpen={false}
+        modified={pipeline !== URL_DEFAULTS.pipeline || differs(options, SHARED_KEYS)}
+        onReset={() => {
+          if (pipeline !== URL_DEFAULTS.pipeline) onPipelineChange(URL_DEFAULTS.pipeline);
+          set('options', (o) => resetKeys(o, SHARED_KEYS));
+        }}
+      >
         <Segmented
           value={pipeline}
           onChange={onPipelineChange}
@@ -110,7 +118,12 @@ export function PipelinePanel({
       </Section>
 
       {pipeline === 'geometry' ? (
-        <Section title="Geometry" modified={geoModified} onReset={() => set('geometryOptions', DEFAULT_GEOMETRY_OPTIONS)}>
+        <Section
+          title="Geometry"
+          defaultOpen={false}
+          modified={geoModified}
+          onReset={() => set('geometryOptions', DEFAULT_GEOMETRY_OPTIONS)}
+        >
           <DialScope className="flex flex-col gap-1.5">
             <SelectControl
               label="Extraction"
@@ -257,7 +270,12 @@ export function PipelinePanel({
           </Hint>
         </Section>
       ) : (
-        <Section title="Raster" modified={differs(options, RASTER_KEYS)} onReset={() => set('options', (o) => resetKeys(o, RASTER_KEYS))}>
+        <Section
+          title="Raster"
+          defaultOpen={false}
+          modified={differs(options, RASTER_KEYS)}
+          onReset={() => set('options', (o) => resetKeys(o, RASTER_KEYS))}
+        >
           <DialScope className="flex flex-col gap-1.5">
             <Slider
               label="Resolution"

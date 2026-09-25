@@ -18,10 +18,10 @@ import { TegakiTextPreview } from '../preview/TegakiTextPreview.tsx';
 import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
 import type { UrlState } from '../url-state.ts';
 import type { CharsetInfo } from './charsets.ts';
-import { CheckIcon, ChevronDownIcon, WarningIcon } from './icons.tsx';
+import { CheckIcon, ChevronDownIcon, CloseIcon, WarningIcon } from './icons.tsx';
 import type { LoadedFont, SetSetting } from './state.ts';
 import { Transport } from './Transport.tsx';
-import { cx, isTypingTarget, Popover, Segmented, Spinner } from './ui.tsx';
+import { cx, IconButton, isTypingTarget, Popover, Segmented, Spinner } from './ui.tsx';
 import { ZoomStage } from './ZoomStage.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
@@ -261,6 +261,9 @@ export function GlyphWorkspace({
   }, [animStageActive, playPause, chars, availableChars, fontInfo, selectedChar, set]);
 
   const stages = pipeline === 'raster' ? STAGES : GEOMETRY_STAGES;
+  // Geometry-pipeline warnings for the selected glyph; the panel stays open while browsing glyphs.
+  const warnings = pipeline === 'geometry' && geoResult && !processing ? geoResult.warnings : [];
+  const [showWarnings, setShowWarnings] = useState(false);
   const activeResult = pipeline === 'raster' ? result : geoResult;
 
   return (
@@ -380,7 +383,17 @@ export function GlyphWorkspace({
           />
         )}
 
-        <GlyphStats pipeline={pipeline} result={result} geoResult={geoResult} />
+        {showWarnings && warnings.length > 0 && (
+          <GlyphWarnings char={selectedChar} warnings={warnings} onClose={() => setShowWarnings(false)} />
+        )}
+
+        <GlyphStats
+          pipeline={pipeline}
+          result={result}
+          geoResult={geoResult}
+          warningsOpen={showWarnings}
+          onToggleWarnings={() => setShowWarnings((v) => !v)}
+        />
       </div>
     </div>
   );
@@ -644,14 +657,50 @@ function GlyphList({
   );
 }
 
+/** Groups repeated warnings so a glyph that trips the same check many times reads as one line. */
+function groupWarnings(warnings: string[]): [string, number][] {
+  const counts = new Map<string, number>();
+  for (const w of warnings) counts.set(w, (counts.get(w) ?? 0) + 1);
+  return [...counts];
+}
+
+function GlyphWarnings({ char, warnings, onClose }: { char: string; warnings: string[]; onClose: () => void }) {
+  const grouped = groupWarnings(warnings);
+  return (
+    <div className="flex max-h-44 shrink-0 flex-col border-t border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/5">
+      <div className="flex h-8 shrink-0 items-center gap-2 pr-1 pl-3 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+        <WarningIcon size={12} />
+        <span className="min-w-0 flex-1 truncate">
+          {warnings.length} geometry warning{warnings.length > 1 ? 's' : ''} for “{char}”
+        </span>
+        <IconButton label="Close warnings" onClick={onClose} className="size-6 text-amber-700 dark:text-amber-400">
+          <CloseIcon size={12} />
+        </IconButton>
+      </div>
+      <ul className="studio-scroll min-h-0 overflow-y-auto px-3 pb-2 font-mono text-[11px] leading-relaxed text-amber-900 dark:text-amber-200/90">
+        {grouped.map(([w, n]) => (
+          <li key={w} className="flex gap-2 border-t border-amber-200/60 py-1 first:border-t-0 dark:border-amber-500/10">
+            <span className="min-w-0 flex-1 break-words select-text">{w}</span>
+            {n > 1 && <span className="shrink-0 text-amber-600 dark:text-amber-400">×{n}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function GlyphStats({
   pipeline,
   result,
   geoResult,
+  warningsOpen,
+  onToggleWarnings,
 }: {
   pipeline: Pipeline;
   result: PipelineResult | null;
   geoResult: GeometryPipelineResult | null;
+  warningsOpen: boolean;
+  onToggleWarnings: () => void;
 }) {
   const r = pipeline === 'raster' ? result : geoResult;
   if (!r) return null;
@@ -681,16 +730,25 @@ function GlyphStats({
       <span className="text-zinc-900 dark:text-zinc-100">
         {r.char} <span className="text-zinc-400">U+{hex}</span>
       </span>
+      {warnings.length > 0 && (
+        <button
+          type="button"
+          onClick={onToggleWarnings}
+          aria-expanded={warningsOpen}
+          className={cx(
+            '-mx-1 flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-amber-700 transition-colors hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-500/15',
+            warningsOpen && 'bg-amber-100 dark:bg-amber-500/15',
+          )}
+        >
+          <WarningIcon size={12} /> {warnings.length} warning{warnings.length > 1 ? 's' : ''}
+          <ChevronDownIcon size={12} className={cx('transition-transform', !warningsOpen && 'rotate-180')} />
+        </button>
+      )}
       {items.map(([k, v]) => (
         <span key={k}>
           <span className="text-zinc-400">{k}</span> {v}
         </span>
       ))}
-      {warnings.length > 0 && (
-        <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400" title={warnings.join('\n')}>
-          <WarningIcon size={12} /> {warnings.length} warning{warnings.length > 1 ? 's' : ''}
-        </span>
-      )}
     </div>
   );
 }
