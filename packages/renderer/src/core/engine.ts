@@ -1196,6 +1196,12 @@ export class TegakiEngine {
   }
 
   private _recomputeLayout(): void {
+    // An adapter can commit new overlay text before handing the engine that
+    // text — React renders the overlay, then calls `update()` from an effect —
+    // and a resize in between (a chat bubble widening as a reply streams in)
+    // would measure one text's lines against another's graphemes. Wait for the
+    // update: it syncs the overlay and lays out again.
+    if (this._overlayEl.textContent !== this._text) return;
     // The strut follows the root's font, which may have just been swapped or finished loading.
     if (this._lineHeightNormal) this._lineHeight = this._measureNormalLineHeight(this._fontSize);
     if (this._fontReady && this._font?.family && this._fontSize && this._containerWidth && this._text) {
