@@ -29,6 +29,14 @@ export function firstMatchProvider(providers: StrokeOrderProvider[]): StrokeOrde
   };
 }
 
+/** A provider asked only about characters matching `pattern` — others are misses without a lookup. */
+function onlyFor(pattern: RegExp, provider: StrokeOrderProvider): StrokeOrderProvider {
+  return { name: provider.name, get: (char) => (pattern.test(char) ? provider.get(char) : Promise.resolve(null)) };
+}
+
+/** Make Me a Hanzi (hanzi-writer-data) holds Han characters only. */
+const HAN = /^\p{Script=Han}/u;
+
 // Pure in-memory datasets: one memoizing instance serves every reference set.
 const LATIN_AND_HANGUL: StrokeOrderProvider[] = [createHersheyProvider(), createHersheySimplexProvider(), createHangulProvider()];
 
@@ -46,7 +54,9 @@ export interface HanReferenceProviders {
  * call: every set shares the passed providers' caches and the in-memory ones.
  */
 export function createReferenceSet(han: HanReferenceProviders, hanLocale: GeometryOptions['hanLocale']): StrokeOrderProvider[] {
-  const hanOrder = hanLocale === 'zh' ? [han.makeMeAHanzi, han.kanjiVG] : [han.kanjiVG, han.makeMeAHanzi];
+  // Asking Make Me a Hanzi about anything else only costs a failed fetch.
+  const makeMeAHanzi = onlyFor(HAN, han.makeMeAHanzi);
+  const hanOrder = hanLocale === 'zh' ? [makeMeAHanzi, han.kanjiVG] : [han.kanjiVG, makeMeAHanzi];
   return [firstMatchProvider(hanOrder), ...LATIN_AND_HANGUL];
 }
 
@@ -59,9 +69,11 @@ async function referencesFor(char: string, providers: StrokeOrderProvider[]): Pr
  * Gather reference variants for a character, provider order preserved,
  * misses and failures skipped. An accented letter no dataset has (é) takes
  * its base letter's (e): its `char` tells the pipeline to match the body
- * without the marks.
+ * without the marks. Whitespace and control characters draw nothing and
+ * have none — no dataset is asked.
  */
 export async function collectReferences(char: string, providers: StrokeOrderProvider[]): Promise<ReferenceGlyph[]> {
+  if (/^[\s\p{Cc}]*$/u.test(char)) return [];
   const refs = await referencesFor(char, providers);
   if (refs.length > 0) return refs;
   const base = hasCombiningMarks(char) ? baseLetter(char) : null;

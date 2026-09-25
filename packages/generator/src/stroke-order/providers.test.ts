@@ -22,6 +22,19 @@ describe('collectReferences', () => {
   test('outside Latin, Greek and Cyrillic there is no fallback (が stays without か)', async () => {
     expect(await collectReferences('が', [provider('か')])).toEqual([]);
   });
+
+  test('whitespace and control characters ask no dataset', async () => {
+    const asked: string[] = [];
+    const spy: StrokeOrderProvider = {
+      name: 'spy',
+      get: async (char) => {
+        asked.push(char);
+        return null;
+      },
+    };
+    for (const char of [' ', '\n', '\t', '\u3000', '\u0007']) expect(await collectReferences(char, [spy])).toEqual([]);
+    expect(asked).toEqual([]);
+  });
 });
 
 const named = (name: string, chars: string): StrokeOrderProvider => ({
@@ -57,6 +70,22 @@ describe('createReferenceSet', () => {
     const set = createReferenceSet(han, 'ja');
     expect((await collectReferences('中', set)).map((r) => r.source)).toEqual(['kanjivg']);
     expect((await collectReferences('这', set)).map((r) => r.source)).toEqual(['makemeahanzi']);
+  });
+
+  test('Make Me a Hanzi is only asked about Han characters', async () => {
+    const asked: string[] = [];
+    const spy: StrokeOrderProvider = {
+      name: 'makemeahanzi',
+      get: async (char) => {
+        asked.push(char);
+        return null;
+      },
+    };
+    for (const locale of ['ja', 'zh'] as const) {
+      const set = createReferenceSet({ kanjiVG: named('kanjivg', ''), makeMeAHanzi: spy }, locale);
+      for (const char of ['a', 'あ', 'ب', '中']) await collectReferences(char, set);
+    }
+    expect(asked).toEqual(['中', '中']);
   });
 
   test("'zh' takes Make Me a Hanzi for shared hanzi and still finds kana in KanjiVG", async () => {
