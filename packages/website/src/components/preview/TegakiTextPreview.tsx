@@ -19,6 +19,7 @@ import {
   type GeometryOptions,
   type GeometryPipelineResult,
   initStraightSkeleton,
+  isHeadlineScriptChar,
   isRtlChar,
   type ParsedFontInfo,
   type PipelineOptions,
@@ -314,12 +315,13 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
         // removes the renderer's reliance on the codepoint-fallback
         // path.
         const rtl = isRtlChar(clusterChar);
+        const headline = isHeadlineScriptChar(clusterChar);
         let res: PipelineResult | GeometryPipelineResult | undefined;
         if (geometry) {
-          const cacheKey = `#${subsetIdx}:${gid}:${rtl ? 'r' : 'l'}:${geoKey}`;
+          const cacheKey = `#${subsetIdx}:${gid}:${rtl ? 'r' : 'l'}${headline ? 'h' : ''}:${geoKey}`;
           res = geoCache.get(cacheKey);
           if (!res) {
-            const geoRes = processGlyphGeometryById(fontInfo, gid, geometryOptions, options.bezierTolerance, subsetIdx, rtl);
+            const geoRes = processGlyphGeometryById(fontInfo, gid, geometryOptions, options.bezierTolerance, subsetIdx, rtl, headline);
             if (geoRes) geoCache.set(cacheKey, geoRes);
             res = geoRes ?? undefined;
           }

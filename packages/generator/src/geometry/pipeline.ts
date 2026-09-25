@@ -53,6 +53,8 @@ export interface GeometryPipelineInput {
   descender: number;
   unitsPerEm: number;
   rtl?: boolean;
+  /** Draw a headline after the letter it caps (see `isHeadlineScriptChar`); heuristic order only. */
+  headlineLast?: boolean;
   /**
    * Stroke-order reference for this character (raw dataset frame), fetched by
    * the caller — providers are async, the pipeline is not. The pipeline
@@ -727,6 +729,7 @@ export function runGeometryPipeline(
       drawingSpeed: DRAWING_SPEED,
       strokePause: STROKE_PAUSE,
       rtl: input.rtl ?? false,
+      headlineLast: input.headlineLast ?? false,
       yTolerance: input.unitsPerEm * 0.02,
     },
     plan,

@@ -23,6 +23,7 @@ import { enumerateVariantGlyphIds } from '../font/enumerate-variants.ts';
 import { getGsubFeatures } from '../font/hb-shaper.ts';
 import { extractGlyph, extractGlyphById, inferLineCap } from '../font/parse.ts';
 import { initStraightSkeleton } from '../geometry/face-straight-skeleton.ts';
+import { isHeadlineScriptChar } from '../geometry/ordering.ts';
 import { runGeometryPipeline } from '../geometry/pipeline.ts';
 import { DEFAULT_GEOMETRY_OPTIONS, type GeometryOptions, type GeometryPipelineResult } from '../geometry/types.ts';
 import { computePathBBox, flattenPath } from '../processing/bezier.ts';
@@ -367,6 +368,7 @@ export function processGlyphGeometry(
       descender: fontInfo.descender,
       unitsPerEm: fontInfo.unitsPerEm,
       rtl: isRtlChar(char),
+      headlineLast: isHeadlineScriptChar(char),
       ...(hasReference && reference ? { reference } : {}),
     },
     rawGlyph,
@@ -379,7 +381,9 @@ export function processGlyphGeometry(
  * Run the geometry pipeline for a variant glyph identified by its opentype
  * index — the geometry counterpart of {@link processGlyphById} (same
  * `subsetIndex` / `rtl` semantics). Variant glyphs have no source character
- * to look up a stroke-order reference by, so ordering is heuristic.
+ * to look up a stroke-order reference by, so ordering is heuristic;
+ * `headlineLast`, like `rtl`, comes from the cluster that produced the variant
+ * (see `isHeadlineScriptChar`).
  */
 export function processGlyphGeometryById(
   fontInfo: ParsedFontInfo,
@@ -388,6 +392,7 @@ export function processGlyphGeometryById(
   bezierTolerance?: number,
   subsetIndex = 0,
   rtl = false,
+  headlineLast = false,
 ): GeometryPipelineResult | null {
   const font = subsetIndex === 0 ? fontInfo.font : fontInfo.extraFonts?.[subsetIndex - 1];
   if (!font) return null;
@@ -404,6 +409,7 @@ export function processGlyphGeometryById(
       descender: fontInfo.descender,
       unitsPerEm: fontInfo.unitsPerEm,
       rtl,
+      headlineLast,
     },
     rawGlyph,
     geometryOptions,
@@ -659,7 +665,15 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
       i++;
       if (geometry) {
         // Variants carry no char, so stroke order is heuristic.
-        const result = processGlyphGeometryById(fontInfo, gid, geometryOptions, options.bezierTolerance, 0, rtl);
+        const result = processGlyphGeometryById(
+          fontInfo,
+          gid,
+          geometryOptions,
+          options.bezierTolerance,
+          0,
+          rtl,
+          isHeadlineScriptChar(clusterChar),
+        );
         if (!result) continue;
         geometryResultsById[String(gid)] = result;
         variantCompact[String(gid)] = toCompactGlyph(result);

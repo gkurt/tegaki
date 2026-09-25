@@ -2,7 +2,8 @@
 //
 // Geometry strokes are already in font units, so unlike the raster pipeline
 // there's no bitmap→font-unit conversion here. This stage only decides draw
-// order (top-to-bottom, left-to-right, dots last), pen direction per stroke,
+// order (top-to-bottom, left-to-right, a headline after the letter it
+// caps, dots last), pen direction per stroke,
 // and per-point time `t` plus per-stroke delay / duration from drawing speed.
 
 import type { Stroke, TimedPoint } from 'tegaki';
@@ -118,10 +119,70 @@ function classifyDots(oriented: AxisPoint[][], priorities: number[]): void {
   }
 }
 
+const HEADLINE_MAX_RISE = 0.12;
+const HEADLINE_MIN_SPAN = 0.5;
+const HEADLINE_MAX_DEPTH = 0.35;
+
+/**
+ * Scripts whose letters hang from a headline (Devanagari's shirorekha,
+ * Bengali's matra, Gurmukhi's): the letter is written first and the
+ * headline drawn over it last, where top-to-bottom order draws it first.
+ */
+export function isHeadlineScriptChar(char: string): boolean {
+  const cp = char.codePointAt(0);
+  if (cp == null) return false;
+  // Devanagari, Bengali, Gurmukhi; Devanagari Extended
+  return (cp >= 0x0900 && cp <= 0x0a7f) || (cp >= 0xa8e0 && cp <= 0xa8ff);
+}
+
+/**
+ * Body strokes that are a headline: flat (rising at most `HEADLINE_MAX_RISE`
+ * of the letter's height), spanning at least `HEADLINE_MIN_SPAN` of its width,
+ * and lying in its top `HEADLINE_MAX_DEPTH`. The letter is measured without
+ * the marks drawn entirely above the candidate (ि's hook, ो's curl, ं): they
+ * can rise nearly a letter's height over the headline. Contact is not
+ * required: handwriting fonts leave a gap under the headline (Tillana न's
+ * body sits 50 units below it), and it is still written last. Only when other
+ * body strokes remain to draw first: a glyph that is nothing but bars keeps
+ * its order.
+ */
+export function findHeadlines(oriented: AxisPoint[][], priorities: number[]): boolean[] {
+  const flags = oriented.map(() => false);
+  const body = oriented.map((_, i) => i).filter((i) => priorities[i] === 0 && oriented[i]!.length > 0);
+  if (body.length < 2) return flags;
+  const boxes = oriented.map(bbox);
+  for (const i of body) {
+    const b = boxes[i]!;
+    const midY = (b.minY + b.maxY) / 2;
+    const letter = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    for (const j of body) {
+      const o = boxes[j]!;
+      if (o.maxY < midY) continue; // a mark above the candidate
+      letter.minX = Math.min(letter.minX, o.minX);
+      letter.minY = Math.min(letter.minY, o.minY);
+      letter.maxX = Math.max(letter.maxX, o.maxX);
+      letter.maxY = Math.max(letter.maxY, o.maxY);
+    }
+    const width = letter.maxX - letter.minX;
+    const height = letter.maxY - letter.minY;
+    flags[i] =
+      width > 0 &&
+      height > 0 &&
+      b.maxY - b.minY <= HEADLINE_MAX_RISE * height &&
+      b.maxX - b.minX >= HEADLINE_MIN_SPAN * width &&
+      midY - letter.minY <= HEADLINE_MAX_DEPTH * height;
+  }
+  // Every body stroke a headline means nothing hangs from them.
+  if (body.every((i) => flags[i])) return oriented.map(() => false);
+  return flags;
+}
+
 export interface OrderTimingParams {
   drawingSpeed: number;
   strokePause: number;
   rtl: boolean;
+  /** The glyph's script writes its headline last (see `isHeadlineScriptChar`). */
+  headlineLast?: boolean;
   yTolerance: number;
 }
 
@@ -140,7 +201,7 @@ export interface OrderPlan {
 /** Order + time geometry strokes into the renderer's Stroke shape (font units). */
 export function orderAndTimeStrokes(strokes: GeoStroke[], params: OrderTimingParams, plan?: OrderPlan): TimedGeoStroke[] {
   if (strokes.length === 0) return [];
-  const { drawingSpeed, strokePause, rtl, yTolerance } = params;
+  const { drawingSpeed, strokePause, rtl, headlineLast = false, yTolerance } = params;
 
   const oriented = plan
     ? strokes.map((s, i) => (plan.reverse[i] ? [...s.points].reverse() : s.points))
@@ -151,12 +212,17 @@ export function orderAndTimeStrokes(strokes: GeoStroke[], params: OrderTimingPar
     order = plan.sequence;
   } else {
     classifyDots(oriented, priorities);
+    // A headline sorts after the body, before the dots — within the glyph
+    // only: `priority` is the renderer's word-level deferral of disconnected
+    // marks, which a headline is not.
+    const headline = headlineLast ? findHeadlines(oriented, priorities) : [];
+    const rank = (i: number) => (priorities[i]! < 0 ? 2 : headline[i] ? 1 : 0);
     // Draw-order sort: dots last (priority), then top-to-bottom with a row
     // band, then left-to-right (right-to-left for RTL).
     order = oriented.map((_, i) => i);
     const boxes = oriented.map(bbox);
     order.sort((a, b) => {
-      if (priorities[b]! !== priorities[a]!) return priorities[b]! - priorities[a]!;
+      if (rank(a) !== rank(b)) return rank(a) - rank(b);
       const ay = boxes[a]!.minY;
       const by = boxes[b]!.minY;
       if (Math.abs(ay - by) > yTolerance) return ay - by;
