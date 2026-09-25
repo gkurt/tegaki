@@ -20,8 +20,8 @@ export interface GlyphForm {
   contextual: boolean;
   /** The text the glyph draws — the letter, or a ligature's letters. Unset for parts. */
   text?: string;
-  /** A ligature's component glyph ids, in text order. */
-  components?: number[];
+  /** A ligature's components in text order, with the letter each draws. */
+  components?: { gid: number; letter?: string }[];
   /** Candidate example texts read off the font's rules (unverified — see `findFormExamples`). */
   hints: string[];
 }
@@ -285,12 +285,15 @@ export function glyphFormsOf(graph: GsubGraph, char: string): GlyphForm[] {
     for (const edge of graph.edgesFrom.get(from.gid) ?? []) {
       let kind: GlyphFormKind;
       let text: string | undefined;
+      let components: GlyphForm['components'];
       if (edge.kind === 'ligature') {
         // The other components must draw letters too, so the ligature can be typed.
         const parts = edge.input.map((g) => (g === from.gid ? from.text : graph.letters.get(g)));
         if (parts.some((p) => p === undefined) || from.kind === 'part') continue;
         kind = 'ligature';
         text = parts.join('');
+        // A component that is itself a ligature draws no one letter.
+        components = edge.input.map((gid, k) => ([...parts[k]!].length === 1 ? { gid, letter: parts[k]! } : { gid }));
       } else if (edge.kind === 'multiple' || from.kind === 'part') {
         kind = 'part';
       } else {
@@ -301,7 +304,6 @@ export function glyphFormsOf(graph: GsubGraph, char: string): GlyphForm[] {
       const contextual = from.contextual || (graph.lookupContextual[edge.lookup] ?? false);
       const hints = contextHints(graph, edge, from.gid, char);
       if (kind === 'ligature' && text) hints.unshift(text);
-      const components = kind === 'ligature' ? { components: edge.input } : {};
       for (const gid of edge.output) {
         if (forms.has(gid) || forms.size >= MAX_FORMS) continue;
         forms.set(gid, {
@@ -311,7 +313,7 @@ export function glyphFormsOf(graph: GsubGraph, char: string): GlyphForm[] {
           features,
           contextual,
           ...(text === undefined ? {} : { text }),
-          ...components,
+          ...(components ? { components } : {}),
           hints,
         });
         queue.push(gid);

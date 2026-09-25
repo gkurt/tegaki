@@ -42,6 +42,7 @@ import { ZoomStage } from './ZoomStage.tsx';
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 const NO_WARNINGS: string[] = [];
 const NO_REFS: ReferenceGlyph[] = [];
+const NO_REFS_BY_CHAR: Record<string, ReferenceGlyph[]> = {};
 
 /** Font size of the Final stage's live render — ZoomStage scales it to fit anyway. */
 const FINAL_FONT_SIZE = 320;
@@ -100,7 +101,7 @@ export function GlyphWorkspace({
   // fetched for: [] = no dataset has an entry (or fetches failed). Fetched
   // BEFORE the pipeline runs so the (synchronous) pipeline can register +
   // match them.
-  const [refs, setRefs] = useState<{ key: string; glyphs: ReferenceGlyph[] } | null>(null);
+  const [refs, setRefs] = useState<{ key: string; byChar: Record<string, ReferenceGlyph[]> } | null>(null);
 
   const chars = useMemo(() => [...segmenter.segment(settings.chars)].map((s) => s.segment), [settings.chars]);
 
@@ -175,28 +176,41 @@ export function GlyphWorkspace({
   // Fetch the stroke-order reference variants for the selected char (memoized
   // per character by each provider). Failures (offline, rate limit) degrade to
   // "no reference" and the pipeline falls back to heuristic ordering. An
-  // alternate draws the same letter and takes its references; a ligature or a
-  // part draws no one letter and has none.
+  // alternate draws the same letter and takes its references; a ligature
+  // takes each of its letters' (ordering them one by one); a part draws no
+  // one letter and has none.
   const hanLocale = geometryOptions.hanLocale;
   const refChar = form ? (form.kind === 'alternate' ? (form.text ?? '') : '') : selectedChar;
-  const refsKey = pipeline === 'geometry' && refChar ? `${refChar}:${hanLocale}` : '';
+  const ligatureComponents = form?.kind === 'ligature' ? form.components : undefined;
+  const refChars = refChar ? [refChar] : [...new Set(ligatureComponents?.flatMap((c) => (c.letter ? [c.letter] : [])))];
+  const refsKey = pipeline === 'geometry' && refChars.length > 0 ? `${refChars.join('|')}:${hanLocale}` : '';
   useEffect(() => {
     if (!refsKey) return;
     let cancelled = false;
-    collectReferences(refChar, strokeOrderProviders(hanLocale))
-      .then((glyphs) => !cancelled && setRefs({ key: refsKey, glyphs }))
-      .catch(() => !cancelled && setRefs({ key: refsKey, glyphs: [] }));
+    const chars = refsKey.slice(0, refsKey.lastIndexOf(':')).split('|');
+    Promise.all(chars.map((c) => collectReferences(c, strokeOrderProviders(hanLocale)).catch((): ReferenceGlyph[] => []))).then(
+      (lists) => !cancelled && setRefs({ key: refsKey, byChar: Object.fromEntries(chars.map((c, i) => [c, lists[i]!])) }),
+    );
     return () => {
       cancelled = true;
     };
-  }, [refsKey, refChar, hanLocale]);
-  const refGlyphs = !refChar ? NO_REFS : refs?.key === refsKey ? refs.glyphs : undefined;
+  }, [refsKey, hanLocale]);
+  const refsByChar = !refsKey ? NO_REFS_BY_CHAR : refs?.key === refsKey ? refs.byChar : undefined;
+  const refGlyphs = refsByChar && (refChar ? (refsByChar[refChar] ?? NO_REFS) : NO_REFS);
+  const letterRefs = useMemo(
+    () => refsByChar && ligatureComponents?.map((c) => (c.letter ? { ...c, reference: refsByChar[c.letter] ?? NO_REFS } : c)),
+    [refsByChar, ligatureComponents],
+  );
 
   // Geometry pipeline — waits for the current char's references, so a single
   // pipeline run sees them (and never runs with the previous char's).
   const geoKey =
     pipeline === 'geometry' && fontInfo && selectedChar && refGlyphs
-      ? `${fontCacheId(fontInfo)}:${selectedChar}:${formSubset}:${formGid}:${options.bezierTolerance}:${JSON.stringify(geometryOptions)}:${refGlyphs.map((r) => r.source).join('+') || 'noref'}`
+      ? `${fontCacheId(fontInfo)}:${selectedChar}:${formSubset}:${formGid}:${options.bezierTolerance}:${JSON.stringify(geometryOptions)}:${
+          [...refGlyphs, ...(letterRefs ?? []).flatMap((c) => ('reference' in c ? (c.reference ?? []) : []))]
+            .map((r) => r.source)
+            .join('+') || 'noref'
+        }`
       : '';
   useEffect(() => {
     if (!geoKey || !fontInfo || !refGlyphs) return;
@@ -222,7 +236,7 @@ export function GlyphWorkspace({
               isRtlChar(selectedChar),
               isHeadlineScriptChar(selectedChar),
               refChar ? { char: refChar, reference: refGlyphs } : undefined,
-              form?.kind === 'ligature' ? form.components : undefined,
+              letterRefs,
             )
           : processGlyphGeometry(fontInfo, selectedChar, geometryOptions, options.bezierTolerance, refGlyphs);
         if (res) geoResultsCache.current.set(geoKey, res);
@@ -236,7 +250,7 @@ export function GlyphWorkspace({
       cancelled = true;
       clearTimeout(id);
     };
-  }, [geoKey, fontInfo, selectedChar, form, formGid, formSubset, refChar, geometryOptions, options.bezierTolerance, refGlyphs]);
+  }, [geoKey, fontInfo, selectedChar, formGid, formSubset, refChar, geometryOptions, options.bezierTolerance, refGlyphs, letterRefs]);
 
   // The last result of the active pipeline (possibly for other inputs), and
   // whether the one for the current inputs is still being computed.

@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import type { Point } from 'tegaki';
-import { parseFont, processGlyphGeometry } from '../commands/generate.ts';
+import { parseFont, processGlyphGeometry, processGlyphGeometryById } from '../commands/generate.ts';
+import { enumerateVariantGlyphIds } from '../font/enumerate-variants.ts';
 import { createHangulProvider } from '../stroke-order/hangul.ts';
-import { createHersheyProvider } from '../stroke-order/hershey.ts';
+import { createHersheyProvider, createHersheySimplexProvider } from '../stroke-order/hershey.ts';
 import type { ReferenceGlyph } from '../stroke-order/types.ts';
+import { componentSlots, ligatureComponentEdges } from './ordering.ts';
 import { hasCanonicalStrokeOrder } from './pipeline.ts';
 import { DEFAULT_GEOMETRY_OPTIONS } from './types.ts';
 
@@ -85,5 +87,73 @@ describe('reference re-grouping on a cursive Hangul font', () => {
     expect(r.strokeOrderRegrouped).toBe(true);
     expect(r.strokesFontUnits.length).toBe(reference.strokes.length);
     expect(r.warnings.join(' ')).not.toContain('retraced');
+  });
+});
+
+/** A print L in two strokes, stem then foot, in a 109-unit frame like KanjiVG's. */
+const PRINT_L: ReferenceGlyph = {
+  char: 'L',
+  source: 'print',
+  license: 'test',
+  viewBox: { width: 109, height: 109 },
+  strokes: [line(25, 12, 25, 95), line(25, 95, 90, 95)],
+};
+
+describe('reference variants on a cursive Latin font', () => {
+  test("a variant that fits the font's own strokes beats one that has to cut them (Caveat's one-stroke L)", async () => {
+    const cursive = (await createHersheySimplexProvider().get('L'))!;
+    const r = processGlyphGeometry(caveat, 'L', DEFAULT_GEOMETRY_OPTIONS, undefined, [PRINT_L, cursive])!;
+    expect(r.reference?.source).toBe(cursive.source);
+    expect(r.strokesFontUnits.length).toBe(1);
+  });
+});
+
+describe('a ligature ordered letter by letter', () => {
+  const ffi = [...enumerateVariantGlyphIds(caveat.font, ['f', 'i']).values()].find((v) => caveat.font.glyphs.get(v.gid).name === 'f_f_i')!;
+  const hershey = createHersheyProvider();
+  const components = async () =>
+    Promise.all(ffi.components!.map(async (c) => ({ gid: c.gid, char: c.letter!, reference: (await hershey.get(c.letter!))! })));
+
+  test("each letter's strokes draw before the next letter's, the i's last (Caveat's f_f_i)", async () => {
+    const r = processGlyphGeometryById(
+      caveat,
+      ffi.gid,
+      DEFAULT_GEOMETRY_OPTIONS,
+      undefined,
+      0,
+      false,
+      false,
+      undefined,
+      await components(),
+    )!;
+    const edges = ligatureComponentEdges(
+      ffi.components!.map((c) => caveat.font.glyphs.get(c.gid).advanceWidth!),
+      r.advanceWidth,
+    );
+    const slots = componentSlots(
+      r.strokesFontUnits.map((s) => s.points),
+      edges,
+    );
+    expect(slots).toEqual([...slots].sort((a, b) => a - b));
+    expect(new Set(slots)).toEqual(new Set([0, 1, 2]));
+  });
+
+  test("each letter meets its own reference, registered onto that letter's ink", async () => {
+    const r = processGlyphGeometryById(
+      caveat,
+      ffi.gid,
+      DEFAULT_GEOMETRY_OPTIONS,
+      undefined,
+      0,
+      false,
+      false,
+      undefined,
+      await components(),
+    )!;
+    // The f's miss theirs and say so, by letter.
+    expect(r.warnings.some((w) => w.startsWith('f: stroke order'))).toBe(true);
+    const refXs = r.reference!.strokes.map((s) => Math.min(...s.points.map((p) => p.x)));
+    // The i's reference sits over the i, right of both f's.
+    expect(Math.max(...refXs)).toBeGreaterThan(caveat.font.glyphs.get(ffi.components![0]!.gid).advanceWidth! * 1.5);
   });
 });

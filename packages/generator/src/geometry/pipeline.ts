@@ -14,7 +14,7 @@ import { computePathBBox, flattenPath } from '../processing/bezier.ts';
 import { guideOrderByReference } from '../stroke-order/guide.ts';
 import { matchStrokes, type StrokeMatchResult } from '../stroke-order/match.ts';
 import { registerReference } from '../stroke-order/register.ts';
-import type { ReferenceGlyph } from '../stroke-order/types.ts';
+import type { ReferenceGlyph, RegisteredReference } from '../stroke-order/types.ts';
 import { splitBentStrokes } from './bends.ts';
 import { buildContours, findContourOverlaps } from './contours.ts';
 import { detectCorners } from './corners.ts';
@@ -28,7 +28,7 @@ import { SegmentIndex } from './ink/spatial.ts';
 import { extendUnpairedEnds, routeJunctionPaths } from './junction-routing.ts';
 import { findMarkStrokes, hasCombiningMarks } from './marks.ts';
 import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
-import { ligatureComponentEdges, type OrderPlan, orderAndTimeStrokes } from './ordering.ts';
+import { componentSlots, ligatureComponentEdges, type OrderPlan, orderAndTimeStrokes, type StrokeGroup } from './ordering.ts';
 import { classifyFaces, dissolvePartitionDebris, partitionFaces } from './partition.ts';
 import { dist, pointInPolygon, sub } from './primitives.ts';
 import { partitionRegions, splitComponents } from './regions.ts';
@@ -69,11 +69,32 @@ export interface GeometryPipelineInput {
    */
   reference?: ReferenceGlyph | ReferenceGlyph[];
   /**
-   * A ligature's components' advance widths, in text order: without a
-   * reference, an LTR ligature is then drawn letter by letter (see
-   * `ligatureComponentEdges`).
+   * A ligature's components, in text order: without a reference of its own,
+   * an LTR ligature is then drawn letter by letter, each letter ordered by
+   * its own references (see `ligatureComponentEdges`).
    */
-  componentAdvances?: readonly number[];
+  components?: readonly LigatureComponent[];
+}
+
+/** One letter of a ligature (see `GeometryPipelineInput.components`). */
+export interface LigatureComponent {
+  /** Advance width of the component's own glyph — where the letter sits in the ligature. */
+  advance: number;
+  /** The letter it draws, when it draws one. */
+  char?: string;
+  /** Stroke-order references for `char`, as `GeometryPipelineInput.reference`. */
+  reference?: ReferenceGlyph | ReferenceGlyph[] | null;
+}
+
+/** What a stroke-order reference decides for a set of strokes (see `orderByReference`). */
+interface ReferenceOrder {
+  reference: RegisteredReference;
+  /** The strokes, re-grouped when the reference re-grouped them. */
+  strokes: GeoStroke[];
+  plan?: OrderPlan;
+  source: GeometryPipelineResult['strokeOrderSource'];
+  regrouped: boolean;
+  warnings: string[];
 }
 
 /** Union-find helper for grouping adjacent junction faces. */
@@ -603,33 +624,24 @@ export function runGeometryPipeline(
   // runs through all of them (口 as one loop). Cut the others (see bends.ts).
   if (BENT_STROKE_SCRIPT.test(input.char)) geoStrokes.splice(0, geoStrokes.length, ...splitBentStrokes(geoStrokes));
 
-  // Stage 7: order + timing across all regions at once. When a stroke-order
+  // Stage 7: order + timing across all regions at once.
+  // A stroke-order reference's say over a set of strokes — the glyph's
+  // body, or one letter of a ligature — registered onto their ink. When a
   // reference is present (and not disabled), a clean match REPLACES the
   // heuristic order/orientation. When the match is UNCLEAN, the reference can
   // still guide a re-grouping of the same ink (split at reference seams,
   // chain along one reference stroke — see regroup.ts), adopted only when the
   // re-grouped strokes re-match clean; anything else degrades per mode so
   // dataset ordering is never worse than the heuristic baseline.
-  let reference: GeometryPipelineResult['reference'];
-  let plan: OrderPlan | undefined;
-  let strokeOrderSource: GeometryPipelineResult['strokeOrderSource'] = 'heuristic';
-  let strokeOrderRegrouped = false;
-  const referenceVariants = input.reference ? (Array.isArray(input.reference) ? input.reference : [input.reference]) : [];
-  // An accented letter's marks draw after its body, and the body alone
-  // meets the reference — the base letter's, unless the character has its
-  // own (see marks.ts).
-  const marks =
-    hasCombiningMarks(input.char) && !referenceVariants.some((r) => r.char === input.char)
-      ? findMarkStrokes(geoStrokes)
-      : geoStrokes.map(() => false);
-  const markStrokes = geoStrokes.filter((_, i) => marks[i]).map((s) => ({ ...s, mark: true }));
-  const bodyStrokes = markStrokes.length > 0 ? geoStrokes.filter((_, i) => !marks[i]) : geoStrokes;
-  const bodyBBox = markStrokes.length > 0 ? strokesBBox(bodyStrokes) : pathBBox;
-  let outStrokes = bodyStrokes;
-  if (referenceVariants.length > 0) {
-    reference = registerReference(referenceVariants[0]!, bodyBBox);
-    if (geometryOptions.strokeOrder !== 'heuristic' && bodyStrokes.length > 0) {
-      const glyphDiag = Math.hypot(bodyBBox.x2 - bodyBBox.x1, bodyBBox.y2 - bodyBBox.y1);
+  const orderByReference = (strokes: GeoStroke[], variants: ReferenceGlyph[], bbox: BBox, char: string): ReferenceOrder => {
+    const warnings: string[] = [];
+    let reference = registerReference(variants[0]!, bbox);
+    let plan: OrderPlan | undefined;
+    let strokeOrderSource: GeometryPipelineResult['strokeOrderSource'] = 'heuristic';
+    let strokeOrderRegrouped = false;
+    let outStrokes = strokes;
+    if (geometryOptions.strokeOrder !== 'heuristic' && strokes.length > 0) {
+      const glyphDiag = Math.hypot(bbox.x2 - bbox.x1, bbox.y2 - bbox.y1);
       // Matched pairs (0.01–0.06 measured on Klee One) sit far below
       // wrong-stroke assignments (≥ ~0.15); between them a generous margin.
       const AUTO_MAX_MEAN_COST = 0.15;
@@ -651,7 +663,7 @@ export function runGeometryPipeline(
         const index = outlineIndex;
         return simplifyKeepingNibs(points, simplifyEps, (p) => index.nearest(p));
       };
-      const totalInk = bodyStrokes.reduce(
+      const totalInk = strokes.reduce(
         (sum, g) => sum + g.points.reduce((len, p, i) => (i > 0 ? len + dist(g.points[i - 1]!, p) : len), 0),
         0,
       );
@@ -662,21 +674,21 @@ export function runGeometryPipeline(
       // KanjiVG's print-style m (three strokes) loses to Hershey's cursive
       // m (one trajectory) on a cursive font, and the reverse on a print
       // font. Only the winner's warnings surface.
-      const evals = referenceVariants.map((variant) => {
-        const registered = registerReference(variant, bodyBBox);
+      const evals = variants.map((variant) => {
+        const registered = registerReference(variant, bbox);
         const refPolylines = registered.strokes.map((s) => s.points);
         let match = matchStrokes(
-          bodyStrokes.map((g) => g.points),
+          strokes.map((g) => g.points),
           refPolylines,
           glyphDiag,
         );
         let clean = isClean(match);
-        let variantStrokes = bodyStrokes;
+        let variantStrokes = strokes;
         let regrouped = false;
         let rankCost = match.meanCost;
         const variantWarnings: string[] = [];
         if (!clean) {
-          const proposal = regroupStrokesByReference(bodyStrokes, refPolylines, {
+          const proposal = regroupStrokesByReference(strokes, refPolylines, {
             spacing: resolved.resampleSpacing,
             minRunLength: resolved.resampleSpacing * 3,
             glyphDiag,
@@ -685,11 +697,11 @@ export function runGeometryPipeline(
             // jamo's strokes (Hangul), a retraced split gives way to a clean
             // one; where the reference is one style among several (Latin),
             // the font's own strokes stand.
-            retracedSplits: hasCanonicalStrokeOrder(input.char) ? 'allow' : GUIDED_STROKE_ORDER.test(input.char) ? 'avoid' : 'reject',
+            retracedSplits: hasCanonicalStrokeOrder(char) ? 'allow' : GUIDED_STROKE_ORDER.test(char) ? 'avoid' : 'reject',
           });
           if (proposal) {
             const candidate = carryNibs(
-              bodyStrokes,
+              strokes,
               proposal.strokes.map((gs) => ({ ...gs, points: simplifyRegrouped(gs.points) })),
             );
             // Lifted extras sit at the END of the proposal and have no
@@ -719,14 +731,14 @@ export function runGeometryPipeline(
             // never lifted — Caveat's one-stroke W re-cut into KanjiVG's four
             // print strokes, its last stroke left with just the tip; A's leg
             // cut at the crossbar.
-            const retracedSplit = chains.length > bodyStrokes.length && proposal.retraces > 0 && !hasCanonicalStrokeOrder(input.char);
+            const retracedSplit = chains.length > strokes.length && proposal.retraces > 0 && !hasCanonicalStrokeOrder(char);
             if (retracedSplit) {
               variantWarnings.push(
-                `stroke order: dataset re-grouping rejected (${bodyStrokes.length} extracted strokes split into ${chains.length} by retracing)`,
+                `stroke order: dataset re-grouping rejected (${strokes.length} extracted strokes split into ${chains.length} by retracing)`,
               );
             } else if (rematch.extractedCount === rematch.referenceCount && rematchCost <= AUTO_MAX_MEAN_COST) {
               variantWarnings.push(
-                `stroke order: re-grouped ${bodyStrokes.length} extracted strokes into ${chains.length} matching the dataset (${proposal.splits} split, ${proposal.merges} merged${proposal.retraces > 0 ? `, ${proposal.retraces} retraced` : ''}${proposal.pruned > 0 ? `, ${Math.round(proposal.pruned)} units of duplicated ink pruned` : ''}${proposal.extras > 0 ? `; ${proposal.extras} leftover stroke${proposal.extras === 1 ? '' : 's'} appended after the dataset order` : ''})`,
+                `stroke order: re-grouped ${strokes.length} extracted strokes into ${chains.length} matching the dataset (${proposal.splits} split, ${proposal.merges} merged${proposal.retraces > 0 ? `, ${proposal.retraces} retraced` : ''}${proposal.pruned > 0 ? `, ${Math.round(proposal.pruned)} units of duplicated ink pruned` : ''}${proposal.extras > 0 ? `; ${proposal.extras} leftover stroke${proposal.extras === 1 ? '' : 's'} appended after the dataset order` : ''})`,
               );
               variantStrokes = candidate;
               match = rematch;
@@ -740,11 +752,18 @@ export function runGeometryPipeline(
             }
           }
         }
-        return { registered, match, clean, strokes: variantStrokes, regrouped, rankCost, warnings: variantWarnings };
+        // Cut the font's strokes into more, where the order is one style
+        // among several (see `retracedSplit`).
+        const cutsFontStrokes = regrouped && variantStrokes.length > strokes.length && !hasCanonicalStrokeOrder(char);
+        return { registered, match, clean, strokes: variantStrokes, regrouped, cutsFontStrokes, rankCost, warnings: variantWarnings };
       });
+      // A variant that fits the font's own strokes beats one that has to cut
+      // them, however low the cut's cost: Dancing Script's w_r takes Hershey's
+      // two-stroke cursive w as drawn, not KanjiVG's print w cut into four.
       evals.sort(
         (a, b) =>
           Number(b.clean) - Number(a.clean) ||
+          Number(a.cutsFontStrokes) - Number(b.cutsFontStrokes) ||
           Number(b.match.extractedCount === b.match.referenceCount) - Number(a.match.extractedCount === a.match.referenceCount) ||
           a.rankCost - b.rankCost,
       );
@@ -755,8 +774,8 @@ export function runGeometryPipeline(
       const match = bestEval.match;
       const clean = bestEval.clean;
       warnings.push(...bestEval.warnings);
-      if (referenceVariants.length > 1) {
-        warnings.push(`stroke order: adopted '${bestEval.registered.source}' among ${referenceVariants.length} reference variants`);
+      if (variants.length > 1) {
+        warnings.push(`stroke order: adopted '${bestEval.registered.source}' among ${variants.length} reference variants`);
       }
       const countsAgree = match.extractedCount === match.referenceCount;
       if (clean || geometryOptions.strokeOrder === 'dataset') {
@@ -778,7 +797,7 @@ export function runGeometryPipeline(
           : `${match.referenceCount} reference vs ${match.extractedCount} extracted strokes`;
         // Where the order is standardized, the reference still orders ink it
         // can't pair 1:1 with (a cursive font's merged jamo).
-        const guided = GUIDED_STROKE_ORDER.test(input.char)
+        const guided = GUIDED_STROKE_ORDER.test(char)
           ? guideOrderByReference(
               outStrokes.map((s) => s.points),
               reference.strokes,
@@ -794,6 +813,90 @@ export function runGeometryPipeline(
         }
       }
     }
+    return {
+      reference,
+      ...(plan ? { plan } : {}),
+      source: strokeOrderSource,
+      regrouped: strokeOrderRegrouped,
+      strokes: outStrokes,
+      warnings,
+    };
+  };
+
+  let reference: GeometryPipelineResult['reference'];
+  let plan: OrderPlan | undefined;
+  let strokeOrderSource: GeometryPipelineResult['strokeOrderSource'] = 'heuristic';
+  let strokeOrderRegrouped = false;
+  const referenceVariants = input.reference ? (Array.isArray(input.reference) ? input.reference : [input.reference]) : [];
+  // An accented letter's marks draw after its body, and the body alone
+  // meets the reference — the base letter's, unless the character has its
+  // own (see marks.ts).
+  const marks =
+    hasCombiningMarks(input.char) && !referenceVariants.some((r) => r.char === input.char)
+      ? findMarkStrokes(geoStrokes)
+      : geoStrokes.map(() => false);
+  const markStrokes = geoStrokes.filter((_, i) => marks[i]).map((s) => ({ ...s, mark: true }));
+  const bodyStrokes = markStrokes.length > 0 ? geoStrokes.filter((_, i) => !marks[i]) : geoStrokes;
+  const bodyBBox = markStrokes.length > 0 ? strokesBBox(bodyStrokes) : pathBBox;
+  let outStrokes = bodyStrokes;
+  let groups: StrokeGroup[] | undefined;
+  // RTL ligatures stack their letters (Amiri's), and headline scripts'
+  // conjuncts share one headline: their letters don't sit side by side.
+  const components = !input.rtl && !input.headlineLast && referenceVariants.length === 0 ? input.components : undefined;
+  const componentEdges = components
+    ? ligatureComponentEdges(
+        components.map((c) => c.advance),
+        input.advanceWidth,
+      )
+    : [];
+  if (referenceVariants.length > 0) {
+    const ordered = orderByReference(bodyStrokes, referenceVariants, bodyBBox, input.char);
+    reference = ordered.reference;
+    plan = ordered.plan;
+    strokeOrderSource = ordered.source;
+    strokeOrderRegrouped = ordered.regrouped;
+    outStrokes = ordered.strokes;
+    warnings.push(...ordered.warnings);
+  } else if (components && componentEdges.length > 0) {
+    // A ligature draws letter by letter, each ordered by its own references
+    // registered onto its own ink — or heuristically, like a letter without.
+    const slots = componentSlots(
+      bodyStrokes.map((s) => s.points),
+      componentEdges,
+    );
+    const letterReferences: RegisteredReference[] = [];
+    const sources: GeometryPipelineResult['strokeOrderSource'][] = [];
+    const letters: GeoStroke[] = [];
+    groups = [];
+    components.forEach((component, k) => {
+      const letterStrokes = bodyStrokes.filter((_, i) => slots[i] === k);
+      if (letterStrokes.length === 0) return;
+      const variants = component.reference ? (Array.isArray(component.reference) ? component.reference : [component.reference]) : [];
+      const offset = letters.length;
+      let ordered: Pick<ReferenceOrder, 'strokes' | 'plan'> = { strokes: letterStrokes };
+      if (variants.length > 0 && component.char) {
+        const letter = orderByReference(letterStrokes, variants, strokesBBox(letterStrokes), component.char);
+        warnings.push(...letter.warnings.map((w) => `${component.char}: ${w}`));
+        letterReferences.push(letter.reference);
+        sources.push(letter.source);
+        if (letter.regrouped) strokeOrderRegrouped = true;
+        ordered = letter;
+      } else {
+        sources.push('heuristic');
+      }
+      letters.push(...ordered.strokes);
+      groups!.push({ strokes: ordered.strokes.map((_, i) => offset + i), ...(ordered.plan ? { plan: ordered.plan } : {}) });
+    });
+    outStrokes = letters;
+    if (letterReferences.length > 0) {
+      reference = {
+        ...letterReferences[0]!,
+        source: [...new Set(letterReferences.map((r) => r.source))].join('+'),
+        strokes: letterReferences.flatMap((r) => r.strokes),
+      };
+    }
+    // The glyph's order is only as sure as its least sure letter.
+    strokeOrderSource = sources.includes('heuristic') ? 'heuristic' : sources.includes('guided') ? 'guided' : 'dataset';
   }
 
   if (markStrokes.length > 0) {
@@ -814,11 +917,7 @@ export function runGeometryPipeline(
       headlineLast: input.headlineLast ?? false,
       topEntry: TOP_ENTRY_SCRIPT.test(input.char),
       yTolerance: input.unitsPerEm * 0.02,
-      // RTL ligatures stack their letters (Amiri's), and headline scripts'
-      // conjuncts share one headline: their slots don't follow the advances.
-      ...(input.componentAdvances && !input.rtl && !input.headlineLast
-        ? { componentEdges: ligatureComponentEdges(input.componentAdvances, input.advanceWidth) }
-        : {}),
+      ...(groups ? { groups } : {}),
     },
     plan,
   );

@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { findHeadlines, HEADLINE_PRIORITY, isHeadlineScriptChar, ligatureComponentEdges, orderAndTimeStrokes } from './ordering.ts';
+import {
+  componentSlots,
+  findHeadlines,
+  HEADLINE_PRIORITY,
+  isHeadlineScriptChar,
+  ligatureComponentEdges,
+  orderAndTimeStrokes,
+  type StrokeGroup,
+} from './ordering.ts';
 import type { GeoStroke } from './types.ts';
 
 const stroke = (...pts: [number, number][]): GeoStroke => ({
@@ -62,24 +70,52 @@ describe('ligature order', () => {
   const wLeft = stroke([30, -270], [150, 0], [260, -270]);
   const wRight = stroke([260, -260], [370, 0], [487, -260]);
   const r = stroke([491, -100], [600, -390], [990, -300]);
-  const firstXs = (strokes: GeoStroke[], componentEdges?: number[]) =>
-    orderAndTimeStrokes(strokes, { ...PARAMS, ...(componentEdges ? { componentEdges } : {}) }).map((s) =>
-      Math.min(...s.points.map((p) => p.x)),
+  /** One heuristic group per ligature slot, as the pipeline builds them for letters without references. */
+  const slotGroups = (strokes: GeoStroke[], edges: number[]): StrokeGroup[] => {
+    const slots = componentSlots(
+      strokes.map((s) => s.points),
+      edges,
     );
+    return Array.from({ length: edges.length + 1 }, (_, k) => ({ strokes: slots.flatMap((slot, i) => (slot === k ? [i] : [])) }));
+  };
+  const drawn = (strokes: GeoStroke[], groups?: StrokeGroup[]) =>
+    orderAndTimeStrokes(strokes, { ...PARAMS, ...(groups ? { groups } : {}) });
+  const firstXs = (strokes: GeoStroke[], groups?: StrokeGroup[]) =>
+    drawn(strokes, groups).map((s) => Math.min(...s.points.map((p) => p.x)));
 
   test('top-to-bottom alone draws the taller r before the w', () => {
     expect(firstXs([wLeft, wRight, r])).toEqual([491, 30, 260]);
   });
 
-  test('component edges draw a ligature letter by letter: the w, then the r', () => {
-    expect(firstXs([wLeft, wRight, r], ligatureComponentEdges([617, 348], 966))).toEqual([30, 260, 491]);
+  test('letter groups draw a ligature letter by letter: the w, then the r', () => {
+    const strokes = [wLeft, wRight, r];
+    expect(firstXs(strokes, slotGroups(strokes, ligatureComponentEdges([617, 348], 966)))).toEqual([30, 260, 491]);
   });
 
   test("a stroke belongs to the letter holding its ink's midpoint, not its leftmost point", () => {
     // Reaches back over the w's slot, but most of its ink lies in the r's.
     const hooked = stroke([560, -100], [600, -390], [990, -300]);
     const reach = stroke([400, -400], [560, -100]);
-    expect(firstXs([hooked, wLeft, reach], [617])).toEqual([400, 30, 560]);
+    expect(componentSlots([hooked.points, reach.points], [617])).toEqual([1, 0]);
+    const strokes = [hooked, wLeft, reach];
+    expect(firstXs(strokes, slotGroups(strokes, [617]))).toEqual([400, 30, 560]);
+  });
+
+  test("a letter's plan orders and orients its strokes; the other letters keep their turn", () => {
+    // The w's reference draws its right half first, from its right end.
+    const groups: StrokeGroup[] = [{ strokes: [0, 1], plan: { sequence: [1, 0], reverse: [false, true] } }, { strokes: [2] }];
+    const order = drawn([wLeft, wRight, r], groups);
+    expect(order.map((s) => Math.min(...s.points.map((p) => p.x)))).toEqual([260, 30, 491]);
+    expect(order[0]!.points[0]!.x).toBe(487);
+  });
+
+  test("a dot draws where its letter's plan puts it, and last in a letter without one", () => {
+    const dot = stroke([200, -470], [204, -474]);
+    const stem = stroke([130, -300], [150, 0]);
+    const planned: StrokeGroup[] = [{ strokes: [0, 1], plan: { sequence: [1, 0], reverse: [false, false] } }];
+    expect(drawn([stem, dot], planned).map((s) => s.priority ?? 0)).toEqual([0, 0]);
+    expect(drawn([stem, dot], planned)[0]!.points[0]!.y).toBe(-470);
+    expect(drawn([stem, dot], [{ strokes: [0, 1] }]).at(-1)!.priority).toBe(-1);
   });
 });
 
@@ -92,6 +128,10 @@ describe('ligatureComponentEdges', () => {
   test('no edges for one component, or components without advance (combining marks)', () => {
     expect(ligatureComponentEdges([500], 500)).toEqual([]);
     expect(ligatureComponentEdges([0, 0], 0)).toEqual([]);
+  });
+
+  test("no edges when the components don't fill the ligature: a fraction's digits are drawn small (Dancing Script ¼)", () => {
+    expect(ligatureComponentEdges([365, 330, 478], 642)).toEqual([]);
   });
 });
 

@@ -34,12 +34,16 @@ describe('enumerateVariantGlyphIds letter', () => {
 });
 
 describe('enumerateVariantGlyphIds components', () => {
-  test("a ligature records its components in text order (Caveat's f_f_i: f, f, i)", async () => {
+  test("a ligature records its components in text order, with their letters (Caveat's f_f_i: f, f, i)", async () => {
     const font = await load('caveat');
     const f = font.charToGlyphIndex('f');
     const i = font.charToGlyphIndex('i');
     const ffi = [...enumerateVariantGlyphIds(font, ['f', 'i']).values()].find((v) => font.glyphs.get(v.gid).name === 'f_f_i');
-    expect(ffi?.components).toEqual([f, f, i]);
+    expect(ffi?.components).toEqual([
+      { gid: f, letter: 'f' },
+      { gid: f, letter: 'f' },
+      { gid: i, letter: 'i' },
+    ]);
   });
 
   test('a letter records none', async () => {

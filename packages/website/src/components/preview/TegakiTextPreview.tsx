@@ -28,8 +28,10 @@ import {
   processGlyphById,
   processGlyphGeometry,
   processGlyphGeometryById,
+  type ReferenceGlyph,
   subsetUnicodeRanges,
   toCompactStroke,
+  type VariantComponent,
 } from 'tegaki-generator';
 import type { Pipeline } from './constants.ts';
 import { fontCacheId } from './font-cache-id.ts';
@@ -51,10 +53,19 @@ function toCompactGlyph(res: PipelineResult | GeometryPipelineResult): TegakiGly
   };
 }
 
-/** A ligature's component glyphs: its letters' nominal glyphs in the font subset that drew it. */
-function ligatureComponents(fontInfo: ParsedFontInfo, subsetIdx: number, letters: string): number[] | undefined {
+/**
+ * A ligature's components: its letters' nominal glyphs in the font subset
+ * that drew it, each with the letter's stroke-order references.
+ */
+async function ligatureComponents(
+  fontInfo: ParsedFontInfo,
+  subsetIdx: number,
+  letters: string,
+  referencesOf: (char: string) => Promise<ReferenceGlyph[]>,
+): Promise<VariantComponent[] | undefined> {
   const font = subsetIdx === 0 ? fontInfo.font : fontInfo.extraFonts?.[subsetIdx - 1];
-  return font ? [...letters].map((ch) => font.charToGlyphIndex(ch)) : undefined;
+  if (!font) return undefined;
+  return Promise.all([...letters].map(async (char) => ({ gid: font.charToGlyphIndex(char), char, reference: await referencesOf(char) })));
 }
 
 /** Let the browser paint between glyphs while a long geometry run is in progress. */
@@ -293,18 +304,26 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
         let res: PipelineResult | GeometryPipelineResult | undefined;
         if (geometry) {
           // A glyph drawing one letter takes that letter's stroke-order
-          // references, like its char-keyed copy (the renderer draws this one).
-          const refs =
-            letter === undefined || geometryOptions.strokeOrder === 'heuristic'
-              ? []
-              : await collectReferences(letter, strokeOrderProviders(geometryOptions.hanLocale)).catch(() => []);
+          // references, like its char-keyed copy (the renderer draws this
+          // one); a ligature takes each of its letters'.
+          const referencesOf = (char: string): Promise<ReferenceGlyph[]> =>
+            geometryOptions.strokeOrder === 'heuristic'
+              ? Promise.resolve([])
+              : collectReferences(char, strokeOrderProviders(geometryOptions.hanLocale)).catch(() => []);
+          const refs = letter === undefined ? [] : await referencesOf(letter);
+          const components = ligature === undefined ? undefined : await ligatureComponents(fontInfo, subsetIdx, ligature, referencesOf);
           if (cancelled) return;
+          const sourcesKey = (reference: VariantComponent['reference']) =>
+            [reference ?? []]
+              .flat()
+              .map((r) => r.source)
+              .join('+') || 'noref';
           const letterKey =
-            letter === undefined
-              ? ligature === undefined
-                ? ''
-                : `:lig:${ligature}`
-              : `:${letter}:${refs.map((r) => r.source).join('+') || 'noref'}`;
+            letter !== undefined
+              ? `:${letter}:${sourcesKey(refs)}`
+              : components
+                ? `:lig:${components.map((c) => `${c.char}=${sourcesKey(c.reference)}`).join(',')}`
+                : '';
           const cacheKey = `#${subsetIdx}:${gid}:${rtl ? 'r' : 'l'}${headline ? 'h' : ''}${letterKey}:${geoKey}`;
           res = geoCache.get(cacheKey);
           if (!res) {
@@ -317,7 +336,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
               rtl,
               headline,
               letter === undefined ? undefined : { char: letter, reference: refs },
-              ligature === undefined ? undefined : ligatureComponents(fontInfo, subsetIdx, ligature),
+              components,
             );
             if (geoRes) geoCache.set(cacheKey, geoRes);
             res = geoRes ?? undefined;

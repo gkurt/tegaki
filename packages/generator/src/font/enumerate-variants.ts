@@ -13,8 +13,8 @@ export interface VariantGlyph {
    * one. Stroke-order references are looked up by it.
    */
   letter?: string;
-  /** A ligature's component glyph ids, in text order (the first rule found that forms it). */
-  components?: number[];
+  /** A ligature's components in text order (by the first rule found that forms it), with the letter each draws. */
+  components?: { gid: number; letter?: string }[];
 }
 
 /**
@@ -71,7 +71,14 @@ export function enumerateVariantGlyphIds(font: opentype.Font, chars: readonly st
       gid,
       clusterChar,
       ...(letter === undefined ? {} : { letter }),
-      ...(parts === undefined ? {} : { components: parts }),
+      ...(parts === undefined
+        ? {}
+        : {
+            components: parts.map((part) => {
+              const partLetter = letters.get(part);
+              return partLetter === undefined ? { gid: part } : { gid: part, letter: partLetter };
+            }),
+          }),
     });
   }
   return variants;

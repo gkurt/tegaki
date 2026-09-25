@@ -33,6 +33,7 @@ export {
   processGlyphGeometryById,
   type TegakiBundleOutput,
   toCompactStroke,
+  type VariantComponent,
   type VariantLetter,
 } from './commands/generate.ts';
 export {
@@ -59,7 +60,7 @@ export { enumerateFontChars } from './font/parse.ts';
 export { subsetUnicodeRanges } from './font/unicode-range.ts';
 export { initStraightSkeleton, isStraightSkeletonReady } from './geometry/face-straight-skeleton.ts';
 export { findHeadlines, isHeadlineScriptChar } from './geometry/ordering.ts';
-export type { GeometryPipelineInput } from './geometry/pipeline.ts';
+export type { GeometryPipelineInput, LigatureComponent } from './geometry/pipeline.ts';
 export {
   type AxisEnd,
   type AxisPoint,
