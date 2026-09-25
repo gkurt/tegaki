@@ -155,7 +155,13 @@ export function pickGeometryOptions(args: GeometryOptions): GeometryOptions {
 // ── CLI argument schema ───────────────────────────────────────────────────
 
 export const generateArgsSchema = pipelineOptionsSchema.extend(geometryOptionsSchema.shape).extend({
-  family: z.string().default(DEFAULT_FONT_FAMILY).describe('Google Fonts family name'),
+  family: z.string().optional().describe(`Google Fonts family name (default: ${DEFAULT_FONT_FAMILY})`),
+  fontFile: z
+    .string()
+    .optional()
+    .describe(
+      "Read the font from this TTF/OTF file instead of Google Fonts, subset to the generated characters; the bundle takes the font's own family name",
+    ),
   pipeline: z
     .enum(['geometry', 'raster'])
     .default('geometry')

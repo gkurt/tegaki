@@ -17,6 +17,7 @@ import { formatStrokeOrderSummary, runStrokeOrderReport } from '../commands/stro
 import { DEFAULT_CHARS, DEFAULT_FONT_FAMILY } from '../constants.ts';
 import { writeDebugOutput, writeGeometryDebugOutput } from '../debug/output.ts';
 import { downloadFont } from '../font/download.ts';
+import { loadLocalFont } from '../font/local.ts';
 import { enumerateFontChars } from '../font/parse.ts';
 import { initStraightSkeleton } from '../geometry/face-straight-skeleton.ts';
 import type { GeometryOptions } from '../geometry/types.ts';
@@ -41,6 +42,32 @@ const referenceProviders = (hanLocale: GeometryOptions['hanLocale']) =>
     hanLocale,
   );
 
+const fontFileArg = z
+  .string()
+  .optional()
+  .describe('Read the font from this TTF/OTF file instead of Google Fonts (subset to the swept characters)');
+
+/**
+ * A command's font: a local `--font-file` (subset to `chars`; undefined keeps
+ * the whole file) or a Google Fonts download (`&text=`-subset to `chars`, may
+ * return several CJK subset files).
+ */
+async function resolveFont(
+  source: { family?: string; fontFile?: string; force: boolean },
+  chars: string | undefined,
+  defaultFamily: string,
+): Promise<{ family: string; fontBuffer: ArrayBuffer; extraFontBuffers?: ArrayBuffer[]; fontFileName: string; local: boolean }> {
+  if (source.fontFile) {
+    if (source.family) throw new Error('Pass either a Google Fonts family or --font-file, not both');
+    return { ...(await loadLocalFont(source.fontFile, chars)), local: true };
+  }
+  const family = source.family ?? defaultFamily;
+  const fontPaths = await downloadFont(family, { force: source.force, chars });
+  const fontBuffer = await Bun.file(fontPaths[0]!).arrayBuffer();
+  const extraFontBuffers = fontPaths.length > 1 ? await Promise.all(fontPaths.slice(1).map((p) => Bun.file(p).arrayBuffer())) : undefined;
+  return { family, fontBuffer, extraFontBuffers, fontFileName: basename(fontPaths[0]!), local: false };
+}
+
 export const tegakiProgram = createPadrone('tegaki')
   .configure({
     description: 'Generate glyph data for handwriting animation',
@@ -49,33 +76,36 @@ export const tegakiProgram = createPadrone('tegaki')
     c
       .extend(padroneProgress(PROGRESS))
       .configure({
-        title: 'Generate glyph data from a Google Font',
-        description: 'Downloads a font, extracts glyph outlines, computes skeletons and stroke order, then writes a JSON file.',
+        title: 'Generate glyph data from a Google Font or a local font file',
+        description:
+          'Downloads a font (or reads --font-file), extracts glyph outlines, computes skeletons and stroke order, then writes a JSON file.',
       })
       .arguments(generateArgsSchema, { positional: ['family'] })
       .action(async (args, ctx) => {
         const progress = ctx.context.progress;
-        const { family, output, force, debug, chars, pipeline, ...pipelineOptions } = args;
+        const { family: familyArg, fontFile, output, force, debug, chars, pipeline, ...pipelineOptions } = args;
 
         // chars: true → all glyphs in the font (skip &text= subsetting)
         // chars: false → DEFAULT_CHARS
         // chars: string → use as-is
         const downloadChars = typeof chars === 'string' ? chars : chars === false ? DEFAULT_CHARS : undefined;
 
-        // Download and read font (may return multiple subset files for CJK fonts)
-        progress?.update(`Downloading font "${family}"...`);
-        const fontPaths = await downloadFont(family, { force, chars: downloadChars });
-        const fontBuffer = await Bun.file(fontPaths[0]!).arrayBuffer();
-        const extraFontBuffers =
-          fontPaths.length > 1 ? await Promise.all(fontPaths.slice(1).map((p) => Bun.file(p).arrayBuffer())) : undefined;
-        const fontFileName = basename(fontPaths[0]!);
+        // Download or read the font (Google Fonts may return multiple subset files for CJK fonts)
+        progress?.update(fontFile ? `Reading font "${fontFile}"...` : `Downloading font "${familyArg ?? DEFAULT_FONT_FAMILY}"...`);
+        const { family, fontBuffer, extraFontBuffers, fontFileName, local } = await resolveFont(
+          { family: familyArg, fontFile, force },
+          downloadChars,
+          DEFAULT_FONT_FAMILY,
+        );
 
-        // When generating a subset, also download the full font so the bundle
-        // can include it as a CSS fallback for non-generated characters.
+        // When generating a subset of a Google font, also download the full
+        // font so the bundle can include it as a CSS fallback for
+        // non-generated characters. A local font ships only its subset: the
+        // fonts that need --font-file (CJK) are tens of megabytes whole.
         const isSubset = chars !== true;
         let fullFontBuffer: ArrayBuffer | undefined;
         let fullFontFileName: string | undefined;
-        if (isSubset) {
+        if (isSubset && !local) {
           const fullPaths = await downloadFont(family, { force });
           fullFontBuffer = await Bun.file(fullPaths[0]!).arrayBuffer();
           fullFontFileName = basename(fullPaths[0]!);
@@ -151,7 +181,8 @@ export const tegakiProgram = createPadrone('tegaki')
       })
       .arguments(
         z.object({
-          family: z.string().default('Klee One').describe('Google Fonts family name'),
+          family: z.string().optional().describe('Google Fonts family name (default: Klee One)'),
+          fontFile: fontFileArg,
           chars: z.string().default(JAPANESE_CHARS).describe('Characters to sweep (default: the Japanese preset)').meta({ flags: 'c' }),
           hanLocale: z
             .enum(['ja', 'zh'])
@@ -164,13 +195,10 @@ export const tegakiProgram = createPadrone('tegaki')
       )
       .action(async (args, ctx) => {
         const progress = ctx.context.progress;
-        const { family, chars, hanLocale, json, force } = args;
+        const { chars, hanLocale, json } = args;
 
-        progress?.update(`Downloading font "${family}"...`);
-        const fontPaths = await downloadFont(family, { force, chars });
-        const fontBuffer = await Bun.file(fontPaths[0]!).arrayBuffer();
-        const extraFontBuffers =
-          fontPaths.length > 1 ? await Promise.all(fontPaths.slice(1).map((p) => Bun.file(p).arrayBuffer())) : undefined;
+        progress?.update(args.fontFile ? `Reading font "${args.fontFile}"...` : 'Downloading font...');
+        const { family, fontBuffer, extraFontBuffers } = await resolveFont(args, chars, 'Klee One');
         const fontInfo = await parseFont(fontBuffer, extraFontBuffers, family);
 
         await initStraightSkeleton();
@@ -202,7 +230,8 @@ export const tegakiProgram = createPadrone('tegaki')
       })
       .arguments(
         geometryOptionsSchema.extend({
-          family: z.string().default(DEFAULT_FONT_FAMILY).describe('Google Fonts family name'),
+          family: z.string().optional().describe(`Google Fonts family name (default: ${DEFAULT_FONT_FAMILY})`),
+          fontFile: fontFileArg,
           chars: z
             .string()
             .default(DEFAULT_CHARS)
@@ -221,13 +250,10 @@ export const tegakiProgram = createPadrone('tegaki')
       )
       .action(async (args, ctx) => {
         const progress = ctx.context.progress;
-        const { family, chars, tolerance, worst, json, force } = args;
+        const { chars, tolerance, worst, json } = args;
 
-        progress?.update(`Downloading font "${family}"...`);
-        const fontPaths = await downloadFont(family, { force, chars });
-        const fontBuffer = await Bun.file(fontPaths[0]!).arrayBuffer();
-        const extraFontBuffers =
-          fontPaths.length > 1 ? await Promise.all(fontPaths.slice(1).map((p) => Bun.file(p).arrayBuffer())) : undefined;
+        progress?.update(args.fontFile ? `Reading font "${args.fontFile}"...` : 'Downloading font...');
+        const { family, fontBuffer, extraFontBuffers } = await resolveFont(args, chars, DEFAULT_FONT_FAMILY);
         const fontInfo = await parseFont(fontBuffer, extraFontBuffers, family);
 
         const geometryOptions = pickGeometryOptions(args);

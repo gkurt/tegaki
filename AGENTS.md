@@ -71,12 +71,12 @@ Pre-generated font bundles live outside `src/`, under `packages/renderer/fonts/<
 
 ### Generator (`packages/generator`)
 
-CLI entry point uses Padrone. The `generate` command orchestrates a pipeline that processes each glyph through several stages. `--pipeline` picks the stroke extraction: `geometry` (default — outline-geometry ink-graph extraction in `src/geometry/`, ordered by KanjiVG / Hershey / Hangul references; the shipped bundles use it) or `raster` (below). Every `GeometryOptions` field is a flag too (`--extraction`, `--stroke-order`, `--ink-spur-tolerance`, …; defaults from `DEFAULT_GEOMETRY_OPTIONS`), and `--debug` writes each glyph's pipeline stages (SVG/PNG, plus the geometry warnings) under `<output>/debug/<glyph>/`.
+CLI entry point uses Padrone. The `generate` command orchestrates a pipeline that processes each glyph through several stages. `--pipeline` picks the stroke extraction: `geometry` (default — outline-geometry ink-graph extraction in `src/geometry/`, ordered by KanjiVG / Make Me a Hanzi / Hershey / Hangul references; the shipped bundles use it) or `raster` (below). Han characters follow one national convention per bundle, set by `--han-locale`: `ja` (default — KanjiVG first) or `zh` (Make Me a Hanzi, PRC order, first); the other dataset only fills characters the first lacks (`createReferenceSet` in [providers.ts](packages/generator/src/stroke-order/providers.ts)). `--font-file <path.ttf|otf>` reads a local font instead of Google Fonts (all three commands below take it): the font is subset to the requested characters with hb-subset ([font/subset.ts](packages/generator/src/font/subset.ts)), the bundle takes the font's own family name, and no full-font fallback is bundled. Every `GeometryOptions` field is a flag too (`--extraction`, `--stroke-order`, `--ink-spur-tolerance`, …; defaults from `DEFAULT_GEOMETRY_OPTIONS`), and `--debug` writes each glyph's pipeline stages (SVG/PNG, plus the geometry warnings) under `<output>/debug/<glyph>/`.
 
 Two scoreboard commands measure the pipeline over a character set — run them before and after a change and compare the summaries:
 
 - `bun start coverage-report <Family> [-c chars] [-t tolerance] [--<geometry flag> …] [-j report.json]` — share of each glyph's rasterized ink no stroke pen or nib paints, geometry vs raster, with the worst offenders. The tolerance is in font units (default 2) so dots and letters are judged alike ([coverage-report.ts](packages/generator/src/commands/coverage-report.ts)).
-- `bun start stroke-order-report <Family> [-c chars] [-j report.json]` — stroke-order agreement with the references (KanjiVG, Hershey, and Hangul jamo templates): how many glyphs match 1:1 and take the dataset order, and how many are only *reference-guided* — Han, kana and Hangul strokes the font merges, ordered by where their ink runs along the reference ([stroke-order-report.ts](packages/generator/src/commands/stroke-order-report.ts), [guide.ts](packages/generator/src/stroke-order/guide.ts)).
+- `bun start stroke-order-report <Family> [-c chars] [--han-locale ja|zh] [-j report.json]` — stroke-order agreement with the references (KanjiVG or Make Me a Hanzi, Hershey, and Hangul jamo templates): how many glyphs match 1:1 and take the dataset order, and how many are only *reference-guided* — Han, kana and Hangul strokes the font merges, ordered by where their ink runs along the reference ([stroke-order-report.ts](packages/generator/src/commands/stroke-order-report.ts), [guide.ts](packages/generator/src/stroke-order/guide.ts)).
 
 #### Raster pipeline (per glyph)
 
@@ -175,6 +175,7 @@ Common keys (non-exhaustive — `url-state.ts` is the source of truth):
 | `fs` | Font size in px                                                | `fs=96`              |
 | `lh` | Line height ratio                                              | `lh=1.5`             |
 | `ol` | Show debug overlay (0/1)                                       | `ol=1`               |
+| `ghl` | Han stroke-order convention: `ja` (default, KanjiVG) or `zh` (Make Me a Hanzi) | `ghl=zh`     |
 | `fx` | Effects state as JSON                                          | `fx=%7B...%7D`       |
 | `se` / `ge` | Stroke / glyph easing preset                            | `se=ease-out-cubic`  |
 | `pr` / `ss` | Render quality — pixel ratio / stroke segment size      | `pr=2&ss=1`          |
