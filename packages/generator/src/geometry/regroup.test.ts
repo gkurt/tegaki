@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Point } from 'tegaki';
-import { regroupStrokesByReference } from './regroup.ts';
+import { foldExtras, regroupStrokesByReference } from './regroup.ts';
 import type { AxisPoint, GeoStroke } from './types.ts';
 
 const pts = (coords: [number, number][], width = 40): AxisPoint[] => coords.map(([x, y]) => ({ x, y, width }));
@@ -696,5 +696,185 @@ describe('regroupStrokesByReference — merging', () => {
     // reversed or concatenated in place.
     expect(a.points).toEqual(before);
     expect(b.points.length).toBe(2);
+  });
+});
+
+describe('foldExtras — lifted extras that belong to a chain', () => {
+  // A 横 (and a 撇 below it) chained from the reference; widths 40, so the
+  // join reach is max(2 × 40, 5% of 800) = 80.
+  const bar = () =>
+    stroke(
+      pts([
+        [100, 400],
+        [300, 400],
+        [500, 400],
+      ]),
+    );
+  const barRef = ref([
+    [100, 400],
+    [500, 400],
+  ]);
+
+  test('an extra running on from a chain end, in its direction, extends the chain (a 横 past the 撇)', () => {
+    const tail = stroke(
+      pts([
+        [500, 400],
+        [560, 402],
+        [620, 404],
+      ]),
+    );
+    const result = foldExtras([bar()], [tail], [barRef], OPTIONS);
+    expect(result.extras.length).toBe(0);
+    expect(result.folded).toBe(1);
+    expect(xs(result.chains[0]!)).toEqual([100, 300, 500, 560, 620]);
+  });
+
+  test('an extra is oriented to leave the joint, whichever way it was traced', () => {
+    const tail = stroke(
+      pts([
+        [620, 404],
+        [560, 402],
+        [500, 400],
+      ]),
+    );
+    const result = foldExtras([bar()], [tail], [barRef], OPTIONS);
+    expect(xs(result.chains[0]!)).toEqual([100, 300, 500, 560, 620]);
+  });
+
+  test('a chain starting with a jog through a junction is trimmed back to where the extra lands (撇 starting above the 横)', () => {
+    // The 撇 chain steps sideways along the 横 before heading down-left; its
+    // top above the 横 was lifted. The top continues the 撇 from the jog's
+    // corner, not from the chain's head.
+    const pie = stroke(
+      pts([
+        [340, 400],
+        [300, 400],
+        [100, 700],
+      ]),
+    );
+    const top = stroke(
+      pts([
+        [300, 400],
+        [360, 310],
+      ]),
+    );
+    const pieRef = ref([
+      [360, 310],
+      [100, 700],
+    ]);
+    const result = foldExtras([pie], [top], [pieRef], OPTIONS);
+    expect(result.extras.length).toBe(0);
+    expect(result.chains[0]!.points.map((p) => [p.x, p.y])).toEqual([
+      [360, 310],
+      [300, 400],
+      [100, 700],
+    ]);
+    expect(result.dropped).toBeCloseTo(40);
+  });
+
+  test('an extra whose ends sit on a short chain section replaces it (the curl where a 横折 begins)', () => {
+    const chain = stroke(
+      pts([
+        [100, 400],
+        [200, 400],
+        [260, 400],
+        [500, 400],
+      ]),
+    );
+    const curl = stroke(
+      pts([
+        [260, 400],
+        [230, 330],
+        [200, 400],
+      ]),
+    );
+    const result = foldExtras([chain], [curl], [barRef], OPTIONS);
+    expect(result.extras.length).toBe(0);
+    expect(result.chains[0]!.points.map((p) => [p.x, p.y])).toEqual([
+      [100, 400],
+      [200, 400],
+      [230, 330],
+      [260, 400],
+      [500, 400],
+    ]);
+  });
+
+  test('an extra lying along a chain is dropped as already painted', () => {
+    const overlap = stroke(
+      pts([
+        [200, 410],
+        [350, 410],
+      ]),
+    );
+    const result = foldExtras([bar()], [overlap], [barRef], OPTIONS);
+    expect(result.extras.length).toBe(0);
+    expect(result.folded).toBe(0);
+    expect(result.dropped).toBeCloseTo(150);
+  });
+
+  test("a link whose two ends sit inside other strokes is not dropped: its middle is ink no one else paints (Caveat P's stem-to-bowl join)", () => {
+    const stem = stroke(
+      pts([
+        [100, 700],
+        [100, 400],
+      ]),
+    );
+    const bowl = stroke(
+      pts([
+        [180, 400],
+        [400, 300],
+        [180, 250],
+      ]),
+    );
+    const link = stroke(
+      pts([
+        [100, 400],
+        [180, 400],
+      ]),
+    );
+    const refs = [
+      ref([
+        [100, 700],
+        [100, 400],
+      ]),
+      ref([
+        [180, 400],
+        [400, 300],
+        [180, 250],
+      ]),
+    ];
+    const result = foldExtras([stem, bowl], [link], refs, OPTIONS);
+    expect(result.dropped).toBe(0);
+    // Some stroke still draws the segment between the stem top and the bowl start.
+    const spans = [...result.chains, ...result.extras].flatMap((s) => s.points.slice(1).map((p, i) => [s.points[i]!, p] as const));
+    expect(spans.some(([a, b]) => a.y === 400 && b.y === 400 && Math.min(a.x, b.x) === 100 && Math.max(a.x, b.x) === 180)).toBe(true);
+  });
+
+  test('a bar crossing a stem mid-way, free at both ends, stays an extra (crossed 7)', () => {
+    const stem = stroke(
+      pts([
+        [400, 100],
+        [400, 700],
+      ]),
+    );
+    const crossbar = stroke(
+      pts([
+        [250, 400],
+        [550, 400],
+      ]),
+    );
+    const result = foldExtras(
+      [stem],
+      [crossbar],
+      [
+        ref([
+          [400, 100],
+          [400, 700],
+        ]),
+      ],
+      OPTIONS,
+    );
+    expect(result.extras.length).toBe(1);
+    expect(result.folded + result.dropped).toBe(0);
   });
 });

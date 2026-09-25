@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import type { Point } from 'tegaki';
 import { parseFont, processGlyphGeometry } from '../commands/generate.ts';
+import { createHangulProvider } from '../stroke-order/hangul.ts';
 import { createHersheyProvider } from '../stroke-order/hershey.ts';
 import type { ReferenceGlyph } from '../stroke-order/types.ts';
 import { hasCanonicalStrokeOrder } from './pipeline.ts';
@@ -69,5 +70,20 @@ describe('hasCanonicalStrokeOrder', () => {
 
   test('Latin letters and digits do not', () => {
     for (const char of ['W', 'a', '7']) expect(hasCanonicalStrokeOrder(char)).toBe(false);
+  });
+});
+
+// Nanum Pen Script joins a jamo's strokes (the bundle's subset parses faster than the full file).
+const nanum = await parseFont(
+  readFileSync(new URL('../../../renderer/fonts/nanum-pen-script/nanum-pen-script-38efadb5.ttf', import.meta.url)).buffer as ArrayBuffer,
+);
+
+describe('reference re-grouping on a cursive Hangul font', () => {
+  test("a retraced split gives way to a clean one: 갈's three joined strokes split into the template's six", async () => {
+    const reference = (await createHangulProvider().get('갈'))!;
+    const r = processGlyphGeometry(nanum, '갈', DEFAULT_GEOMETRY_OPTIONS, undefined, [reference])!;
+    expect(r.strokeOrderRegrouped).toBe(true);
+    expect(r.strokesFontUnits.length).toBe(reference.strokes.length);
+    expect(r.warnings.join(' ')).not.toContain('retraced');
   });
 });

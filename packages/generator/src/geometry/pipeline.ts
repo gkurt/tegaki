@@ -675,6 +675,11 @@ export function runGeometryPipeline(
             minRunLength: resolved.resampleSpacing * 3,
             glyphDiag,
             maxMeanCost: AUTO_MAX_MEAN_COST,
+            // Where the order is standard but cursive fonts join a
+            // jamo's strokes (Hangul), a retraced split gives way to a clean
+            // one; where the reference is one style among several (Latin),
+            // the font's own strokes stand.
+            retracedSplits: hasCanonicalStrokeOrder(input.char) ? 'allow' : GUIDED_STROKE_ORDER.test(input.char) ? 'avoid' : 'reject',
           });
           if (proposal) {
             const candidate = carryNibs(

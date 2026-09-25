@@ -102,6 +102,16 @@ export interface RegroupOptions {
    * from one strategy is never shadowed by a lower-cost chain that fails.
    */
   maxMeanCost: number;
+  /**
+   * Proposals that end with more strokes than were extracted AND retrace
+   * (a split cut along the font's own trajectory — see the pipeline):
+   * - 'allow' (default): adoptable like any other;
+   * - 'reject': the caller throws them away; the pick is unchanged, so a
+   *   rejected winner leaves the extracted strokes as they were;
+   * - 'avoid': the caller throws them away, but the pick falls to the best
+   *   proposal it would take instead.
+   */
+  retracedSplits?: 'allow' | 'reject' | 'avoid';
 }
 
 export interface RegroupResult {
@@ -886,6 +896,233 @@ function liftMisfits(
 }
 
 /**
+ * Most of an extra's centerline, in pen widths, the chains may leave unpainted
+ * for it to be dropped as a duplicate. A length, not a share: a short link
+ * whose two ends sit inside other strokes (Caveat P's stem-to-bowl join) is
+ * mostly "covered" but still bridges a visible gap.
+ */
+const FOLD_UNCOVERED_MAX_WIDTHS = 0.25;
+/** Max angle between a chain's outward direction and an extra leaving from its end (a continuation, not a branch). */
+const FOLD_CONTINUE_MAX_DEG = 50;
+/**
+ * Max angle between a chain end's heading over one pen width and its course
+ * over FOLD_COURSE_WIDTHS: a chain that ends in a junction hook (a 横 whose
+ * chain finishes on the 撇's pass up through their crossing) isn't heading
+ * anywhere an extra could continue it.
+ */
+const FOLD_END_HOOK_MAX_DEG = 60;
+const FOLD_COURSE_WIDTHS = 3;
+
+/** Unit direction pointing OUT of a polyline at one end, measured over `reach` of arc. */
+function outwardDirection(pts: AxisPoint[], atHead: boolean, reach: number): Point {
+  const seq = atHead ? pts : [...pts].reverse();
+  const end = seq[0]!;
+  let inner = seq[seq.length - 1]!;
+  let walked = 0;
+  for (let i = 1; i < seq.length; i++) {
+    walked += dist(seq[i - 1]!, seq[i]!);
+    if (walked >= reach) {
+      inner = seq[i]!;
+      break;
+    }
+  }
+  const len = dist(end, inner) || 1;
+  return { x: (end.x - inner.x) / len, y: (end.y - inner.y) / len };
+}
+
+const angleDeg = (a: Point, b: Point) => (Math.acos(Math.max(-1, Math.min(1, a.x * b.x + a.y * b.y))) * 180) / Math.PI;
+
+/**
+ * Fold LIFTED extras back into the chains when they belong to a chained
+ * stroke after all. Lifting judges a piece against its reference ARC, and ink
+ * that runs past the end of the reference stroke projects onto an end that
+ * better pieces already cover — so it reads as a misfit. In kaishu that ink
+ * is ordinary: a 撇 starting above the 横 it crosses, a 横 running on past
+ * the 撇, the curl where 口's 横折 begins (LXGW WenKai against Make Me a
+ * Hanzi's medians). Drawn after the prescribed order, each is a late blip
+ * away from its stroke. Three cases, retried until none applies:
+ * - covered: the chains already paint the extra's ink — drop it;
+ * - continuation: an extra end within join reach of a chain end, the extra
+ *   leaving in the chain's own direction there — extend the chain;
+ * - splice: the extra's ends on the two ends of a short chain section (the
+ *   straight jump chaining bridged a junction with) — the extra replaces it.
+ * A separate feature (a crossed 7's bar crosses its stem mid-way, free at
+ * both ends) matches none of them and stays an extra.
+ */
+export function foldExtras(
+  chains: GeoStroke[],
+  extras: GeoStroke[],
+  references: Point[][],
+  options: RegroupOptions,
+): { chains: GeoStroke[]; extras: GeoStroke[]; folded: number; dropped: number } {
+  return foldIndexed(chains, extras, references.map(indexRef), options);
+}
+
+function foldIndexed(
+  chains: GeoStroke[],
+  extras: GeoStroke[],
+  refs: (RefIndex | null)[],
+  options: RegroupOptions,
+): { chains: GeoStroke[]; extras: GeoStroke[]; folded: number; dropped: number } {
+  const work = chains.map((c) => ({ ...c, points: c.points.map((p) => ({ ...p })) }));
+  let left = extras.map((e) => ({ ...e, points: e.points.map((p) => ({ ...p })) }));
+  let folded = 0;
+  let dropped = 0;
+
+  // Whether the chains already paint an extra's ink, bar under half a pen width of it.
+  const isCovered = (pts: AxisPoint[]) => {
+    const samples = densify(pts, options.spacing);
+    const step = polylineLength(pts) / Math.max(samples.length - 1, 1);
+    let uncovered = 0;
+    let width = 0;
+    for (const p of samples) {
+      width += p.width;
+      if (
+        !work.some((c) => {
+          const hit = projectOntoPolyline(c.points, p);
+          return hit !== null && hit.d <= hit.q.width / 2;
+        })
+      )
+        uncovered += step;
+    }
+    return uncovered <= FOLD_UNCOVERED_MAX_WIDTHS * (width / samples.length);
+  };
+
+  // Mean distance of a polyline's samples to each reference stroke.
+  const refDistances = (pts: AxisPoint[]) => {
+    const samples = resamplePolyline(pts, 12);
+    return refs.map((ref) => (ref ? samples.reduce((sum, q) => sum + projectToRef(q, ref).d, 0) / samples.length : Infinity));
+  };
+
+  const tryContinuation = (extra: GeoStroke): boolean => {
+    const extraD = refDistances(extra.points);
+    const nearestD = Math.min(...extraD);
+    const extraLen = polylineLength(extra.points);
+    let best: { chain: number; chainHead: boolean; extraHead: boolean; kept: AxisPoint[]; trimmed: number; score: number } | null = null;
+    for (let c = 0; c < work.length; c++) {
+      const chain = work[c]!;
+      if (chain.isLoop || chain.points.length < 2) continue;
+      const chainLabel = labelPiece(chain, refs)?.label;
+      const offReference = chainLabel === undefined ? 0 : extraD[chainLabel]! - nearestD;
+      const chainLen = polylineLength(chain.points);
+      for (const chainHead of [true, false]) {
+        const ce = chainHead ? chain.points[0]! : chain.points[chain.points.length - 1]!;
+        // Tie-break only: registration of a reference onto a font whose
+        // proportions differ mislabels junction pieces, so it never vetoes.
+        const offWidths = offReference / Math.max(ce.width, 1);
+        for (const extraHead of [true, false]) {
+          const ee = extraHead ? extra.points[0]! : extra.points[extra.points.length - 1]!;
+          const reach = joinTolerance(ce, ee, options.glyphDiag);
+          // Two joints: the chain end itself, or — when the extra lands ON
+          // the chain within a junction's reach of that end — the landing
+          // point, trimming the jog between (chaining often starts a stroke
+          // with a sideways step through the junction it leaves).
+          const joints: { kept: AxisPoint[]; trimmed: number; gap: number }[] = [{ kept: chain.points, trimmed: 0, gap: dist(ce, ee) }];
+          const hit = projectOntoPolyline(chain.points, ee);
+          if (hit && hit.d <= hit.q.width / 2) {
+            const trimmed = chainHead
+              ? lengthFromHeadToHit(chain.points, hit.seg, hit.q)
+              : lengthFromHitToTail(chain.points, hit.seg, hit.q);
+            if (trimmed > 0 && trimmed <= reach && chainLen - trimmed >= 2 * trimmed) {
+              const kept = chainHead ? [hit.q, ...chain.points.slice(hit.seg + 1)] : [...chain.points.slice(0, hit.seg + 1), hit.q];
+              joints.push({ kept, trimmed, gap: hit.d });
+            }
+          }
+          for (const { kept, trimmed, gap } of joints) {
+            if (gap > reach) continue;
+            const joint = chainHead ? kept[0]! : kept[kept.length - 1]!;
+            const out = outwardDirection(kept, chainHead, joint.width);
+            const course = outwardDirection(kept, chainHead, FOLD_COURSE_WIDTHS * joint.width);
+            if (angleDeg(out, course) > FOLD_END_HOOK_MAX_DEG) continue;
+            // The extra must leave the joint the way the chain was heading
+            // (its chord from the joint to its far end, which points out at the far end)…
+            const away = outwardDirection(extra.points, !extraHead, extraLen);
+            const bend = angleDeg(out, away);
+            if (bend > FOLD_CONTINUE_MAX_DEG) continue;
+            // …and a gap wider than the pen must lie ahead of the chain end, not beside it.
+            if (gap > joint.width / 2 && angleDeg(out, { x: (ee.x - joint.x) / gap, y: (ee.y - joint.y) / gap }) > 60) continue;
+            const score = bend + ((gap + trimmed) / reach) * 30 + 10 * offWidths;
+            if (!best || score < best.score) best = { chain: c, chainHead, extraHead, kept, trimmed, score };
+          }
+        }
+      }
+    }
+    if (!best) return false;
+    const chain = work[best.chain]!;
+    if (DEBUG) {
+      const e0 = extra.points[0]!;
+      console.log(
+        `[fold] continuation: extra (${e0.x.toFixed(0)},${e0.y.toFixed(0)}) len ${extraLen.toFixed(0)} onto chain ${best.chain} ${best.chainHead ? 'head' : 'tail'}${best.trimmed > 0 ? ` (trimmed ${best.trimmed.toFixed(0)})` : ''}, score ${best.score.toFixed(1)}`,
+      );
+    }
+    // Orient the extra to run away from the joint, then attach it on that side.
+    const leaving = best.extraHead ? extra.points : [...extra.points].reverse();
+    const points: AxisPoint[] = [];
+    if (best.chainHead) {
+      appendDedup(points, [...leaving].reverse());
+      appendDedup(points, best.kept);
+    } else {
+      appendDedup(points, best.kept);
+      appendDedup(points, leaving);
+    }
+    dropped += best.trimmed;
+    work[best.chain] = { ...chain, points, segmentIndices: [...chain.segmentIndices, ...extra.segmentIndices] };
+    return true;
+  };
+
+  const trySplice = (extra: GeoStroke): boolean => {
+    const a = extra.points[0]!;
+    const b = extra.points[extra.points.length - 1]!;
+    const extraLen = polylineLength(extra.points);
+    for (let c = 0; c < work.length; c++) {
+      const chain = work[c]!;
+      if (chain.isLoop) continue;
+      const ha = projectOntoPolyline(chain.points, a);
+      const hb = projectOntoPolyline(chain.points, b);
+      if (!ha || !hb || ha.d > ha.q.width / 2 || hb.d > hb.q.width / 2) continue;
+      const section = polylineLength(walkBetween(chain.points, ha.seg, ha.q, hb.seg, hb.q));
+      // Only a junction-sized section is replaced — never the chain's own ink run.
+      if (section > joinTolerance(ha.q, hb.q, options.glyphDiag) || section >= extraLen) continue;
+      const [first, second, run] =
+        ha.seg < hb.seg || (ha.seg === hb.seg && dist(chain.points[ha.seg]!, ha.q) <= dist(chain.points[hb.seg]!, hb.q))
+          ? [ha, hb, extra.points]
+          : [hb, ha, [...extra.points].reverse()];
+      if (DEBUG)
+        console.log(
+          `[fold] splice: extra (${a.x.toFixed(0)},${a.y.toFixed(0)})-(${b.x.toFixed(0)},${b.y.toFixed(0)}) into chain ${c}, section ${section.toFixed(0)}`,
+        );
+      const points: AxisPoint[] = [];
+      appendDedup(points, chain.points.slice(0, first.seg + 1));
+      appendDedup(points, run);
+      appendDedup(points, chain.points.slice(second.seg + 1));
+      work[c] = { ...chain, points, segmentIndices: [...chain.segmentIndices, ...extra.segmentIndices] };
+      return true;
+    }
+    return false;
+  };
+
+  for (let progress = true; progress && left.length > 0; ) {
+    progress = false;
+    const next: GeoStroke[] = [];
+    for (const extra of left) {
+      if (extra.isLoop || extra.points.length < 2) {
+        next.push(extra);
+      } else if (isCovered(extra.points)) {
+        dropped += polylineLength(extra.points);
+        progress = true;
+      } else if (tryContinuation(extra) || trySplice(extra)) {
+        folded++;
+        progress = true;
+      } else {
+        next.push(extra);
+      }
+    }
+    left = next;
+  }
+  return { chains: work, extras: left, folded, dropped };
+}
+
+/**
  * How a group's pieces are ordered while chaining:
  * - 'reference': strict projected-t order, each piece joins the previous one
  *   or breaks the chain. Right when pieces project cleanly onto the
@@ -1314,12 +1551,20 @@ export function regroupStrokesByReference(strokes: GeoStroke[], references: Poin
     pieceSets.flatMap((set) =>
       combos.map(([strategy, allowVia]) => {
         const chained = chainPieces(set.pieces, refs, options, strategy, allowVia, extras);
+        // Lifted extras that turn out to continue a chain fold back into it.
+        const fold =
+          set.extras.length > 0
+            ? foldIndexed(chained.strokes, set.extras, refs, options)
+            : { chains: chained.strokes, extras: [], folded: 0, dropped: 0 };
+        const chainStrokes = fold.chains;
+        const setExtras = fold.extras;
         // An absorption both merges two extracted strokes and doubles travel,
         // so it reports as one merge + one retrace.
-        const merges = chained.merges + set.absorbed;
+        const merges = chained.merges + set.absorbed + fold.folded;
         const retraces = chained.retraces + set.absorbed;
+        const pruned = set.pruned + fold.dropped;
         const match = matchStrokes(
-          chained.strokes.map((s) => s.points),
+          chainStrokes.map((s) => s.points),
           references,
           options.glyphDiag,
         );
@@ -1329,15 +1574,13 @@ export function regroupStrokesByReference(strokes: GeoStroke[], references: Poin
         // the match improves by more than the ink was worth. Lifted extras
         // pay a flat surcharge for deviating from the prescribed count.
         const gateCost =
-          match.meanCost +
-          (totalInk > 0 ? PRUNE_COST_WEIGHT * (set.pruned / totalInk) : 0) +
-          (set.extras.length > 0 ? LIFT_RANK_PENALTY : 0);
+          match.meanCost + (totalInk > 0 ? PRUNE_COST_WEIGHT * (pruned / totalInk) : 0) + (setExtras.length > 0 ? LIFT_RANK_PENALTY : 0);
         // Excess travel: everything the proposal draws beyond the raw ink
         // AND beyond what the reference itself travels (prescribed doubles
         // are free) — retrace walks, via corridors, absorb excursions.
         const drawn =
-          chained.strokes.reduce((sum, s) => sum + polylineLength(s.points), 0) +
-          set.extras.reduce((sum, p) => sum + polylineLength(p.points), 0);
+          chainStrokes.reduce((sum, s) => sum + polylineLength(s.points), 0) +
+          setExtras.reduce((sum, p) => sum + polylineLength(p.points), 0);
         const extraTravel = Math.max(0, drawn - Math.max(totalInk, refTravel));
         const rankCost = gateCost + (totalInk > 0 ? RETRACE_COST_WEIGHT * (extraTravel / totalInk) : 0);
         // The deviation ladder: a faithful full match (nothing pruned, no
@@ -1345,9 +1588,11 @@ export function regroupStrokesByReference(strokes: GeoStroke[], references: Poin
         // extra strokes outside the canon), which beats destroying ink or
         // re-traveling a would-be stroke. Cost only arbitrates within a
         // rung. The 10% allowance is ordinary join glue, not re-travel.
-        const deviation = set.pruned > 0 || extraTravel > totalInk * 0.1 ? 2 : set.extras.length > 0 ? 1 : 0;
+        // Folded extras dropped as already painted are not destroyed ink:
+        // the rung reads the set's own pruning.
+        const deviation = set.pruned > 0 || extraTravel > totalInk * 0.1 ? 2 : setExtras.length > 0 ? 1 : 0;
         if (DEBUG) {
-          const ends = chained.strokes
+          const ends = chainStrokes
             .map((s) => {
               const f = s.points[0]!;
               const l = s.points[s.points.length - 1]!;
@@ -1356,42 +1601,53 @@ export function regroupStrokesByReference(strokes: GeoStroke[], references: Poin
             .join(' ');
           const tag = `${extras.fillEmpty ? '+fill' : ''}${extras.rescue ? '+rescue' : ''}`;
           console.log(
-            `[regroup] ${set.name}/${strategy}${allowVia ? '+via' : ''}${tag}: ${chained.strokes.length} strokes${set.extras.length > 0 ? ` +${set.extras.length} extras` : ''}, mean ${match.meanCost.toFixed(3)}, rank ${rankCost.toFixed(3)} dev${deviation}${countsAgree && gateCost <= options.maxMeanCost ? ' adoptable' : ''}, pairs ${match.pairs.map((p) => p.cost.toFixed(3)).join('/')} ${ends}`,
+            `[regroup] ${set.name}/${strategy}${allowVia ? '+via' : ''}${tag}: ${chainStrokes.length} strokes${setExtras.length > 0 ? ` +${setExtras.length} extras` : ''}${fold.folded + fold.dropped > 0 ? ` (${fold.folded} folded, ${fold.dropped.toFixed(0)} dropped)` : ''}, mean ${match.meanCost.toFixed(3)}, rank ${rankCost.toFixed(3)} dev${deviation}${countsAgree && gateCost <= options.maxMeanCost ? ' adoptable' : ''}, pairs ${match.pairs.map((p) => p.cost.toFixed(3)).join('/')} ${ends}`,
           );
         }
         return {
-          strokes: [...chained.strokes, ...set.extras],
+          strokes: [...chainStrokes, ...setExtras],
           merges,
           retraces,
           filled: chained.filled,
-          pruned: set.pruned,
-          extras: set.extras.length,
+          pruned,
+          extras: setExtras.length,
           countsAgree,
           adoptable: countsAgree && gateCost <= options.maxMeanCost,
+          retracedSplit: retraces > 0 && chainStrokes.length > strokes.length,
           deviation,
           rankCost,
         };
       }),
     );
-  let scored = runPortfolio({ fillEmpty: false, rescue: false });
+  // Adoptable AND not a proposal the caller throws away in favour of another.
+  const acceptable = (c: { adoptable: boolean; retracedSplit: boolean }) =>
+    c.adoptable && !(options.retracedSplits === 'avoid' && c.retracedSplit);
+  type Scored = ReturnType<typeof runPortfolio>[number];
+  const ranked = (list: Scored[]) =>
+    list.sort(
+      (a, b) =>
+        Number(b.adoptable) - Number(a.adoptable) ||
+        Number(b.countsAgree) - Number(a.countsAgree) ||
+        (a.adoptable ? a.deviation - b.deviation : 0) ||
+        a.rankCost - b.rankCost,
+    );
+  let scored = ranked(runPortfolio({ fillEmpty: false, rescue: false }));
   // Second phase: corrective labeling variants (see ChainExtras). Consulted
-  // only when the plain portfolio has no adoptable proposal, so glyphs that
+  // only when the plain portfolio has no acceptable proposal, so glyphs that
   // already pass never change.
-  if (!scored.some((c) => c.adoptable)) {
-    scored = scored.concat(
-      runPortfolio({ fillEmpty: true, rescue: false }),
-      runPortfolio({ fillEmpty: false, rescue: true }),
-      runPortfolio({ fillEmpty: true, rescue: true }),
+  if (!scored.some(acceptable)) {
+    scored = ranked(
+      scored.concat(
+        runPortfolio({ fillEmpty: true, rescue: false }),
+        runPortfolio({ fillEmpty: false, rescue: true }),
+        runPortfolio({ fillEmpty: true, rescue: true }),
+      ),
     );
   }
-  scored.sort(
-    (a, b) =>
-      Number(b.adoptable) - Number(a.adoptable) ||
-      Number(b.countsAgree) - Number(a.countsAgree) ||
-      (a.adoptable ? a.deviation - b.deviation : 0) ||
-      a.rankCost - b.rankCost,
-  );
-  const best = scored[0]!;
+  // A winner to avoid gives way to the best acceptable proposal (a Hangul
+  // syllable split along its jamo without retracing); failing one, it stands
+  // and the caller keeps the extracted strokes.
+  const best = (scored[0]!.adoptable && !acceptable(scored[0]!) && scored.find(acceptable)) || scored[0]!;
 
   if (splits === 0 && best.merges === 0 && best.pruned === 0 && best.filled === 0 && best.extras === 0) return null;
   return { strokes: best.strokes, splits, merges: best.merges, retraces: best.retraces, pruned: best.pruned, extras: best.extras };
