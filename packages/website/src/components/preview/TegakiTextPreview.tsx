@@ -37,11 +37,8 @@ import { strokeOrderProviders } from './stroke-order-providers.ts';
 
 TegakiEngine.registerShaper(harfbuzzShaper);
 
-// Must mirror the set in `packages/renderer/src/shaper-harfbuzz/index.ts` and the
-// generator's `hb-shaper.ts`. Explicit enables of these features override
-// harfbuzz's contextual positional assignment (and, for the fraction ones,
-// turn every digit into a numerator).
-const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig', 'frac', 'numr', 'dnom']);
+/** Shared empty variant map, so a bundle without the shaper stays memoized. */
+const NO_VARIANTS: Record<string, TegakiGlyphData> = {};
 
 /** A pipeline result (either pipeline) as the bundle's compact glyph entry. */
 function toCompactGlyph(res: PipelineResult | GeometryPipelineResult): TegakiGlyphData {
@@ -131,39 +128,15 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   },
   ref,
 ) {
-  const [fontReady, setFontReady] = useState(false);
-
-  // Make blob URLs for every subset buffer so both the renderer (bundle.fontUrl
-  // + bundle.extraFontUrls) and our own DOM FontFace registration point at
-  // identical URLs — `ensureFont` keys its cache on URL, so collisions there
-  // dedupe automatically.
+  // Blob URLs for every subset buffer (bundle.fontUrl + bundle.extraFontUrls).
+  // A URL is revoked only once neither the wanted bundle nor the one still on
+  // screen uses it: the renderer keeps drawing the previous bundle until the
+  // next is complete, and may still fetch its fonts.
   const fontUrl = useMemo(() => URL.createObjectURL(new Blob([fontBuffer], { type: 'font/ttf' })), [fontBuffer]);
   const extraFontUrls = useMemo(
     () => (extraFontBuffers ?? []).map((buf) => URL.createObjectURL(new Blob([buf], { type: 'font/ttf' }))),
     [extraFontBuffers],
   );
-
-  const prevFontUrl = useRef(fontUrl);
-  useEffect(() => {
-    const prev = prevFontUrl.current;
-    prevFontUrl.current = fontUrl;
-    if (prev && prev !== fontUrl) URL.revokeObjectURL(prev);
-    return () => {
-      if (fontUrl) URL.revokeObjectURL(fontUrl);
-    };
-  }, [fontUrl]);
-
-  const prevExtraUrls = useRef(extraFontUrls);
-  useEffect(() => {
-    const prev = prevExtraUrls.current;
-    prevExtraUrls.current = extraFontUrls;
-    if (prev !== extraFontUrls) {
-      for (const url of prev) URL.revokeObjectURL(url);
-    }
-    return () => {
-      for (const url of extraFontUrls) URL.revokeObjectURL(url);
-    };
-  }, [extraFontUrls]);
 
   // Features are detected once at parse time (see `parseFont`) and carried on
   // `fontInfo` — subtract any the user has disabled for this render.
@@ -171,38 +144,6 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     () => fontInfo.features.filter((f) => !options.disabledFeatures.includes(f)),
     [fontInfo.features, options.disabledFeatures],
   );
-
-  useEffect(() => {
-    setFontReady(false);
-    // Mirror the renderer's `ensureFont`. With the shaper on, shaper-managed
-    // Arabic features (init/medi/fina/isol/rlig) are omitted — explicit
-    // enables would override the browser's contextual positional assignment
-    // and collapse every glyph to one variant. Fonts with no declared
-    // features keep the legacy "disable liga/calt" fallback.
-    //
-    // With the shaper off, the renderer draws nominal char-keyed glyphs, so
-    // every variant-producing GSUB feature must be disabled so the FontFace
-    // doesn't emit ligatures or contextual forms the renderer can't draw.
-    const featureSettings = useShaper
-      ? (() => {
-          const explicit = enabledFeatures.filter((f) => !SHAPER_MANAGED_FEATURES.has(f));
-          if (enabledFeatures.length === 0) return "'calt' 0, 'liga' 0";
-          if (explicit.length === 0) return 'normal';
-          return explicit.map((f) => `'${f}' 1`).join(', ');
-        })()
-      : "'liga' 0, 'calt' 0, 'clig' 0, 'rlig' 0, 'dlig' 0, 'init' 0, 'medi' 0, 'fina' 0, 'isol' 0";
-    const faces = [fontUrl, ...extraFontUrls].map((url) => new FontFace(fontInfo.family, `url(${url})`, { featureSettings }));
-    let cancelled = false;
-    Promise.all(faces.map((f) => f.load())).then((loaded) => {
-      if (cancelled) return;
-      for (const f of loaded) document.fonts.add(f);
-      setFontReady(true);
-    });
-    return () => {
-      cancelled = true;
-      for (const f of faces) document.fonts.delete(f);
-    };
-  }, [fontInfo, fontUrl, extraFontUrls, enabledFeatures, useShaper]);
 
   const internalCacheRef = useRef<Map<string, PipelineResult>>(new Map());
   const activeCache = resultsCache?.current ?? internalCacheRef.current;
@@ -275,7 +216,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // whole picks different contextual alternates. Caveat's calt cycles three
   // forms of d; every glyph missing from glyphDataById falls back to the base
   // letter's strokes, drawn under the alternate's clip mask.
-  const [variantData, setVariantData] = useState<Record<string, TegakiGlyphData>>({});
+  const [variantData, setVariantData] = useState<{ key: string; data: Record<string, TegakiGlyphData> } | null>(null);
   const variantShaper = useMemo(
     () =>
       useShaper
@@ -292,16 +233,36 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // Spaced text is shaped without ligatures or contextual alternates, as the
   // renderer does, so it draws a different set of glyphs.
   const letterSpaced = letterSpacingPx !== 0;
+  // Everything the variants depend on: data shaped for other inputs is never
+  // put in a bundle (it would draw the previous font's glyph ids).
+  const variantWanted = useMemo(
+    () =>
+      JSON.stringify([
+        fontUrl,
+        extraFontUrls,
+        enabledFeatures,
+        fontCacheId(fontInfo),
+        options,
+        geometry,
+        geoKey,
+        normalizedText,
+        letterSpaced,
+      ]),
+    [fontUrl, extraFontUrls, enabledFeatures, fontInfo, options, geometry, geoKey, normalizedText, letterSpaced],
+  );
   useEffect(() => {
-    if (!variantShaper) {
-      setVariantData((prev) => (Object.keys(prev).length === 0 ? prev : {}));
-      return;
-    }
+    if (!variantShaper) return;
     let cancelled = false;
     (async () => {
       if (geometry) await prepareGeometry();
-      const shaper = await variantShaper;
-      if (cancelled || !shaper) return;
+      // A shaper that fails to build leaves the bundle without variants (the
+      // renderer then shapes nothing either) rather than never ready.
+      const shaper = await variantShaper.catch(() => null);
+      if (cancelled) return;
+      if (!shaper) {
+        setVariantData({ key: variantWanted, data: NO_VARIANTS });
+        return;
+      }
       const optionsKey = `${fontCacheId(fontInfo)}:${JSON.stringify(options)}`;
       const variants: Record<string, TegakiGlyphData> = {};
       for (const { key: variantKey, subsetIdx, gid, char: clusterChar, letter } of collectShapedGlyphs(shaper, normalizedText, {
@@ -357,7 +318,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
         if (!res) continue;
         variants[variantKey] = toCompactGlyph(res);
       }
-      if (!cancelled) setVariantData(variants);
+      if (!cancelled) setVariantData({ key: variantWanted, data: variants });
     })();
     return () => {
       cancelled = true;
@@ -374,9 +335,16 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     geometryOptions,
     geoCache,
     prepareGeometry,
+    variantWanted,
   ]);
 
-  const fontBundle = useMemo<TegakiBundle>(() => {
+  // The bundle for the current inputs — null until every async part (geometry
+  // glyphs, shaped variants) has been built for exactly these inputs, so a
+  // bundle never mixes, say, the new font's outline with the old font's strokes.
+  const geoCurrent = !geometry || geoGlyphs?.key === geoWanted;
+  const variants = !variantShaper ? NO_VARIANTS : variantData?.key === variantWanted ? variantData.data : null;
+  const fontBundle = useMemo<TegakiBundle | null>(() => {
+    if (!geoCurrent || !variants) return null;
     const glyphData: TegakiBundle['glyphData'] = {};
     const optionsKey = `${fontCacheId(fontInfo)}:${JSON.stringify(options)}`;
 
@@ -398,7 +366,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       }
     }
 
-    const hasVariants = Object.keys(variantData).length > 0;
+    const hasVariants = Object.keys(variants).length > 0;
     return {
       version: BUNDLE_VERSION,
       family: fontInfo.family,
@@ -410,16 +378,49 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       descender: fontInfo.descender,
       glyphData,
       ...(extraFontUrls.length > 0 ? { extraFontUrls } : {}),
-      ...(hasVariants ? { glyphDataById: variantData } : {}),
+      ...(hasVariants ? { glyphDataById: variants } : {}),
       ...(enabledFeatures.length > 0 ? { features: enabledFeatures } : {}),
     } satisfies TegakiBundle;
-  }, [fontInfo, fontUrl, extraFontUrls, normalizedText, options, activeCache, enabledFeatures, variantData, geometry, geoGlyphs]);
+  }, [fontInfo, fontUrl, extraFontUrls, normalizedText, options, activeCache, enabledFeatures, variants, geometry, geoGlyphs, geoCurrent]);
+
+  // What the renderer draws: the last complete text + bundle pair. A new pair
+  // replaces it once its font faces and shaper are loaded, so switching font,
+  // text or settings goes straight from one finished frame to the next — no
+  // blank frame, no frame drawn with the old state's glyphs or unshaped.
+  const [shown, setShown] = useState<{ text: string; bundle: TegakiBundle } | null>(null);
+  useEffect(() => {
+    if (!fontBundle) return;
+    let cancelled = false;
+    TegakiEngine.preload(fontBundle).then(() => {
+      if (!cancelled) setShown({ text, bundle: fontBundle });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fontBundle, text]);
+
+  const liveUrls = useRef(new Set<string>());
+  useEffect(() => {
+    const keep = new Set([fontUrl, ...extraFontUrls, ...(shown ? [shown.bundle.fontUrl, ...(shown.bundle.extraFontUrls ?? [])] : [])]);
+    for (const url of [...liveUrls.current]) {
+      if (keep.has(url)) continue;
+      URL.revokeObjectURL(url);
+      liveUrls.current.delete(url);
+    }
+    for (const url of keep) liveUrls.current.add(url);
+  }, [fontUrl, extraFontUrls, shown]);
+  useEffect(
+    () => () => {
+      for (const url of liveUrls.current) URL.revokeObjectURL(url);
+    },
+    [],
+  );
 
   // Latest bundle, captured by ref so the stable `handleTimelineChange`
   // callback can read it without re-subscribing the engine. Without this,
   // every change to `fontBundle` would force the engine option to re-bind.
-  const bundleRef = useRef(fontBundle);
-  bundleRef.current = fontBundle;
+  const bundleRef = useRef(shown?.bundle);
+  bundleRef.current = shown?.bundle;
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
 
@@ -429,26 +430,25 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // collapses to a single half-form glyph (e.g. Devanagari "द्") fell
   // through to the bare consonant's duration, so the host clock stopped
   // before the engine's last stroke had drawn.
-  // A geometry bundle still being rebuilt (stale glyphs shown meanwhile) is
-  // not ready: snapshot tooling must wait for the current one.
+  // While the previous pair is still on screen (the next one being built),
+  // the preview is not ready: snapshot tooling must wait for the current one.
   const bundleCurrentRef = useRef(true);
-  bundleCurrentRef.current = !geometry || geoGlyphs?.key === geoWanted;
+  bundleCurrentRef.current = !!shown && shown.bundle === fontBundle && shown.text === text;
   const handleTimelineChange = useCallback((timeline: Timeline) => {
-    if (!bundleCurrentRef.current) return;
+    if (!bundleCurrentRef.current || !bundleRef.current) return;
     onReadyRef.current?.({ bundle: bundleRef.current, totalDuration: timeline.totalDuration });
   }, []);
 
-  if (!fontReady) return null;
-  if (geometry && !geoGlyphs) return null;
+  if (!shown) return null;
 
   return (
     <TegakiRenderer
       ref={ref}
       className={className}
       style={{ fontSize: `${fontSizePx}px`, lineHeight: lineHeightRatio, letterSpacing: `${letterSpacingPx}px`, ...style }}
-      text={text}
+      text={shown.text}
       time={time}
-      font={fontBundle}
+      font={shown.bundle}
       showOverlay={showOverlay}
       effects={effects}
       quality={quality}

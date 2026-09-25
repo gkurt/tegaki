@@ -19,7 +19,7 @@ import {
   resolveEffects,
 } from '../lib/effects.ts';
 import { LETTER_SPACED_OFF_FEATURES } from '../lib/features.ts';
-import { ensureFont } from '../lib/font.ts';
+import { ensureFont, ensureFontFace } from '../lib/font.ts';
 import { type CanvasOverflow, glyphInkBounds, inkOverflow, NO_OVERFLOW } from '../lib/inkBounds.ts';
 import type { BundleShaper, ShapeOptions } from '../lib/shaper.ts';
 import { type SubdividedStroke, subdivideStroke } from '../lib/strokeCache.ts';
@@ -32,7 +32,7 @@ import { cssFontFamily, drawsFallbackGlyphs, graphemes, lookupGlyphData } from '
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
 import { buildChildren, buildRootProps, canvasBoxStyle, domCreateElement } from './render-elements.ts';
-import { getShaperForBundle, registerShaper } from './shaper-registry.ts';
+import { getShaperForBundle, registerShaper, settledShaperForBundle } from './shaper-registry.ts';
 import type { CreateElementFn, TegakiEngineOptions, TegakiQuality, TimeControlMode, TimeControlProp } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -155,6 +155,18 @@ export class TegakiEngine {
    * Pass `null` to unregister.
    */
   static registerShaper = registerShaper;
+
+  /**
+   * Load everything a bundle needs before its first frame — its font faces and
+   * (with a registered shaper) its shaper. An engine handed a preloaded bundle
+   * draws it complete right away, rather than first without the font or
+   * unshaped. Hosts swapping bundles can await this to keep showing the old
+   * one until the new one is ready. Never rejects: a part that fails to load
+   * degrades the same way it would when rendering.
+   */
+  static async preload(bundle: TegakiBundle): Promise<void> {
+    await Promise.all([ensureFontFace(bundle), getShaperForBundle(bundle)]).catch(() => {});
+  }
 
   // --- DOM elements ---
   private _rootEl: HTMLElement;
@@ -899,6 +911,13 @@ export class TegakiEngine {
 
     const shaperPromise = getShaperForBundle(this._font);
     if (!shaperPromise) return;
+    // Already built (the same font swapped for a rebuilt bundle, or one
+    // `preload` warmed): take it now, so no frame is drawn unshaped meanwhile.
+    const settled = settledShaperForBundle(this._font);
+    if (settled !== undefined) {
+      this._shaper = settled;
+      return;
+    }
 
     this._shaperReady = false;
     const currentFont = this._font;

@@ -12,6 +12,16 @@ export type ShaperFactory = (bundle: TegakiBundle) => Promise<BundleShaper> | nu
 
 let factory: ShaperFactory | null = null;
 const shaperCache = new Map<string, Promise<BundleShaper>>();
+/** Settled shapers by the same key — `null` for one that failed to build. */
+const settledShapers = new Map<string, BundleShaper | null>();
+
+/**
+ * A shaper is built from the bundle's font files and features, so a bundle
+ * that changes either (a feature toggled off) needs its own.
+ */
+function shaperKey(bundle: TegakiBundle): string {
+  return JSON.stringify([bundle.fontUrl, bundle.extraFontUrls ?? [], bundle.features ?? []]);
+}
 
 /**
  * Register a shaper factory. Shaping is opt-in — without a registered factory,
@@ -25,6 +35,7 @@ const shaperCache = new Map<string, Promise<BundleShaper>>();
 export function registerShaper(f: ShaperFactory | null): void {
   factory = f;
   shaperCache.clear();
+  settledShapers.clear();
 }
 
 /**
@@ -33,13 +44,27 @@ export function registerShaper(f: ShaperFactory | null): void {
  */
 export function getShaperForBundle(bundle: TegakiBundle): Promise<BundleShaper> | null {
   if (!factory) return null;
-  const key = bundle.fontUrl;
+  const key = shaperKey(bundle);
   let entry = shaperCache.get(key);
   if (!entry) {
     const result = factory(bundle);
     if (!result) return null;
     shaperCache.set(key, result);
+    result.then(
+      (shaper) => settledShapers.set(key, shaper),
+      () => settledShapers.set(key, null),
+    );
     entry = result;
   }
   return entry;
+}
+
+/**
+ * The bundle's shaper if it has already been built — `null` when it failed to
+ * build, `undefined` while it is still building (or was never requested). Lets
+ * the engine switch to a bundle whose shaper is ready without a frame drawn
+ * unshaped while it awaits the cached promise.
+ */
+export function settledShaperForBundle(bundle: TegakiBundle): BundleShaper | null | undefined {
+  return settledShapers.get(shaperKey(bundle));
 }

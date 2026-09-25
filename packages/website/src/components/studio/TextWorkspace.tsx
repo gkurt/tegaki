@@ -65,33 +65,36 @@ export function TextWorkspace({
     [settings.effectsState, settings.customEffects],
   );
 
-  // Synchronous font change detection — reset playback state BEFORE rendering so
-  // the renderer never sees stale displayTime or glyph components. We skip the
-  // initial null→loaded transition so URL-seeded state (e.g. `ct`) survives the
-  // first font load; playback is only reset when the user actually switches fonts.
+  // A font switch shows "Generating strokes…" until the renderer has the new
+  // font's bundle. It keeps drawing the previous font (at its time) meanwhile,
+  // so playback restarts only once the new font is what's drawn — resetting on
+  // the switch itself would rewind the old font to an empty frame.
   const prevFontInfoForReset = useRef(fontInfo);
   if (prevFontInfoForReset.current !== fontInfo) {
-    const wasLoaded = prevFontInfoForReset.current !== null;
     prevFontInfoForReset.current = fontInfo;
     if (bundleReady) setBundleReady(false);
-    if (totalDuration !== 0) setTotalDuration(0);
-    if (wasLoaded) {
-      timeRef.current = 0;
-      if (displayTime !== 0) setDisplayTime(0);
-      if (!playing) setPlaying(true);
-    }
   }
 
+  // The font of the last bundle drawn. The first one keeps URL-seeded state
+  // (e.g. `ct`); each later font replays from the start.
+  const drawnFontUrl = useRef<string | null>(null);
   const handleReady = useCallback(
     (info: { bundle: TegakiBundle; totalDuration: number }) => {
+      if (drawnFontUrl.current !== info.bundle.fontUrl) {
+        if (drawnFontUrl.current !== null) {
+          timeRef.current = 0;
+          setDisplayTime(0);
+          setPlaying(true);
+        }
+        drawnFontUrl.current = info.bundle.fontUrl;
+      }
       setBundleReady(true);
       setTotalDuration(info.totalDuration);
       // Mirror the renderer's engine onto `window.__tegakiEngine` so an attached
       // browser-harness / devtools session can inspect timeline entries, layout
       // offsets, and shaper output without modifying the engine itself. Fires
-      // whenever the bundle becomes ready (also on font swaps, since each
-      // engine is recreated per font). Pure dev affordance — does not affect
-      // rendering.
+      // whenever the bundle becomes ready (also on font swaps). Pure dev
+      // affordance — does not affect rendering.
       (window as Window & { __tegakiEngine?: unknown }).__tegakiEngine = rendererRef.current?.engine ?? null;
     },
     [rendererRef],
@@ -214,7 +217,7 @@ export function TextWorkspace({
             settings.frameWidth === null ? 'overflow-x-hidden' : 'studio-scroll-x overflow-x-auto',
           )}
         >
-          <div className={cx('min-h-full px-6 pt-14 pb-10 sm:px-10 sm:pt-16', settings.frameWidth !== null && 'w-max min-w-full')}>
+          <div className={cx('relative min-h-full px-6 pt-14 pb-10 sm:px-10 sm:pt-16', settings.frameWidth !== null && 'w-max min-w-full')}>
             {!fontInfo && <CanvasMessage>Load a font to get started</CanvasMessage>}
             {fontInfo && !bundleReady && (
               <CanvasMessage>
@@ -302,8 +305,9 @@ function SpeedBadge({ speed }: { speed: number }) {
   );
 }
 
+/** A status line in the canvas's top padding — over the frame, so it never moves the text. */
 function CanvasMessage({ children }: { children: React.ReactNode }) {
-  return <p className="mb-4 flex items-center gap-2 text-sm text-zinc-400">{children}</p>;
+  return <p className="absolute top-4 left-6 flex items-center gap-2 text-sm text-zinc-400 sm:top-5 sm:left-10">{children}</p>;
 }
 
 /** The text being previewed: an auto-growing field with script samples and a pop-out to /preview. */

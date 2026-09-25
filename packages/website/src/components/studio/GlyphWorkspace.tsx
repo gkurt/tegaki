@@ -73,16 +73,18 @@ export function GlyphWorkspace({
   const { pipeline, selectedChar, options, geometryOptions, activeStage, geometryStage } = settings;
   const glyphFamily = useFontFaceFamily(font);
 
-  const [result, setResult] = useState<PipelineResult | null>(null);
-  const [geoResult, setGeoResult] = useState<GeometryPipelineResult | null>(null);
-  const [processing, setProcessing] = useState(false);
-  const [stageError, setStageError] = useState('');
+  // Pipeline results tagged with the inputs they were computed from (`key`).
+  // Only a result whose key matches the current inputs is current; the last
+  // one stays on screen, dimmed, until the next is ready — never passed off
+  // as the current glyph's.
+  const [rasterRun, setRasterRun] = useState<{ key: string; result: PipelineResult | null } | null>(null);
+  const [geoRun, setGeoRun] = useState<{ key: string; result: GeometryPipelineResult | null; error: string } | null>(null);
   const geoResultsCache = useRef(new Map<string, GeometryPipelineResult>());
-  // Stroke-order reference variants for the selected char: undefined = fetch
-  // in flight, [] = no dataset has an entry (or fetches failed). Fetched
+  // Stroke-order reference variants, tagged with the char + locale they were
+  // fetched for: [] = no dataset has an entry (or fetches failed). Fetched
   // BEFORE the pipeline runs so the (synchronous) pipeline can register +
   // match them.
-  const [refGlyphs, setRefGlyphs] = useState<ReferenceGlyph[] | undefined>(undefined);
+  const [refs, setRefs] = useState<{ key: string; glyphs: ReferenceGlyph[] } | null>(null);
 
   const chars = useMemo(() => [...segmenter.segment(settings.chars)].map((s) => s.segment), [settings.chars]);
 
@@ -105,64 +107,54 @@ export function GlyphWorkspace({
   }, [fontInfo, chars, availableChars, selectedChar, set]);
 
   // Raster pipeline
+  const rasterKey =
+    pipeline === 'raster' && fontInfo && selectedChar ? `${selectedChar}:${fontCacheId(fontInfo)}:${JSON.stringify(options)}` : '';
   useEffect(() => {
-    if (pipeline !== 'raster' || !fontInfo || !selectedChar) {
-      setResult(null);
-      return;
-    }
-    const cacheKey = `${selectedChar}:${fontCacheId(fontInfo)}:${JSON.stringify(options)}`;
-    const cached = resultsCache.current.get(cacheKey);
+    if (!rasterKey || !fontInfo) return;
+    const cached = resultsCache.current.get(rasterKey);
     if (cached) {
-      setResult(cached);
-      setProcessing(false);
+      setRasterRun({ key: rasterKey, result: cached });
       return;
     }
-    setProcessing(true);
     // Let the UI paint the spinner before the heavy computation.
     const id = setTimeout(() => {
       const res = processGlyph(fontInfo, selectedChar, options);
-      if (res) resultsCache.current.set(cacheKey, res);
-      setResult(res);
-      setProcessing(false);
+      if (res) resultsCache.current.set(rasterKey, res);
+      setRasterRun({ key: rasterKey, result: res });
     }, 10);
     return () => clearTimeout(id);
-  }, [pipeline, fontInfo, selectedChar, options, resultsCache]);
+  }, [rasterKey, fontInfo, selectedChar, options, resultsCache]);
 
   // Fetch the stroke-order reference variants for the selected char (memoized
   // per character by each provider). Failures (offline, rate limit) degrade to
   // "no reference" and the pipeline falls back to heuristic ordering.
   const hanLocale = geometryOptions.hanLocale;
+  const refsKey = pipeline === 'geometry' && selectedChar ? `${selectedChar}:${hanLocale}` : '';
   useEffect(() => {
-    if (pipeline !== 'geometry' || !selectedChar) return;
+    if (!refsKey) return;
     let cancelled = false;
-    setRefGlyphs(undefined);
     collectReferences(selectedChar, strokeOrderProviders(hanLocale))
-      .then((refs) => !cancelled && setRefGlyphs(refs))
-      .catch(() => !cancelled && setRefGlyphs([]));
+      .then((glyphs) => !cancelled && setRefs({ key: refsKey, glyphs }))
+      .catch(() => !cancelled && setRefs({ key: refsKey, glyphs: [] }));
     return () => {
       cancelled = true;
     };
-  }, [pipeline, selectedChar, hanLocale]);
+  }, [refsKey, selectedChar, hanLocale]);
+  const refGlyphs = refs?.key === refsKey ? refs.glyphs : undefined;
 
-  // Geometry pipeline
+  // Geometry pipeline — waits for the current char's references, so a single
+  // pipeline run sees them (and never runs with the previous char's).
+  const geoKey =
+    pipeline === 'geometry' && fontInfo && selectedChar && refGlyphs
+      ? `${fontCacheId(fontInfo)}:${selectedChar}:${options.bezierTolerance}:${JSON.stringify(geometryOptions)}:${refGlyphs.map((r) => r.source).join('+') || 'noref'}`
+      : '';
   useEffect(() => {
-    if (pipeline !== 'geometry' || !fontInfo || !selectedChar) {
-      setGeoResult(null);
-      return;
-    }
-    // Wait for the reference fetches to settle so a single pipeline run sees them.
-    if (refGlyphs === undefined) {
-      setProcessing(true);
-      return;
-    }
-    const cacheKey = `${fontCacheId(fontInfo)}:${selectedChar}:${options.bezierTolerance}:${JSON.stringify(geometryOptions)}:${refGlyphs.map((r) => r.source).join('+') || 'noref'}`;
-    const cached = geoResultsCache.current.get(cacheKey);
+    if (!geoKey || !fontInfo || !refGlyphs) return;
+    const cached = geoResultsCache.current.get(geoKey);
     if (cached) {
-      setGeoResult(cached);
-      setProcessing(false);
+      setGeoRun({ key: geoKey, result: cached, error: '' });
       return;
     }
-    setProcessing(true);
     let cancelled = false;
     const id = setTimeout(async () => {
       try {
@@ -171,21 +163,26 @@ export function GlyphWorkspace({
         if (geometryOptions.medialMethod === 'straight-skeleton') await initStraightSkeleton();
         if (cancelled) return;
         const res = processGlyphGeometry(fontInfo, selectedChar, geometryOptions, options.bezierTolerance, refGlyphs);
-        if (res) geoResultsCache.current.set(cacheKey, res);
-        setGeoResult(res);
-        setStageError('');
+        if (res) geoResultsCache.current.set(geoKey, res);
+        setGeoRun({ key: geoKey, result: res, error: '' });
       } catch (e) {
         if (cancelled) return;
-        setGeoResult(null);
-        setStageError((e as Error).message);
+        setGeoRun({ key: geoKey, result: null, error: (e as Error).message });
       }
-      setProcessing(false);
     }, 10);
     return () => {
       cancelled = true;
       clearTimeout(id);
     };
-  }, [pipeline, fontInfo, selectedChar, geometryOptions, options.bezierTolerance, refGlyphs]);
+  }, [geoKey, fontInfo, selectedChar, geometryOptions, options.bezierTolerance, refGlyphs]);
+
+  // The last result of the active pipeline (possibly for other inputs), and
+  // whether the one for the current inputs is still being computed.
+  const result = pipeline === 'raster' ? (rasterRun?.result ?? null) : null;
+  const geoResult = pipeline === 'geometry' ? (geoRun?.result ?? null) : null;
+  const processing =
+    !!fontInfo && !!selectedChar && (pipeline === 'raster' ? rasterRun?.key !== rasterKey : !geoKey || geoRun?.key !== geoKey);
+  const stageError = pipeline === 'geometry' && !processing ? (geoRun?.error ?? '') : '';
 
   // ── Stroke animation ──
   const animResult: PipelineResult | GeometryPipelineResult | null = pipeline === 'geometry' ? geoResult : result;
@@ -325,7 +322,8 @@ export function GlyphWorkspace({
         </div>
 
         <ZoomStage
-          contentKey={`${selectedChar}:${pipeline}:${stageValue}:${activeResult ? 1 : 0}`}
+          // Refit when what's drawn changes — the glyph on screen, not the selection.
+          contentKey={`${activeResult?.char ?? ''}:${pipeline}:${stageValue}:${activeResult ? 1 : 0}`}
           overlay={
             <StageStatus
               processing={processing}
@@ -337,27 +335,28 @@ export function GlyphWorkspace({
           }
         >
           {finalActive ? (
+            // Stays mounted across glyph switches: the renderer keeps the last
+            // glyph it drew until the next one is built.
             font &&
-            activeResult &&
-            !processing && (
-              <FinalStage
-                font={font}
-                char={selectedChar}
-                settings={settings}
-                time={animTime}
-                resultsCache={resultsCache}
-                onDuration={setRenderedDuration}
-              />
+            activeResult && (
+              <div className={cx('transition-opacity', processing && 'opacity-40')}>
+                <FinalStage
+                  font={font}
+                  char={selectedChar}
+                  settings={settings}
+                  time={animTime}
+                  resultsCache={resultsCache}
+                  onDuration={setRenderedDuration}
+                />
+              </div>
             )
           ) : (
             // The diagnostic stages draw fixed light-theme art; dark mode inverts it (see studio.css).
-            <div className="studio-stage-art text-zinc-900">
+            // The previous result stays up, dimmed, while the current one is computed.
+            <div className={cx('studio-stage-art text-zinc-900 transition-opacity', processing && 'opacity-40')}>
               {pipeline === 'raster'
-                ? result &&
-                  !processing &&
-                  activeStage !== 'final' && <StageRenderer result={result} stage={activeStage} animTime={animTime} />
+                ? result && activeStage !== 'final' && <StageRenderer result={result} stage={activeStage} animTime={animTime} />
                 : geoResult &&
-                  !processing &&
                   geometryStage !== 'final' && <GeometryStageRenderer result={geoResult} stage={geometryStage} animTime={animTime} />}
             </div>
           )}
@@ -418,16 +417,33 @@ function FinalStage({
     () => buildTimingConfig({ strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration }),
     [strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration],
   );
+  // The glyph the renderer has finished drawing (it keeps the previous one up
+  // while the next is built): the card stays hidden until there is one — no
+  // empty card — and is sized by it rather than by the one still coming.
+  const [drawn, setDrawn] = useState<{ font: LoadedFont; char: string } | null>(null);
+  const onReady = useCallback(
+    (info: { totalDuration: number }) => {
+      onDuration(info.totalDuration);
+      setDrawn({ font, char });
+    },
+    [onDuration, font, char],
+  );
   // Size the artboard to the glyph's advance so the fit-to-view zoom frames it.
   const advance = useMemo(() => {
-    const fonts = [font.info.font, ...(font.info.extraFonts ?? [])];
-    const glyph = fonts.map((f) => f.charToGlyph(char)).find((g) => (g?.index ?? 0) !== 0);
-    return (glyph?.advanceWidth ?? font.info.unitsPerEm) / font.info.unitsPerEm;
-  }, [font, char]);
-  const onReady = useCallback((info: { totalDuration: number }) => onDuration(info.totalDuration), [onDuration]);
+    if (!drawn) return 1;
+    const { info } = drawn.font;
+    const fonts = [info.font, ...(info.extraFonts ?? [])];
+    const glyph = fonts.map((f) => f.charToGlyph(drawn.char)).find((g) => (g?.index ?? 0) !== 0);
+    return (glyph?.advanceWidth ?? info.unitsPerEm) / info.unitsPerEm;
+  }, [drawn]);
 
   return (
-    <div className="overflow-hidden rounded-sm bg-white p-8 text-zinc-900 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-800">
+    <div
+      className={cx(
+        'overflow-hidden rounded-sm bg-white p-8 text-zinc-900 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-800',
+        !drawn && 'invisible',
+      )}
+    >
       <TegakiTextPreview
         style={{ width: Math.ceil(Math.max(advance, 0.5) * FINAL_FONT_SIZE * 1.1) }}
         fontInfo={font.info}
