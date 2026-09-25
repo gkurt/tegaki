@@ -9,7 +9,7 @@ Every bundled font was regenerated with a new generator pipeline. Strokes are no
 
 Stroke order also improved:
 
-- **Klee One:** kana and kanji follow KanjiVG stroke order wherever the strokes match.
+- **Klee One:** kana and kanji follow KanjiVG stroke order wherever the strokes match. Strokes turn corners only where a brush would: 口 is drawn as the left side, then the top and right side in one stroke, then the closing bottom bar, instead of one loop.
 - **Caveat, Italianno, Tangerine and Parisienne:** Latin letters follow Hershey reference order where they match.
 - **Nanum Pen Script:** Hangul syllables follow standard jamo order: initial, then vowel, then final. That includes syllables whose jamo the font writes as a single stroke.
 - **Amiri:** a stroke that stands on another is written after it, so ط and ظ draw the bowl before the stem.
