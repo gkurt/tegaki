@@ -55,7 +55,7 @@ This writes a self-drawing, looping `tegaki-is-awesome.svg` — drop it into a R
 npx tegaki "Hello World" --font tangerine --mode once -o hello.svg
 npx tegaki "ABC" --stagger 80% --size 140 --color "#222"
 npx tegaki "مرحبا بالعالم" --font amiri --stroke-easing ease-in-out-cubic
-npx tegaki "Glow" --effects '{"glow":{"radius":10,"color":"#f0a"}}' --no-clip
+npx tegaki "Glow" --effects '{"glow":{"radius":10,"color":"#f0a"}}'
 ```
 
 `--mode` is `loop` (repeats forever, the default), `once` (draws itself a single time), or `static` (finished artwork). The CLI shapes text with harfbuzz (bundled as WASM) the way the renderer does, so ligatures, Arabic joining, Devanagari and right-to-left text come out right, and it clips strokes to the letter outlines as the studio does. Run `npx tegaki --help` for every option and `--list-fonts` for the bundled fonts. The CLI emits SVG only — for PNG, GIF, or WebM use the [interactive studio](https://gkurt.com/tegaki/studio/).

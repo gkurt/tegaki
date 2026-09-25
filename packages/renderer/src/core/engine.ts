@@ -26,6 +26,7 @@ import { ensureFont, ensureFontFace, fontDataUri } from '../lib/font.ts';
 import { type CanvasOverflow, glyphInkBounds, inkOverflow, NO_OVERFLOW } from '../lib/inkBounds.ts';
 import type { BundleShaper, ShapeOptions } from '../lib/shaper.ts';
 import { type SubdividedStroke, subdivideStroke } from '../lib/strokeCache.ts';
+import { glowPasses, strokeEffects, wobbledOutline } from '../lib/strokeEffects.ts';
 import {
   placementsToSvg,
   type SvgExportConfig,
@@ -201,8 +202,17 @@ export class TegakiEngine {
   private _overlayEl: HTMLElement;
   private _canvasFallbackEl: HTMLSpanElement;
   private _maskCanvas: HTMLCanvasElement | null = null;
-  /** Parsed glyph outlines for the clip mask, by path data, for the shaper they came from. */
-  private _maskPaths: { shaper: BundleShaper | null; paths: Map<string, Path2D> } = { shaper: null, paths: new Map() };
+  /** Scratch canvas recoloring the clipped ink for each glow pass. */
+  private _glowCanvas: HTMLCanvasElement | null = null;
+  /**
+   * Parsed glyph outlines for the clip mask, by path data (and glyph seed
+   * when wobbled), for the shaper and wobble (`key`) they were built with.
+   */
+  private _maskPaths: { shaper: BundleShaper | null; key: string; paths: Map<string, Path2D> } = {
+    shaper: null,
+    key: '',
+    paths: new Map(),
+  };
 
   // --- Options ---
   private _text = '';
@@ -795,6 +805,7 @@ export class TegakiEngine {
     this._strokeCache = new WeakMap();
     this._strokeCacheKey = '';
     this._maskCanvas = null;
+    this._glowCanvas = null;
   }
 
   // =========================================================================
@@ -1488,20 +1499,29 @@ export class TegakiEngine {
       const d = shaper.glyphPath(entry.glyphId);
       if (d === null) return null;
       const { x, glyphY } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
-      out.push({ d, x: padH + x, y: padV + glyphY + font.ascender * scale, scale });
+      out.push({ d, x: padH + x, y: padV + glyphY + font.ascender * scale, scale, seed: this._seed + entry.graphemeIndex });
     }
     return out;
   }
 
-  /** A `Path2D` per outline, parsed once per shaper. */
-  private _outlinePaths(outlines: SvgGlyphOutline[]): Path2D[] {
-    if (this._maskPaths.shaper !== this._shaper) this._maskPaths = { shaper: this._shaper, paths: new Map() };
+  /**
+   * A `Path2D` per outline, parsed once per shaper — wobbled as its glyph's
+   * strokes are (subdivided every `segmentLengthFU`) when a wobble is on.
+   */
+  private _outlinePaths(outlines: SvgGlyphOutline[], segmentLengthFU: number): Path2D[] {
+    const effects = this._resolvedEffects;
+    const wobble = findEffect(effects, 'wobble');
+    const key = wobble ? `${JSON.stringify(wobble.config)}|${segmentLengthFU}` : '';
+    if (this._maskPaths.shaper !== this._shaper || this._maskPaths.key !== key) {
+      this._maskPaths = { shaper: this._shaper, key, paths: new Map() };
+    }
     const cache = this._maskPaths.paths;
     return outlines.map((g) => {
-      let path = cache.get(g.d);
+      const id = wobble ? `${g.seed ?? 0}|${g.d}` : g.d;
+      let path = cache.get(id);
       if (!path) {
-        path = new Path2D(g.d);
-        cache.set(g.d, path);
+        path = new Path2D(wobble ? wobbledOutline(g.d, strokeEffects(effects, g.seed ?? 0, ''), segmentLengthFU) : g.d);
+        cache.set(id, path);
       }
       return path;
     });
@@ -1593,6 +1613,10 @@ export class TegakiEngine {
 
     const clipText = this._quality?.clipText;
     const strokeScale = typeof clipText === 'number' ? clipText : 1;
+    // Clipped ink is drawn without its glow and glowed once clipped (see the
+    // mask below) — the clip would cut away a glow drawn with the strokes.
+    const clipGlows = clipText ? glowPasses(this._resolvedEffects, color, fontSize, scale) : [];
+    const inkEffects = clipGlows.length > 0 ? this._resolvedEffects.filter((e) => e.effect !== 'glow') : this._resolvedEffects;
 
     // --- Render-stage hooks (pre) ---
     // Effects that span the whole layout (vs. per-stroke) can hook the
@@ -1659,7 +1683,7 @@ export class TegakiEngine {
           localTime,
           font.lineCap,
           color,
-          this._resolvedEffects,
+          inkEffects,
           this._seed + charIdx,
           getSubdivided,
           this._timing?.strokeEasing,
@@ -1688,7 +1712,7 @@ export class TegakiEngine {
           fontSize,
           cssFontFamily(font, this._fallbackFont),
           color,
-          this._resolvedEffects,
+          inkEffects,
           clip?.seed ?? this._seed + charIdx,
           clip?.direction ?? layout.direction ?? 'ltr',
         );
@@ -1731,7 +1755,7 @@ export class TegakiEngine {
       maskCtx.translate(padH, padV);
       const outlines = this._glyphOutlines(graphemeToLine);
       if (outlines) {
-        const paths = this._outlinePaths(outlines);
+        const paths = this._outlinePaths(outlines, maxSegLenFU);
         for (let i = 0; i < outlines.length; i++) {
           const g = outlines[i]!;
           maskCtx.save();
@@ -1772,6 +1796,39 @@ export class TegakiEngine {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'destination-in';
       ctx.drawImage(maskCanvas, 0, 0);
+
+      // --- Glow the clipped ink ---
+      // Each pass lays the clipped ink, recolored in the glow color, with its
+      // shadow under the ink — what `drawGlyph` draws per stroke unclipped.
+      // The spent mask canvas keeps a copy of the clipped ink to recolor.
+      if (clipGlows.length > 0) {
+        maskCtx.setTransform(1, 0, 0, 1, 0, 0);
+        maskCtx.globalCompositeOperation = 'copy';
+        maskCtx.drawImage(canvas, 0, 0);
+        maskCtx.globalCompositeOperation = 'source-over';
+        if (!this._glowCanvas) this._glowCanvas = document.createElement('canvas');
+        const glowCanvas = this._glowCanvas;
+        if (glowCanvas.width !== canvas.width || glowCanvas.height !== canvas.height) {
+          glowCanvas.width = canvas.width;
+          glowCanvas.height = canvas.height;
+        }
+        const glowCtx = glowCanvas.getContext('2d')!;
+        // Under the ink, so the last pass goes first to end up on top of the others.
+        ctx.globalCompositeOperation = 'destination-over';
+        for (let i = clipGlows.length - 1; i >= 0; i--) {
+          const glow = clipGlows[i]!;
+          glowCtx.globalCompositeOperation = 'copy';
+          glowCtx.drawImage(maskCanvas, 0, 0);
+          glowCtx.globalCompositeOperation = 'source-in';
+          glowCtx.fillStyle = glow.color;
+          glowCtx.fillRect(0, 0, glowCanvas.width, glowCanvas.height);
+          ctx.shadowBlur = glow.blur;
+          ctx.shadowColor = glow.color;
+          ctx.shadowOffsetX = glow.dx;
+          ctx.shadowOffsetY = glow.dy;
+          ctx.drawImage(glowCanvas, 0, 0);
+        }
+      }
       ctx.restore();
     }
   }

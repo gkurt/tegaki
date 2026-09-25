@@ -210,7 +210,14 @@ export function textToSvg(text: string, font: TegakiBundle, options: TextToSvgOp
     });
     if (clip && entry.glyphId !== undefined && /\S/u.test(entry.char)) {
       const d = shaper?.glyphPath?.(entry.glyphId);
-      if (d) outlines.push({ d, x: padH + xEm * fontSize, y: padV + glyphY + font.ascender * scale, scale });
+      if (d)
+        outlines.push({
+          d,
+          x: padH + xEm * fontSize,
+          y: padV + glyphY + font.ascender * scale,
+          scale,
+          seed: (options.seed ?? 0) + charIdx,
+        });
     }
   }
 

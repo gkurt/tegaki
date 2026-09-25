@@ -168,6 +168,29 @@ describe('placementsToSvg text', () => {
     expect(svg).not.toContain('<text');
   });
 
+  test('a clipped glow is filtered from the clipped ink, outside the mask', () => {
+    const svg = svgOf({
+      animated: false,
+      effects: resolveEffects({ glow: { radius: 8, color: '#f0f' } }),
+      clipText: { glyphs: [{ d: 'M0,0L100,0L100,700Z', x: 10, y: 80, scale: 0.1 }] },
+    });
+    // No per-stroke glow copies for the mask to cut away…
+    expect(svg).not.toContain('stroke="#f0f"');
+    // …but one filter wrapping the masked group.
+    expect(svg).toContain('<filter id="tk-clip-glow"');
+    expect(svg).toContain('<feDropShadow in="tk-t0"');
+    expect(svg.indexOf('<g filter="url(#tk-clip-glow)">')).toBeLessThan(svg.indexOf('<g mask="url(#tk-clip)">'));
+  });
+
+  test('a wobble moves the clip outlines with the strokes', () => {
+    const d = 'M0,0L100,0L100,700Z';
+    const clipText = { glyphs: [{ d, x: 10, y: 80, scale: 0.1 }] };
+    const wobbly = svgOf({ segmentLengthFU: 20, effects: resolveEffects({ wobble: { amplitude: 5 } }), clipText });
+    expect(wobbly).not.toContain(`<path d="${d}"`);
+    expect(wobbly).toMatch(/<mask id="tk-clip"[^>]*><g fill="#fff"><path d="M[^"]*Z" transform/);
+    expect(svgOf({ segmentLengthFU: 20, clipText })).toContain(`<path d="${d}"`);
+  });
+
   test('without outlines, clip-to-text sets the words in the font', () => {
     const svg = svgOf({ clipText: { font, words: [{ text: 'Hi', x: 10, y: 80, direction: 'ltr' }] } });
     expect(svg).toMatch(

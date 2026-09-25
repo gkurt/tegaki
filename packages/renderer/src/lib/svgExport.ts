@@ -1,7 +1,7 @@
 import type { LineCap, TegakiGlyphData } from '../types.ts';
-import type { ResolvedEffect } from './effects.ts';
+import { findEffect, type ResolvedEffect } from './effects.ts';
 import { subdivideStroke } from './strokeCache.ts';
-import { defaultStrokeEasing, type GlowPass, glowPasses, type StrokeEffects, strokeEffects } from './strokeEffects.ts';
+import { defaultStrokeEasing, type GlowPass, glowPasses, type StrokeEffects, strokeEffects, wobbledOutline } from './strokeEffects.ts';
 
 /**
  * One positioned glyph ready to serialize. Coordinates are the engine's ctx
@@ -58,6 +58,8 @@ export interface SvgGlyphOutline {
   y: number;
   /** fontSize / unitsPerEm. */
   scale: number;
+  /** Effect seed of the glyph drawn here (its strokes' `seed`), so a wobble moves the outline in step. Default `0`. */
+  seed?: number;
 }
 
 /** A character the bundle has no strokes for, drawn as text in the fallback font. */
@@ -133,6 +135,22 @@ const LOOP_GAP = 0.7;
 
 /** Stands in for a mask / filter region's attributes until the viewBox is known. */
 const REGION = '\u0000REGION\u0000';
+
+/**
+ * The glow of clipped ink: each pass is the clipped ink recolored in the glow
+ * color with its drop shadow, stacked under the ink in order — what each
+ * stroke draws when nothing is clipped, taken after the clip so the clip
+ * doesn't cut the glow away.
+ */
+function clipGlowFilter(id: string, glows: GlowPass[]): string {
+  const passes = glows.map(
+    (g, i) =>
+      `<feFlood flood-color="${g.color}" /><feComposite in2="SourceAlpha" operator="in" result="tk-t${i}" />` +
+      `<feDropShadow in="tk-t${i}" dx="${fmt(g.dx)}" dy="${fmt(g.dy)}" stdDeviation="${fmt(g.blur / 2)}" flood-color="${g.color}" result="tk-g${i}" />`,
+  );
+  const merge = glows.map((_, i) => `<feMergeNode in="tk-g${i}" />`).join('');
+  return `<filter id="${id}" filterUnits="userSpaceOnUse" ${REGION}>${passes.join('')}<feMerge>${merge}<feMergeNode in="SourceGraphic" /></feMerge></filter>`;
+}
 
 function fmt(n: number): string {
   return (Math.round(n * 100) / 100).toString();
@@ -527,7 +545,8 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
     const px = (fx: number) => ox + fx * scale;
     const py = (fy: number) => oy + (fy + ascender) * scale;
     const fx = strokeEffects(effects, item.seed ?? 0, cfg.color);
-    const glows = glowPasses(effects, cfg.color, fontSize, scale);
+    // Clipped ink glows as a whole, past the clip — see `clipGlowFilter`.
+    const glows = cfg.clipText ? [] : glowPasses(effects, cfg.color, fontSize, scale);
     const needsPerSegment = pressure > 0 || fx.hasTaper;
     const segmented = needsPerSegment || fx.hasStrokeGradient;
 
@@ -682,7 +701,7 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
       const [l, top, r, bottom] = t.box;
       grow(l, top, 0);
       grow(r, bottom, 0);
-      const glowParts = t.glows.map((g) => textEl(t, font, g.color, filterFor(g), reveal));
+      const glowParts = (cfg.clipText ? [] : t.glows).map((g) => textEl(t, font, g.color, filterFor(g), reveal));
       const main = textEl(t, font, t.fill, '', reveal);
       body.push(clip ? `<g${clip}>${glowParts.join('')}${main}</g>` : [...glowParts, main].join('\n'));
     }
@@ -721,12 +740,22 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
   if (fade) content = `<g class="${fade}">\n${content}\n</g>`;
   if (cfg.clipText) {
     const { glyphs = [], font, words = [] } = cfg.clipText;
+    // A wobble moves the letters' edges with the strokes inside them.
+    const wobble = findEffect(effects, 'wobble');
     const shapes = glyphs
       .filter((g) => g.d)
-      .map((g) => `<path d="${g.d}" transform="translate(${fmt(g.x)} ${fmt(g.y)}) scale(${fmtFine(g.scale)} ${fmtFine(-g.scale)})" />`);
+      .map((g) => {
+        const d = wobble ? wobbledOutline(g.d, strokeEffects(effects, g.seed ?? 0, cfg.color), cfg.segmentLengthFU) : g.d;
+        return `<path d="${d}" transform="translate(${fmt(g.x)} ${fmt(g.y)}) scale(${fmtFine(g.scale)} ${fmtFine(-g.scale)})" />`;
+      });
     if (font) shapes.push(...words.map((w) => textEl(w, font, '#fff', '', NO_ANIM)));
     defs.push(`<mask id="tk-clip" maskUnits="userSpaceOnUse" ${REGION}><g fill="#fff">${shapes.join('')}</g></mask>`);
     content = `<g mask="url(#tk-clip)">\n${content}\n</g>`;
+    const glows = glowPasses(effects, cfg.color, fontSize, items[0]?.scale ?? 1);
+    if (glows.length > 0) {
+      defs.push(clipGlowFilter('tk-clip-glow', glows));
+      content = `<g filter="url(#tk-clip-glow)">\n${content}\n</g>`;
+    }
   }
 
   const css: string[] = [];

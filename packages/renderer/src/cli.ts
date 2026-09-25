@@ -94,8 +94,7 @@ Options:
       --clip <scale>        Clip strokes to the letter outlines, scaling their width by
                               <scale> first (default: ${DEFAULT_CLIP}); --no-clip draws bare strokes
       --effects <json>      Renderer effects, e.g. '{"glow":{"radius":8,"color":"#0cf"}}'
-                              (glow, wobble, taper, strokeGradient, globalGradient);
-                              the clip trims a glow too — pair glow with --no-clip
+                              (glow, wobble, taper, strokeGradient, globalGradient)
       --seed <n>            Seed for wobble / gradient variation (default: 0)
       --no-shaping          Place glyphs one per character by advance width (no ligatures,
                               joining or bidi)
@@ -110,7 +109,7 @@ Examples:
   tegaki "Hello World" --font tangerine --mode once -o hello.svg
   tegaki "ABC" --stagger 80% --size 140 --color "#222"
   tegaki "مرحبا بالعالم" --font amiri --mode once
-  tegaki "Glow" --effects '{"glow":{"radius":10,"color":"#f0a"}}' --no-clip
+  tegaki "Glow" --effects '{"glow":{"radius":10,"color":"#f0a"}}'
 `;
 
 function fail(message: string): never {
