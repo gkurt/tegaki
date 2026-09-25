@@ -14,6 +14,8 @@ export interface LocalFont {
   fontBuffer: ArrayBuffer;
   /** Filename for the bundle's copy of the font. */
   fontFileName: string;
+  /** Filename for a bundled copy of the whole file (`<family slug>.ttf`, like the Google Fonts full downloads). */
+  fullFontFileName: string;
 }
 
 /** sfnt magic numbers opentype.js can't read: compressed web fonts. */
@@ -39,5 +41,5 @@ export async function loadLocalFont(path: string, chars?: string): Promise<Local
   const ext = magic === 'OTTO' ? 'otf' : 'ttf';
   const slug = family.toLowerCase().replace(/\s+/g, '-');
   const fontFileName = chars === undefined ? basename(path) : `${slug}-${charsHash(chars)}.${ext}`;
-  return { family, fontBuffer, fontFileName };
+  return { family, fontBuffer, fontFileName, fullFontFileName: `${slug}.${ext}` };
 }

@@ -56,7 +56,15 @@ async function resolveFont(
   source: { family?: string; fontFile?: string; force: boolean },
   chars: string | undefined,
   defaultFamily: string,
-): Promise<{ family: string; fontBuffer: ArrayBuffer; extraFontBuffers?: ArrayBuffer[]; fontFileName: string; local: boolean }> {
+): Promise<{
+  family: string;
+  fontBuffer: ArrayBuffer;
+  extraFontBuffers?: ArrayBuffer[];
+  fontFileName: string;
+  /** Set for a local font: the name its whole file takes in a bundle. */
+  fullFontFileName?: string;
+  local: boolean;
+}> {
   if (source.fontFile) {
     if (source.family) throw new Error('Pass either a Google Fonts family or --font-file, not both');
     return { ...(await loadLocalFont(source.fontFile, chars)), local: true };
@@ -83,7 +91,7 @@ export const tegakiProgram = createPadrone('tegaki')
       .arguments(generateArgsSchema, { positional: ['family'] })
       .action(async (args, ctx) => {
         const progress = ctx.context.progress;
-        const { family: familyArg, fontFile, output, force, debug, chars, pipeline, ...pipelineOptions } = args;
+        const { family: familyArg, fontFile, fullFont, output, force, debug, chars, pipeline, ...pipelineOptions } = args;
 
         // chars: true → all glyphs in the font (skip &text= subsetting)
         // chars: false → DEFAULT_CHARS
@@ -92,20 +100,27 @@ export const tegakiProgram = createPadrone('tegaki')
 
         // Download or read the font (Google Fonts may return multiple subset files for CJK fonts)
         progress?.update(fontFile ? `Reading font "${fontFile}"...` : `Downloading font "${familyArg ?? DEFAULT_FONT_FAMILY}"...`);
-        const { family, fontBuffer, extraFontBuffers, fontFileName, local } = await resolveFont(
-          { family: familyArg, fontFile, force },
-          downloadChars,
-          DEFAULT_FONT_FAMILY,
-        );
+        const {
+          family,
+          fontBuffer,
+          extraFontBuffers,
+          fontFileName,
+          fullFontFileName: localFullFileName,
+          local,
+        } = await resolveFont({ family: familyArg, fontFile, force }, downloadChars, DEFAULT_FONT_FAMILY);
 
         // When generating a subset of a Google font, also download the full
         // font so the bundle can include it as a CSS fallback for
-        // non-generated characters. A local font ships only its subset: the
-        // fonts that need --font-file (CJK) are tens of megabytes whole.
+        // non-generated characters. A local font ships only its subset unless
+        // --full-font asks for the file too: the fonts that need --font-file
+        // (CJK) are tens of megabytes whole.
         const isSubset = chars !== true;
         let fullFontBuffer: ArrayBuffer | undefined;
         let fullFontFileName: string | undefined;
-        if (isSubset && !local) {
+        if (isSubset && local && fullFont) {
+          fullFontBuffer = await Bun.file(fontFile!).arrayBuffer();
+          fullFontFileName = localFullFileName;
+        } else if (isSubset && !local) {
           const fullPaths = await downloadFont(family, { force });
           fullFontBuffer = await Bun.file(fullPaths[0]!).arrayBuffer();
           fullFontFileName = basename(fullPaths[0]!);

@@ -13,6 +13,7 @@ describe('loadLocalFont', () => {
     const font = await loadLocalFont(caveatPath, 'Hello');
     expect(font.family).toBe('Caveat');
     expect(font.fontFileName).toBe(`caveat-${charsHash('Hello')}.ttf`);
+    expect(font.fullFontFileName).toBe('caveat.ttf');
     const parsed = opentype.parse(font.fontBuffer);
     expect(parsed.charToGlyphIndex('H')).toBeGreaterThan(0);
     expect(parsed.charToGlyphIndex('Z')).toBe(0);

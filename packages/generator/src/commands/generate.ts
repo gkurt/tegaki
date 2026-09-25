@@ -162,6 +162,12 @@ export const generateArgsSchema = pipelineOptionsSchema.extend(geometryOptionsSc
     .describe(
       "Read the font from this TTF/OTF file instead of Google Fonts, subset to the generated characters; the bundle takes the font's own family name",
     ),
+  fullFont: z
+    .boolean()
+    .default(false)
+    .describe(
+      'With --font-file: also bundle the whole file as the fallback for characters outside the generated set, as Google Fonts bundles do (CJK fonts are tens of MB whole)',
+    ),
   pipeline: z
     .enum(['geometry', 'raster'])
     .default('geometry')
