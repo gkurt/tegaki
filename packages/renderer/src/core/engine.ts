@@ -1,3 +1,4 @@
+import { paragraphDirection } from '../lib/bidi.ts';
 import {
   CSS_DURATION,
   CSS_PROGRESS,
@@ -618,6 +619,8 @@ export class TegakiEngine {
 
     if ('direction' in options && options.direction !== this._direction) {
       this._direction = options.direction;
+      // Shaping follows the direction: it decides which brackets are mirrored.
+      dirtyTimeline = true;
       dirtyLayout = true;
       dirtyRender = true;
     }
@@ -686,8 +689,13 @@ export class TegakiEngine {
   }
 
   /** How the overlay's text is laid out, for the shaper to match. */
+  /**
+   * How the timeline shapes the text. The layout's shaping must agree (it
+   * matches glyph ids against the timeline's), so it takes the DOM's resolved
+   * direction — the same one: the root is `dir="auto"` unless told otherwise.
+   */
   private _shapeOptions(): ShapeOptions {
-    return { letterSpaced: this._letterSpacing !== 0 };
+    return { letterSpaced: this._letterSpacing !== 0, direction: this._direction ?? paragraphDirection(this._text) };
   }
 
   /**
@@ -1428,18 +1436,20 @@ export class TegakiEngine {
       // than lines keeps the mask aligned where the canvas shapes a word
       // differently from the DOM, and needs no bidi reordering across words:
       // the anchors carry the DOM's order (a word switching direction is
-      // drawn as one piece per direction, each where bidi put it).
-      // `direction` still places neutral characters at a piece's ends, and
-      // textAlign 'left' pins its left edge — the
-      // mask canvas is detached, so 'start' alignment would resolve by its
-      // own direction.
-      maskCtx.direction = layout.direction ?? 'ltr';
+      // drawn as one piece per direction, each where bidi put it). Each
+      // piece's `direction` is the one the shaper shaped it in, which places
+      // neutral characters at its ends and mirrors brackets as the strokes
+      // do; textAlign 'left' pins its left edge — 'start' would follow the
+      // direction.
       maskCtx.textAlign = 'left';
       if ('letterSpacing' in maskCtx) maskCtx.letterSpacing = `${this._letterSpacing}px`;
       let clipY = 0;
       for (let li = 0; li < layout.lines.length; li++) {
         const baseline = clipY + halfLeading + (font.ascender / font.unitsPerEm) * fontSize;
-        for (const word of lineWords(layout, characters, li)) maskCtx.fillText(word.text, word.leftEm * fontSize, baseline);
+        for (const word of lineWords(layout, characters, li)) {
+          maskCtx.direction = word.direction;
+          maskCtx.fillText(word.text, word.leftEm * fontSize, baseline);
+        }
         clipY += lineHeight;
       }
 

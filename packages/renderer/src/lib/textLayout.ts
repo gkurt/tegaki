@@ -1,5 +1,5 @@
 import type { TegakiBundle } from '../types.ts';
-import { strongDirection } from './bidi.ts';
+import { neutralRunDirection, strongDirection } from './bidi.ts';
 import type { BundleShaper, ShapedGlyph } from './shaper.ts';
 import type { Timeline } from './timeline.ts';
 import { graphemes } from './utils.ts';
@@ -36,6 +36,11 @@ export interface TextLayout {
 export interface LineWord {
   text: string;
   leftEm: number;
+  /**
+   * The direction to draw `text` in — the one the shaper shapes it in, so a
+   * bracket is mirrored in the mask where it is in the strokes.
+   */
+  direction: 'ltr' | 'rtl';
 }
 
 /**
@@ -47,30 +52,42 @@ export interface LineWord {
  * beside Arabic measures 19px wider in canvas). Words that measured no width
  * are left out.
  *
- * A word that switches direction is split there: bidi need not keep its
- * halves together. `aכתב` opening an LTR line has its a at the left end and
- * `כתב` at the right end, after the rest of the Hebrew run.
- * Direction-neutral characters stay with the piece they follow.
+ * A word that switches direction is split there, as the shaper splits it into
+ * runs: bidi need not keep its halves together. `aכתב` opening an LTR line has
+ * its a at the left end and `כתב` at the right end, after the rest of the
+ * Hebrew run. Direction-neutral characters stay with the piece they follow,
+ * which is drawn in its letters' direction; a piece of nothing but them (a
+ * lone bracket) in the direction bidi resolves it to, from the line and the
+ * paragraph's direction.
  */
 export function lineWords(layout: TextLayout, characters: readonly string[], lineIdx: number): LineWord[] {
+  const indices = layout.lines[lineIdx] ?? [];
+  const lineText = indices.map((idx) => characters[idx] ?? '').join('');
+  const base = layout.direction ?? 'ltr';
   const words: LineWord[] = [];
   let text = '';
   let left = Infinity;
   let direction: 'ltr' | 'rtl' | null = null;
+  let start = 0;
+  let at = 0;
   const flush = () => {
-    if (text && Number.isFinite(left)) words.push({ text, leftEm: left });
+    if (text && Number.isFinite(left)) {
+      words.push({ text, leftEm: left, direction: direction ?? neutralRunDirection(lineText, start, start + text.length, base) });
+    }
     text = '';
     left = Infinity;
     direction = null;
   };
-  for (const charIdx of layout.lines[lineIdx] ?? []) {
+  for (const charIdx of indices) {
     const char = characters[charIdx] ?? '';
+    at += char.length;
     if (!char || WHITESPACE_RE.test(char)) {
       flush();
       continue;
     }
     const charDirection = strongDirection(char.codePointAt(0)!);
     if (charDirection && direction && charDirection !== direction) flush();
+    if (!text) start = at - char.length;
     direction ??= charDirection;
     text += char;
     if ((layout.charWidths[charIdx] ?? 0) > 0) left = Math.min(left, layout.charOffsets[charIdx] ?? 0);
@@ -323,7 +340,8 @@ export function applyShaperPositions(
     // Word order comes from the browser; glyph order within a word from the
     // shaper. See positionLineGlyphs.
     const lineText = text.slice(lineStartU, lineEndU);
-    const shaped = shaper.shape(lineText, { letterSpaced: letterSpacingEm !== 0 });
+    // Each line alone would pick its own `dir="auto"` direction; the DOM's is the paragraph's.
+    const shaped = shaper.shape(lineText, { letterSpaced: letterSpacingEm !== 0, direction: layout.direction ?? 'ltr' });
     if (shaped.length === 0) continue;
     const spanLeftEm = (start: number, end: number): number | undefined => {
       range.setStart(textNode, lineStartU + start);

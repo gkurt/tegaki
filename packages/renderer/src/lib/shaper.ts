@@ -32,6 +32,14 @@ export interface ShapeOptions {
    * shaper must drop them as well to pick the glyphs the DOM draws.
    */
   letterSpaced?: boolean;
+  /**
+   * The paragraph's base direction, as the DOM lays it out. A run of only
+   * direction-neutral characters (a bracket between spaces, or one in a font
+   * subset of its own) is shaped in the direction bidi resolves it to, so it
+   * is mirrored where the browser mirrors it. Defaults to `dir="auto"`'s
+   * pick for the text shaped — pass it when shaping a paragraph line by line.
+   */
+  direction?: 'ltr' | 'rtl';
 }
 
 export interface BundleShaper {

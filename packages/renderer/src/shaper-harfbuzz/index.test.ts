@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { ShapeOptions } from '../lib/shaper.ts';
+import type { ShapedGlyph, ShapeOptions } from '../lib/shaper.ts';
 import type { TegakiBundle } from '../types.ts';
 import harfbuzzShaper, { isShapingWhitespace, splitForShaping, toHbFeatureString } from './index.ts';
 
@@ -189,5 +189,25 @@ describe('mixed-direction words', () => {
       [4, 1],
       [5, 1],
     ]);
+  });
+});
+
+describe('bracket mirroring', () => {
+  const suezUrl = new URL('../../fonts/suez-one/suez-one.ttf', import.meta.url).href;
+  const suez = () => harfbuzzShaper({ fontUrl: suezUrl, features: [], glyphDataById: {} } as unknown as TegakiBundle)!;
+  const glyphOf = (shaped: ShapedGlyph[], cl: number) => shaped.find((g) => g.cl === cl)?.g;
+
+  test('a bracket standing alone between Hebrew words is mirrored, as bidi mirrors it', async () => {
+    const shaper = await suez();
+    const [open, close] = [shaper.shape('(')[0]!.g, shaper.shape(')')[0]!.g];
+    const shaped = shaper.shape('( שלום )');
+    expect([glyphOf(shaped, 0), glyphOf(shaped, 7)]).toEqual([close, open]);
+  });
+
+  test('a lone bracket between a Latin and a Hebrew word follows the paragraph direction', async () => {
+    const shaper = await suez();
+    const open = shaper.shape('(')[0]!.g;
+    expect(glyphOf(shaper.shape('a ( שלום'), 2)).toBe(open);
+    expect(glyphOf(shaper.shape('a ( שלום', { direction: 'rtl' }), 2)).not.toBe(open);
   });
 });

@@ -1,3 +1,4 @@
+export { paragraphDirection } from '../lib/bidi.ts';
 export { drawGlyph } from '../lib/drawGlyph.ts';
 export {
   type EffectDefinition,

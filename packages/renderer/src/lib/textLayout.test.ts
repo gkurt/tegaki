@@ -111,14 +111,14 @@ describe('lineWords', () => {
     // "אב גד" right-aligned: the first word is at the right, each written right to left.
     const words = lineWords(layout([1.75, 1.25, 1, 0.5, 0], [0.5, 0.5, 0.25, 0.5, 0.5], [[0, 1, 2, 3, 4]]), ['א', 'ב', ' ', 'ג', 'ד'], 0);
     expect(words).toEqual([
-      { text: 'אב', leftEm: 1.25 },
-      { text: 'גד', leftEm: 0 },
+      { text: 'אב', leftEm: 1.25, direction: 'rtl' },
+      { text: 'גד', leftEm: 0, direction: 'rtl' },
     ]);
   });
 
   test('zero-width graphemes join their word without moving its anchor', () => {
     const words = lineWords(layout([0.3, 0, 0.5], [0.5, 0, 0.5], [[0, 1, 2]]), ['a', '\u200d', 'b'], 0);
-    expect(words).toEqual([{ text: 'a\u200db', leftEm: 0.3 }]);
+    expect(words).toEqual([{ text: 'a\u200db', leftEm: 0.3, direction: 'ltr' }]);
   });
 
   test('a word switching direction splits into pieces anchored apart: "aכתב היד" in an LTR line has כתב at the right end', () => {
@@ -129,18 +129,30 @@ describe('lineWords', () => {
       0,
     );
     expect(words).toEqual([
-      { text: 'a', leftEm: 0 },
-      { text: 'כתב', leftEm: 1 },
-      { text: 'הי', leftEm: 0.25 },
+      { text: 'a', leftEm: 0, direction: 'ltr' },
+      { text: 'כתב', leftEm: 1, direction: 'rtl' },
+      { text: 'הי', leftEm: 0.25, direction: 'rtl' },
     ]);
   });
 
   test('direction-neutral characters stay with the piece they follow', () => {
     const words = lineWords(layout([0, 0.25, 0.5, 0.75], [0.25, 0.25, 0.25, 0.25], [[0, 1, 2, 3]]), ['a', '.', 'b', 'ש'], 0);
     expect(words).toEqual([
-      { text: 'a.b', leftEm: 0 },
-      { text: 'ש', leftEm: 0.75 },
+      { text: 'a.b', leftEm: 0, direction: 'ltr' },
+      { text: 'ש', leftEm: 0.75, direction: 'rtl' },
     ]);
+  });
+
+  test('a lone bracket is drawn in the direction bidi resolves it to, so it mirrors where the strokes do', () => {
+    // "( b )" after a Latin word in an RTL paragraph: the pair encloses Latin, so both brackets are LTR.
+    const l: TextLayout = {
+      ...layout([0, 0, 0.5, 0, 1, 0, 1.5], [0.5, 0, 0.5, 0, 0.5, 0, 0.5], [[0, 1, 2, 3, 4, 5, 6]]),
+      direction: 'rtl',
+    };
+    const words = lineWords(l, ['a', ' ', '(', ' ', 'b', ' ', ')'], 0);
+    expect(words.map((w) => w.direction)).toEqual(['ltr', 'ltr', 'ltr', 'ltr']);
+    const alone = lineWords({ ...l, lines: [[0, 1]] }, ['(', ' '], 0);
+    expect(alone.map((w) => w.direction)).toEqual(['rtl']);
   });
 
   test('reads only the requested line and drops its newline', () => {
@@ -152,6 +164,6 @@ describe('lineWords', () => {
         [2, 3],
       ],
     );
-    expect(lineWords(l, ['a', '\n', 'b', 'c'], 1)).toEqual([{ text: 'bc', leftEm: 0 }]);
+    expect(lineWords(l, ['a', '\n', 'b', 'c'], 1)).toEqual([{ text: 'bc', leftEm: 0, direction: 'ltr' }]);
   });
 });

@@ -1,4 +1,4 @@
-import type { BundleShaper, ShapeOptions } from 'tegaki/core';
+import { type BundleShaper, paragraphDirection, type ShapeOptions } from 'tegaki/core';
 
 /** A glyph the renderer's shaper draws, with what the pipeline needs to build its strokes. */
 export interface ShapedGlyphRef {
@@ -25,12 +25,15 @@ export interface ShapedGlyphRef {
  * line shaped whole, and any glyph missing here would be drawn with its base
  * letter's strokes under the alternate's clip mask. `options` must match the
  * renderer's (letter-spaced text drops ligatures and contextual alternates).
+ * Each line is shaped in the whole text's `dir="auto"` direction, as the
+ * engine does, unless `options.direction` names one.
  */
 export function collectShapedGlyphs(shaper: BundleShaper, text: string, options?: ShapeOptions): ShapedGlyphRef[] {
   const out: ShapedGlyphRef[] = [];
   const seen = new Set<string>();
+  const shapeOptions: ShapeOptions = { ...options, direction: options?.direction ?? paragraphDirection(text) };
   for (const line of text.split('\n')) {
-    const shaped = shaper.shape(line, options);
+    const shaped = shaper.shape(line, shapeOptions);
     const starts = [...new Set(shaped.map((g) => g.cl))].sort((a, b) => a - b);
     const glyphsPerCluster = new Map<number, number>();
     for (const g of shaped) glyphsPerCluster.set(g.cl, (glyphsPerCluster.get(g.cl) ?? 0) + 1);
