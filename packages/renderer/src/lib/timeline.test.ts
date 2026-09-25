@@ -374,3 +374,48 @@ describe('computeTimeline for Devanagari "द्" (consonant + virama)', () => {
     expect(tl.totalDuration).toBeLessThan(lastStrokeDelay);
   });
 });
+
+describe('computeTimeline word-level deferral tiers', () => {
+  // Each glyph: a 1s body stroke, then (by its bundled timing) a 0.5s headline
+  // (r = -0.5) and a 0.2s mark (r = -1). glyphGap 0.1.
+  const tiered = (): TegakiGlyphData => ({
+    w: 500,
+    t: 1.9,
+    s: [{ ...stroke(0, 1) }, { ...stroke(1.1, 0.5), r: -0.5 }, { ...stroke(1.7, 0.2), r: -1 }],
+  });
+  const bundle = makeBundle({ glyphData: { क: tiered(), ख: tiered() } });
+  const timeline = computeTimeline('कख', bundle, { glyphGap: 0.1 });
+  const [a, b] = timeline.entries;
+  const at = (entry: typeof a, i: number) => entry!.offset + entry!.strokeDelays![i]!;
+
+  test('bodies of the whole word draw first', () => {
+    expect(a!.offset).toBe(0);
+    expect(b!.offset).toBeCloseTo(1.1, 6);
+  });
+
+  test('headlines follow the bodies, glyph to glyph with no gap — one line across the word', () => {
+    // Bodies end at 2.1; the headline phase starts a glyph gap later.
+    expect(at(a, 1)).toBeCloseTo(2.2, 6);
+    expect(at(b, 1)).toBeCloseTo(2.7, 6);
+  });
+
+  test('marks follow the headlines, with the glyph gap between glyphs', () => {
+    expect(at(a, 2)).toBeCloseTo(3.3, 6);
+    expect(at(b, 2)).toBeCloseTo(3.6, 6);
+    expect(timeline.totalDuration).toBeCloseTo(3.8, 6);
+  });
+
+  test('a glyph without a tier sits that phase out', () => {
+    const plain: TegakiGlyphData = { w: 500, t: 1, s: [stroke(0, 1)] };
+    const t2 = computeTimeline('कग', makeBundle({ glyphData: { क: tiered(), ग: plain } }), { glyphGap: 0.1 });
+    const [first, second] = t2.entries;
+    expect(second!.strokeDelays).toBeUndefined();
+    expect(first!.offset + first!.strokeDelays![1]!).toBeCloseTo(2.2, 6);
+  });
+
+  test('deferDots: false keeps the bundled order', () => {
+    const t3 = computeTimeline('कख', bundle, { glyphGap: 0.1, deferDots: false });
+    expect(t3.entries.every((e) => e.strokeDelays === undefined)).toBe(true);
+    expect(t3.totalDuration).toBeCloseTo(3.9, 6);
+  });
+});

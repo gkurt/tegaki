@@ -24,10 +24,11 @@ export interface TimelineConfig {
    */
   glyphEasing?: (t: number) => number;
   /**
-   * When `true` (default), disconnected marks tagged by the generator — i-dots,
-   * Arabic nuqṭa, diacritics — are deferred so every body stroke in a word
-   * draws before any dot in that word. When `false`, strokes animate in their
-   * bundled order with no deferral.
+   * When `true` (default), strokes the generator tags with a negative
+   * priority are deferred so every body stroke in a word draws first: a
+   * Devanagari/Bengali headline, drawn across the word as one line, then the
+   * disconnected marks — i-dots, Arabic nuqṭa, diacritics. When `false`,
+   * strokes animate in their bundled order with no deferral.
    *
    * Ignored when `stagger` is set — stagger mode treats every stroke uniformly.
    */
@@ -93,8 +94,9 @@ export interface TimelineEntry {
    * Sparse per-stroke override of the bundled stroke's `d` (delay) field. When
    * `strokeDelays[i]` is a number, the renderer treats that value as stroke
    * `i`'s delay (relative to `offset`) instead of the delay stored in the
-   * glyph. Populated by word-level dot deferral: priority-tagged strokes get
-   * shifted to after every body stroke in the word has drawn.
+   * glyph. Populated by word-level deferral: priority-tagged strokes (a
+   * headline, then marks) get shifted to after every body stroke in the word
+   * has drawn.
    */
   strokeDelays?: (number | undefined)[];
   /**
@@ -240,51 +242,64 @@ class StaggerScheduler {
 
 type EntryFields = Omit<TimelineEntry, 'offset' | 'duration' | 'strokeDelays'>;
 
+/** One glyph's strokes of one deferred priority tier (see `Stroke.priority`). */
+interface DeferredTier {
+  priority: number;
+  /** Span of the tier's strokes (`maxEnd − minD`). */
+  duration: number;
+  /** Minimum `d` across the tier's strokes — used to re-anchor them against the word's phase for the tier. */
+  minD: number;
+  /** Indices of the tier's strokes inside `glyph.s`. */
+  indices: number[];
+  /** Bundled `d` values of the strokes at those indices (parallel to `indices`). */
+  delays: number[];
+}
+
 interface Pending {
   fields: EntryFields;
-  /** Span of the body-stroke phase (or the full `t` when no strokes are dot-tagged). */
+  /** Span of the body-stroke phase (or the full `t` when no strokes are deferred). */
   bodyDuration: number;
-  /** Span of the dot-stroke phase (`dotMaxEnd − dotMinD`). Zero when no dots. */
-  dotDuration: number;
-  /** Minimum `d` across dot strokes — used to re-anchor dots against the word's dot phase. */
-  dotMinD: number;
-  /** Indices of dot-tagged strokes inside `glyph.s`. */
-  dotIndices: number[];
-  /** Bundled `d` values of the dot strokes at those indices (parallel to `dotIndices`). */
-  dotDelays: number[];
+  /** Deferred tiers present in the glyph, highest priority first. */
+  tiers: DeferredTier[];
 }
+
+/**
+ * Priorities in (−1, 0) are CONNECTING strokes — a Devanagari/Bengali
+ * headline — whose per-glyph pieces join into one line across the word, so
+ * their phase runs glyph to glyph without a gap. Marks (−1 and below) keep
+ * the glyph gap between glyphs.
+ */
+const isConnectingTier = (priority: number) => priority > -1 && priority < 0;
 
 type Separator = 'word' | 'line';
 
-/** Decompose a glyph into a body phase and an optional dot phase. */
-function partitionGlyph(glyph: TegakiGlyphData, fallbackTotal: number, deferDots: boolean) {
+/** Decompose a glyph into a body phase and its deferred tiers (one phase each). */
+function partitionGlyph(glyph: TegakiGlyphData, fallbackTotal: number, deferDots: boolean): Omit<Pending, 'fields'> {
   const strokes = glyph.s;
   let bodyDuration = 0;
-  let dotMinD = Infinity;
-  let dotMaxEnd = 0;
-  const dotIndices: number[] = [];
-  const dotDelays: number[] = [];
+  const byPriority = new Map<number, DeferredTier & { maxEnd: number }>();
   for (let i = 0; i < strokes.length; i++) {
     const s = strokes[i]!;
     const end = s.d + s.a;
-    if (deferDots && (s.r ?? 0) < 0) {
-      dotIndices.push(i);
-      dotDelays.push(s.d);
-      if (s.d < dotMinD) dotMinD = s.d;
-      if (end > dotMaxEnd) dotMaxEnd = end;
+    const priority = s.r ?? 0;
+    if (deferDots && priority < 0) {
+      let tier = byPriority.get(priority);
+      if (!tier) byPriority.set(priority, (tier = { priority, duration: 0, minD: Infinity, maxEnd: 0, indices: [], delays: [] }));
+      tier.indices.push(i);
+      tier.delays.push(s.d);
+      if (s.d < tier.minD) tier.minD = s.d;
+      if (end > tier.maxEnd) tier.maxEnd = end;
     } else if (end > bodyDuration) {
       bodyDuration = end;
     }
   }
-  if (dotIndices.length === 0) {
-    return { bodyDuration: glyph.t ?? fallbackTotal, dotDuration: 0, dotMinD: 0, dotIndices, dotDelays };
-  }
-  // All-dot glyphs (e.g. a standalone nuqṭa that classification flagged) fall
-  // back to plain body rendering so we never emit an empty body phase.
-  if (bodyDuration === 0) {
-    return { bodyDuration: glyph.t ?? fallbackTotal, dotDuration: 0, dotMinD: 0, dotIndices: [], dotDelays: [] };
-  }
-  return { bodyDuration, dotDuration: dotMaxEnd - dotMinD, dotMinD, dotIndices, dotDelays };
+  // All-deferred glyphs (e.g. a standalone nuqṭa that classification flagged)
+  // fall back to plain body rendering so we never emit an empty body phase.
+  if (byPriority.size === 0 || bodyDuration === 0) return { bodyDuration: glyph.t ?? fallbackTotal, tiers: [] };
+  const tiers = [...byPriority.values()]
+    .sort((a, b) => b.priority - a.priority)
+    .map(({ maxEnd, ...tier }) => ({ ...tier, duration: maxEnd - tier.minD }));
+  return { bodyDuration, tiers };
 }
 
 class Scheduler {
@@ -346,46 +361,46 @@ class Scheduler {
     }
     const bodyEnd = cursor;
 
-    // --- Phase 2: deferred dots, anchored after every body in the group. ---
-    // Glyphs without dots contribute nothing to phase 2 and stay finished at
-    // their body end; glyphs with dots get their entry duration stretched to
-    // cover the dot phase.
-    const hasAnyDots = group.some((p) => p.dotIndices.length > 0);
-    const dotStarts: (number | undefined)[] = new Array(group.length);
+    // --- Phase 2+: one phase per deferred tier (a headline, then marks),
+    // highest priority first, each anchored after the previous phase ends.
+    // Glyphs without a tier contribute nothing to its phase; glyphs with
+    // deferred strokes get their entry duration stretched to cover them.
+    const priorities = [...new Set(group.flatMap((p) => p.tiers.map((t) => t.priority)))].sort((a, b) => b - a);
+    const tierStarts: Map<number, number>[] = group.map(() => new Map());
     let groupEnd = bodyEnd;
-    if (hasAnyDots) {
-      cursor = bodyEnd + this.glyphGap;
+    for (const priority of priorities) {
+      const gap = isConnectingTier(priority) ? 0 : this.glyphGap;
+      cursor = groupEnd + this.glyphGap;
       for (let i = 0; i < group.length; i++) {
-        const p = group[i]!;
-        if (p.dotIndices.length === 0) continue;
-        dotStarts[i] = cursor;
-        cursor += p.dotDuration + this.glyphGap;
+        const tier = group[i]!.tiers.find((t) => t.priority === priority);
+        if (!tier) continue;
+        tierStarts[i]!.set(priority, cursor);
+        cursor += tier.duration + gap;
       }
-      // The trailing glyphGap past the last dot phase is intra-group spacing
+      // The trailing gap past the phase's last glyph is intra-group spacing
       // that should not count; strip it.
-      groupEnd = cursor - this.glyphGap;
+      groupEnd = cursor - gap;
     }
 
     // --- Emit each glyph's finalized entry. ---
     for (let i = 0; i < group.length; i++) {
       const p = group[i]!;
       const bodyStart = bodyStarts[i]!;
-      const dotStart = dotStarts[i];
 
       let strokeDelays: (number | undefined)[] | undefined;
       let endTime = bodyStart + p.bodyDuration;
-      if (dotStart !== undefined && p.dotIndices.length > 0) {
-        // Rebuild a sparse per-stroke delay array. `dotIndices[k]` is the
-        // absolute stroke index inside the glyph; its new effective delay
-        // (relative to the entry's offset, i.e. the body start) re-anchors
-        // it to the group-level dot phase while preserving the glyph's
-        // intra-dot spacing.
-        strokeDelays = [];
-        for (let k = 0; k < p.dotIndices.length; k++) {
-          const strokeIdx = p.dotIndices[k]!;
-          strokeDelays[strokeIdx] = dotStart - bodyStart + (p.dotDelays[k]! - p.dotMinD);
+      for (const tier of p.tiers) {
+        const tierStart = tierStarts[i]!.get(tier.priority)!;
+        // A sparse per-stroke delay array. `indices[k]` is the absolute
+        // stroke index inside the glyph; its new effective delay (relative to
+        // the entry's offset, i.e. the body start) re-anchors it to the
+        // group-level phase of its tier while preserving the glyph's
+        // intra-tier spacing.
+        strokeDelays ??= [];
+        for (let k = 0; k < tier.indices.length; k++) {
+          strokeDelays[tier.indices[k]!] = tierStart - bodyStart + (tier.delays[k]! - tier.minD);
         }
-        endTime = dotStart + p.dotDuration;
+        endTime = Math.max(endTime, tierStart + tier.duration);
       }
 
       this.entries.push({
@@ -462,20 +477,13 @@ function computeGraphemeTimeline(text: string, font: TegakiBundle, config?: Time
       const part = partitionGlyph(glyph, unknownDuration, deferDots);
       sched.add({
         fields: { char, graphemeIndex: i, hasGlyph: true },
-        bodyDuration: part.bodyDuration,
-        dotDuration: part.dotDuration,
-        dotMinD: part.dotMinD,
-        dotIndices: part.dotIndices,
-        dotDelays: part.dotDelays,
+        ...part,
       });
     } else {
       sched.add({
         fields: { char, graphemeIndex: i, hasGlyph: false },
         bodyDuration: unknownDuration,
-        dotDuration: 0,
-        dotMinD: 0,
-        dotIndices: [],
-        dotDelays: [],
+        tiers: [],
       });
     }
   }
@@ -578,20 +586,13 @@ function computeShapedTimeline(
           const part = partitionGlyph(data, unknownDuration, deferDots);
           sched!.add({
             fields: { char: firstChar, graphemeIndex: graphemeIdx, glyphId: glyph.g, hasGlyph: true },
-            bodyDuration: part.bodyDuration,
-            dotDuration: part.dotDuration,
-            dotMinD: part.dotMinD,
-            dotIndices: part.dotIndices,
-            dotDelays: part.dotDelays,
+            ...part,
           });
         } else {
           sched!.add({
             fields: { char: firstChar, graphemeIndex: graphemeIdx, glyphId: glyph.g, hasGlyph: false },
             bodyDuration: unknownDuration,
-            dotDuration: 0,
-            dotMinD: 0,
-            dotIndices: [],
-            dotDelays: [],
+            tiers: [],
           });
         }
       }

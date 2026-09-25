@@ -119,6 +119,8 @@ function classifyDots(oriented: AxisPoint[][], priorities: number[]): void {
   }
 }
 
+/** `Stroke.priority` of a headline: a connecting tier, after the body and before the marks (-1). */
+export const HEADLINE_PRIORITY = -0.5;
 const HEADLINE_MAX_RISE = 0.12;
 const HEADLINE_MIN_SPAN = 0.5;
 const HEADLINE_MAX_DEPTH = 0.35;
@@ -212,17 +214,19 @@ export function orderAndTimeStrokes(strokes: GeoStroke[], params: OrderTimingPar
     order = plan.sequence;
   } else {
     classifyDots(oriented, priorities);
-    // A headline sorts after the body, before the dots — within the glyph
-    // only: `priority` is the renderer's word-level deferral of disconnected
-    // marks, which a headline is not.
-    const headline = headlineLast ? findHeadlines(oriented, priorities) : [];
-    const rank = (i: number) => (priorities[i]! < 0 ? 2 : headline[i] ? 1 : 0);
+    // A headline draws after its letter and before the dots — and, as its
+    // own priority tier, after every letter of the word: the renderer joins
+    // the word's headline pieces into one line (see `Stroke.priority`).
+    if (headlineLast) {
+      const headlines = findHeadlines(oriented, priorities);
+      for (let i = 0; i < headlines.length; i++) if (headlines[i]) priorities[i] = HEADLINE_PRIORITY;
+    }
     // Draw-order sort: dots last (priority), then top-to-bottom with a row
     // band, then left-to-right (right-to-left for RTL).
     order = oriented.map((_, i) => i);
     const boxes = oriented.map(bbox);
     order.sort((a, b) => {
-      if (rank(a) !== rank(b)) return rank(a) - rank(b);
+      if (priorities[b]! !== priorities[a]!) return priorities[b]! - priorities[a]!;
       const ay = boxes[a]!.minY;
       const by = boxes[b]!.minY;
       if (Math.abs(ay - by) > yTolerance) return ay - by;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { findHeadlines, isHeadlineScriptChar, orderAndTimeStrokes } from './ordering.ts';
+import { findHeadlines, HEADLINE_PRIORITY, isHeadlineScriptChar, orderAndTimeStrokes } from './ordering.ts';
 import type { GeoStroke } from './types.ts';
 
 const stroke = (...pts: [number, number][]): GeoStroke => ({
@@ -31,10 +31,10 @@ describe('headline last', () => {
     expect(findHeadlines([headline.points, stem.points, hook.points], [0, 0, 0])).toEqual([true, false, false]);
   });
 
-  test('a dot still draws after the headline', () => {
+  test('the headline is tagged for word-level deferral; a dot still draws after it', () => {
     const dot = stroke([900, -900], [905, -905]);
     const order = orderAndTimeStrokes([headline, stem, bowl, dot], { ...PARAMS, headlineLast: true });
-    expect(order.at(-1)!.priority).toBe(-1);
+    expect(order.map((s) => s.priority ?? 0)).toEqual([0, 0, HEADLINE_PRIORITY, -1]);
     expect(order.at(-2)!.points[0]!.y).toBe(-600);
   });
 

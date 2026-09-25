@@ -57,10 +57,13 @@ export interface Stroke {
   delay: number;
   /**
    * Draw-priority rank. `0` (default) is the glyph body; negative numbers are
-   * rendered later within word-level scheduling so disconnected marks — i-dots,
-   * Arabic nuqṭa, diacritics — follow after every body stroke in the word.
-   * Only `0` and `-1` are used today; the range is open for future priority
-   * tiers.
+   * rendered later within word-level scheduling, one phase per value, highest
+   * first, after every body stroke in the word:
+   * - `-0.5` — a headline (Devanagari shirorekha, Bengali matra). Values in
+   *   (−1, 0) are CONNECTING tiers: their phase runs glyph to glyph without
+   *   a gap, so the pieces draw as one line across the word.
+   * - `-1` — disconnected marks: i-dots, Arabic nuqṭa, diacritics.
+   * The range is open for future priority tiers.
    */
   priority?: number;
 }
