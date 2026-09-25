@@ -69,7 +69,8 @@ export interface UrlState {
   // Text preview settings
   animSpeed: number;
   fontSizePx: number;
-  lineHeightRatio: number;
+  /** Line height as a multiple of the font size (null = CSS `normal`, the font's own line spacing). */
+  lineHeightRatio: number | null;
   /** Extra spacing between characters, in px (CSS `letter-spacing`). */
   letterSpacingPx: number;
   /** Width of the text frame in px (null = fill the available space). `/preview` reads the same `w` as its container width. */
@@ -128,7 +129,7 @@ export const URL_DEFAULTS: UrlState = {
   geometryOptions: DEFAULT_GEOMETRY_OPTIONS,
   animSpeed: 1,
   fontSizePx: 128,
-  lineHeightRatio: 1.5,
+  lineHeightRatio: null,
   letterSpacingPx: 0,
   frameWidth: null,
   allChars: false,
@@ -302,7 +303,10 @@ export function parseUrlState(search: string | URLSearchParams = window.location
   if (p.has('t')) state.previewText = p.get('t')!;
   if (p.has('as')) state.animSpeed = Number(p.get('as'));
   if (p.has('fs')) state.fontSizePx = Number(p.get('fs'));
-  if (p.has('lh')) state.lineHeightRatio = Number(p.get('lh'));
+  if (p.has('lh')) {
+    const lh = Number(p.get('lh'));
+    state.lineHeightRatio = Number.isFinite(lh) && lh > 0 ? lh : null;
+  }
   if (p.has('ls')) state.letterSpacingPx = Number(p.get('ls'));
   if (p.has('w')) {
     const w = Number(p.get('w'));
@@ -414,7 +418,7 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
   if (state.previewText !== URL_DEFAULTS.previewText) p.set('t', state.previewText);
   if (state.animSpeed !== URL_DEFAULTS.animSpeed) p.set('as', String(state.animSpeed));
   if (state.fontSizePx !== URL_DEFAULTS.fontSizePx) p.set('fs', String(state.fontSizePx));
-  if (state.lineHeightRatio !== URL_DEFAULTS.lineHeightRatio) p.set('lh', String(state.lineHeightRatio));
+  if (state.lineHeightRatio !== null) p.set('lh', String(state.lineHeightRatio));
   if (state.letterSpacingPx !== URL_DEFAULTS.letterSpacingPx) p.set('ls', String(state.letterSpacingPx));
   if (state.frameWidth !== null) p.set('w', String(state.frameWidth));
   if (state.showOverlay !== URL_DEFAULTS.showOverlay) p.set('ol', '1');

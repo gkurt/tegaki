@@ -80,6 +80,24 @@ describe('Han locale', () => {
   });
 });
 
+describe('line height', () => {
+  test("a bare URL renders at the font's normal line height and writes no lh", () => {
+    expect(parseUrlState('').lineHeightRatio).toBeNull();
+    expect(buildUrlParams(URL_DEFAULTS).has('lh')).toBe(false);
+  });
+
+  test('a numeric lh round-trips as a ratio', () => {
+    const state = parseUrlState('?lh=1.5');
+    expect(state.lineHeightRatio).toBe(1.5);
+    expect(buildUrlParams(state).get('lh')).toBe('1.5');
+  });
+
+  test('lh=normal or an invalid lh falls back to normal', () => {
+    expect(parseUrlState('?lh=normal').lineHeightRatio).toBeNull();
+    expect(parseUrlState('?lh=0').lineHeightRatio).toBeNull();
+  });
+});
+
 describe('text frame width', () => {
   test('w round-trips as the frame width in whole pixels', () => {
     const state = parseUrlState('?w=412.4');

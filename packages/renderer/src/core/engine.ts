@@ -243,6 +243,8 @@ export class TegakiEngine {
   private _containerWidth = 0;
   private _fontSize = 0;
   private _lineHeight = 0;
+  /** CSS `line-height` is `normal`: `_lineHeight` is the browser's line box, re-measured whenever the font may have changed. */
+  private _lineHeightNormal = false;
   private _currentColor = '';
   private _letterSpacing = 0;
 
@@ -799,11 +801,37 @@ export class TegakiEngine {
   // Internal: DOM updates
   // =========================================================================
 
-  /** Estimate line-height from font metrics when CSS returns "normal". */
-  private _fallbackLineHeight(fontSize: number): number {
-    if (this._font) {
-      return ((this._font.ascender - this._font.descender) / this._font.unitsPerEm) * fontSize;
+  /** The used line height in px, from computed styles (the root's or the sentinel's — both inherit it). */
+  private _readLineHeight(styles: CSSStyleDeclaration, fontSize: number): number {
+    const parsed = Number.parseFloat(styles.lineHeight);
+    this._lineHeightNormal = Number.isNaN(parsed);
+    return this._lineHeightNormal ? this._measureNormalLineHeight(fontSize) : parsed;
+  }
+
+  /**
+   * The browser's line box for `line-height: normal`. It comes from font
+   * metrics the bundle doesn't carry — the line gap (Nanum Pen Script's is a
+   * quarter em) and the platform's choice of ascent/descent tables — so it is
+   * measured rather than derived: a probe holding only an empty inline-block
+   * gets exactly one line box, the height of the font's strut.
+   */
+  private _measureNormalLineHeight(fontSize: number): number {
+    if (typeof document !== 'undefined') {
+      const probe = document.createElement('span');
+      probe.setAttribute('aria-hidden', 'true');
+      probe.style.cssText = 'position:absolute;top:0;left:0;width:100px;visibility:hidden;pointer-events:none;';
+      const strut = document.createElement('span');
+      strut.style.display = 'inline-block';
+      probe.appendChild(strut);
+      this._rootEl.appendChild(probe);
+      // Ancestor transforms scale the rect but not the layout width.
+      const rect = probe.getBoundingClientRect();
+      const scale = probe.offsetWidth > 0 ? rect.width / probe.offsetWidth : 1;
+      probe.remove();
+      if (rect.height > 0 && scale > 0) return rect.height / scale;
     }
+    // Detached or hidden root: the font's ascender-to-descender span.
+    if (this._font) return ((this._font.ascender - this._font.descender) / this._font.unitsPerEm) * fontSize;
     return fontSize * 1.2;
   }
 
@@ -811,8 +839,7 @@ export class TegakiEngine {
     const styles = getComputedStyle(this._rootEl);
     this._containerWidth = this._rootEl.getBoundingClientRect().width;
     this._fontSize = Number.parseFloat(styles.fontSize);
-    const parsedLh = Number.parseFloat(styles.lineHeight);
-    this._lineHeight = Number.isNaN(parsedLh) ? this._fallbackLineHeight(this._fontSize) : parsedLh;
+    this._lineHeight = this._readLineHeight(styles, this._fontSize);
     this._currentColor = styles.color;
     this._letterSpacing = parseLetterSpacing(styles.letterSpacing);
     this._updateOverlayStyle();
@@ -905,8 +932,7 @@ export class TegakiEngine {
     const newWidth = entry.contentRect.width;
     const styles = getComputedStyle(this._rootEl);
     const newFontSize = Number.parseFloat(styles.fontSize);
-    const parsedLh = Number.parseFloat(styles.lineHeight);
-    const newLineHeight = Number.isNaN(parsedLh) ? this._fallbackLineHeight(newFontSize) : parsedLh;
+    const newLineHeight = this._readLineHeight(styles, newFontSize);
     const newColor = styles.color;
     const newLetterSpacing = parseLetterSpacing(styles.letterSpacing);
 
@@ -948,8 +974,7 @@ export class TegakiEngine {
 
     if (e.propertyName === 'font-size' || e.propertyName === 'line-height') {
       const newFontSize = Number.parseFloat(styles.fontSize);
-      const parsedLh = Number.parseFloat(styles.lineHeight);
-      const newLineHeight = Number.isNaN(parsedLh) ? this._fallbackLineHeight(newFontSize) : parsedLh;
+      const newLineHeight = this._readLineHeight(styles, newFontSize);
       if (newFontSize !== this._fontSize || newLineHeight !== this._lineHeight) {
         this._fontSize = newFontSize;
         this._lineHeight = newLineHeight;
@@ -1171,6 +1196,8 @@ export class TegakiEngine {
   }
 
   private _recomputeLayout(): void {
+    // The strut follows the root's font, which may have just been swapped or finished loading.
+    if (this._lineHeightNormal) this._lineHeight = this._measureNormalLineHeight(this._fontSize);
     if (this._fontReady && this._font?.family && this._fontSize && this._containerWidth && this._text) {
       const shaperId = this._shaper ? '1' : '0';
       const key = `${this._text}\0${this._font.family}\0${this._fallbackFont ?? ''}\0${this._fontSize}\0${this._lineHeight}\0${this._containerWidth}\0${this._direction ?? ''}\0${shaperId}\0${this._letterSpacing}`;

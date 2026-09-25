@@ -190,7 +190,7 @@ Common keys (non-exhaustive — `url-state.ts` is the source of truth):
 | `ct` | **Paused timeline position in seconds (controlled mode).** When present and > 0, the text preview loads **paused** at that time. Auto-updated on pause/seek/reset, left stale during playback. | `ct=1.25` |
 | `as` | Animation speed multiplier                                     | `as=2`               |
 | `fs` | Font size in px                                                | `fs=96`              |
-| `lh` | Line height ratio                                              | `lh=1.5`             |
+| `lh` | Line height as a multiple of the font size (unset = CSS `normal`, the font's own line spacing) | `lh=1.2` |
 | `w`  | Text frame width in px — the studio's resizable text frame, and `/preview`'s container width (unset = fill) | `w=320` |
 | `ol` | Show debug overlay (0/1)                                       | `ol=1`               |
 | `ghl` | Han stroke-order convention: `ja` (default, KanjiVG) or `zh` (Make Me a Hanzi) | `ghl=zh`     |

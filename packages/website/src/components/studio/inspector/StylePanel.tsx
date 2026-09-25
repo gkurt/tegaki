@@ -15,6 +15,9 @@ import type { SetSetting } from '../state.ts';
 import { IconButton, Section } from '../ui.tsx';
 import { ColorStops, DialScope, SmallIconButton, ToggleGroup } from './dial.tsx';
 
+/** Where the line-height slider starts when switched on from the font's `normal`. */
+const CUSTOM_LINE_HEIGHT = 1.2;
+
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 export function StylePanel({ settings, set }: { settings: UrlState; set: SetSetting }) {
@@ -68,14 +71,21 @@ export function StylePanel({ settings, set }: { settings: UrlState; set: SetSett
       >
         <DialScope className="flex flex-col gap-1.5">
           <Slider label="Size" value={settings.fontSizePx} min={16} max={256} step={1} unit="px" onChange={(v) => set('fontSizePx', v)} />
-          <Slider
-            label="Line height"
-            value={settings.lineHeightRatio}
-            min={0}
-            max={3}
-            step={0.1}
-            onChange={(v) => set('lineHeightRatio', v)}
-          />
+          <ToggleGroup
+            label="Custom line height"
+            checked={settings.lineHeightRatio !== null}
+            onChange={(v) => set('lineHeightRatio', v ? CUSTOM_LINE_HEIGHT : null)}
+          >
+            <Slider
+              label="Line height"
+              value={settings.lineHeightRatio ?? CUSTOM_LINE_HEIGHT}
+              min={0.5}
+              max={3}
+              step={0.05}
+              unit="×"
+              onChange={(v) => set('lineHeightRatio', v)}
+            />
+          </ToggleGroup>
           <Slider
             label="Letter spacing"
             value={settings.letterSpacingPx}
