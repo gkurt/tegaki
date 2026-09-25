@@ -13,6 +13,7 @@ import type { TegakiBundle } from '../types.ts';
  * - `loop`: loop animation (uncontrolled mode, default `false`)
  * - `delay`: delay before animation starts (seconds, uncontrolled mode, default `0`)
  * - `loop-gap`: pause between loop iterations (seconds, uncontrolled mode, default `0`)
+ * - `reduced-motion`: `"never"` (default, always animate), `"user"` (follow `prefers-reduced-motion`) or `"always"` (show the text finished)
  * - `pixel-ratio`: supersampling factor on top of devicePixelRatio (quality knob, default `1`)
  * - `segment-size`: segment size for rendering (quality knob)
  * - `smoothing`: smooth strokes with a centripetal Catmull-Rom spline (quality knob)
@@ -34,6 +35,7 @@ const OBSERVED_ATTRS = [
   'loop',
   'delay',
   'loop-gap',
+  'reduced-motion',
   'pixel-ratio',
   'segment-size',
   'smoothing',
@@ -199,10 +201,12 @@ export class TegakiElement extends HTMLElement {
     const time = this._resolveTime();
 
     const directionAttr = this.getAttribute('direction');
+    const reducedMotionAttr = this.getAttribute('reduced-motion');
     return {
       text,
       font,
       time,
+      reducedMotion: reducedMotionAttr === 'user' || reducedMotionAttr === 'always' ? reducedMotionAttr : undefined,
       effects: this._effects,
       timing: this._timing,
       quality: this._resolveQuality(),

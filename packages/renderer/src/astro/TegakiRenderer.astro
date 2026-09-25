@@ -11,7 +11,7 @@ interface Props extends Omit<TegakiEngineOptions, 'onComplete' | 'onChangeTimeli
   [key: string]: any;
 }
 
-const { text, font, bundle: registerBundle, loadFont, time, effects, timing, quality, showOverlay, shaper, fallbackFont, class: className, style: userStyle, ...attrs } = Astro.props;
+const { text, font, bundle: registerBundle, loadFont, time, reducedMotion, effects, timing, quality, showOverlay, shaper, fallbackFont, class: className, style: userStyle, ...attrs } = Astro.props;
 
 // Resolve the font bundle for SSR
 let resolvedFont: TegakiBundle | undefined;
@@ -28,6 +28,7 @@ const engineOptions: Omit<TegakiEngineOptions, 'onComplete' | 'onChangeTimeline'
   text,
   font: resolvedFont,
   time,
+  reducedMotion,
   effects: effects as Record<string, any>,
   timing,
   quality,

@@ -80,6 +80,19 @@ export type TimeControlMode = {
  */
 export type TimeControlProp = null | undefined | number | `${number}%` | 'css' | TimeControlMode[keyof TimeControlMode];
 
+/**
+ * How uncontrolled playback treats reduced motion. Under reduced motion the
+ * text is drawn finished instead of written out (`onComplete` still fires).
+ *
+ * - `'never'` (default) — always animate. Ink appearing in place is not the
+ *   kind of motion (parallax, zooming, sliding) the OS setting guards against.
+ * - `'user'` — follow the user's `prefers-reduced-motion` setting.
+ * - `'always'` — never animate.
+ *
+ * Controlled and `css` time are driven by the host, so they are unaffected.
+ */
+export type ReducedMotionProp = 'user' | 'always' | 'never';
+
 // ---------------------------------------------------------------------------
 // Quality
 // ---------------------------------------------------------------------------
@@ -139,6 +152,8 @@ export interface TegakiEngineOptions {
   /** A font bundle, or a registered bundle name (see {@link TegakiEngine.registerBundle}). */
   font?: TegakiBundle | string;
   time?: TimeControlProp;
+  /** Whether uncontrolled playback honours reduced motion. Default: `'never'`. See {@link ReducedMotionProp}. */
+  reducedMotion?: ReducedMotionProp;
   effects?: TegakiEffects<Record<string, any>>;
   timing?: TimelineConfig;
   /** Render-quality knobs (supersampling, segment subdivision). */

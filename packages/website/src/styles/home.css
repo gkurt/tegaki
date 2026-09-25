@@ -1438,17 +1438,6 @@ p code {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    /* biome-ignore lint/complexity/noImportantStyles: reduced motion wins over every animation */
-    animation-duration: 0.01ms !important;
-    /* biome-ignore lint/complexity/noImportantStyles: reduced motion wins over every transition */
-    transition-duration: 0.01ms !important;
-  }
-}
-
 /* ------------------------------------------------------------ responsive */
 
 @media (max-width: 960px) {

@@ -44,7 +44,15 @@ import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
 import { buildChildren, buildRootProps, canvasBoxStyle, domCreateElement } from './render-elements.ts';
 import { getShaperForBundle, registerShaper, settledShaperForBundle } from './shaper-registry.ts';
-import type { CreateElementFn, TegakiEngineOptions, TegakiQuality, TegakiSvgOptions, TimeControlMode, TimeControlProp } from './types.ts';
+import type {
+  CreateElementFn,
+  ReducedMotionProp,
+  TegakiEngineOptions,
+  TegakiQuality,
+  TegakiSvgOptions,
+  TimeControlMode,
+  TimeControlProp,
+} from './types.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -129,6 +137,11 @@ interface FallbackClip {
 
 /** Far enough past any canvas edge to leave a clip rectangle's side open (canvas rects take no Infinity). */
 const CLIP_REACH = 1e6;
+
+/** Whether the `reducedMotion` setting skips the animation, given the OS `prefers-reduced-motion` setting. */
+export function isMotionReduced(setting: ReducedMotionProp | undefined, prefersReducedMotion: boolean): boolean {
+  return setting === 'always' || (setting === 'user' && prefersReducedMotion);
+}
 
 const warnedFontFailures = new Set<string>();
 
@@ -268,7 +281,9 @@ export class TegakiEngine {
   private _lastTs: number | null = null;
   private _rafId = 0;
   private _prevCompleted = false;
+  /** The OS `prefers-reduced-motion` setting — honoured only when `_reducedMotion` is `'user'`. */
   private _prefersReducedMotion = false;
+  private _reducedMotion: ReducedMotionProp = 'never';
   private _destroyed = false;
 
   // --- Observers & listeners ---
@@ -737,6 +752,11 @@ export class TegakiEngine {
       }
     }
 
+    if ('reducedMotion' in options && (options.reducedMotion ?? 'never') !== this._reducedMotion) {
+      this._reducedMotion = options.reducedMotion ?? 'never';
+      dirtyPlayback = true;
+    }
+
     if ('effects' in options && options.effects !== this._effects) {
       this._effects = options.effects as Record<string, any>;
       this._resolvedEffects = resolveEffects(this._effects);
@@ -1026,12 +1046,30 @@ export class TegakiEngine {
 
   private _onReducedMotionChange = (e: MediaQueryListEvent): void => {
     this._prefersReducedMotion = e.matches;
-    if (this._prefersReducedMotion && this._timeControl.mode === 'uncontrolled' && this._timeline.totalDuration > 0) {
-      this._internalTime = this._timeline.totalDuration;
-    }
     this._evaluatePlayback();
-    this._render();
   };
+
+  private get _motionReduced(): boolean {
+    return isMotionReduced(this._reducedMotion, this._prefersReducedMotion);
+  }
+
+  /**
+   * Under reduced motion the text is shown finished: jump to the end (firing
+   * `onComplete`) instead of writing it out. Called from every playback
+   * evaluation, so it also covers the first timeline, text changes and
+   * `restart()`.
+   */
+  private _skipToEnd(): void {
+    const totalDur = this._timeline.totalDuration;
+    if (totalDur === 0 || this._internalTime >= totalDur) return;
+    this._internalTime = totalDur;
+    this._delayRemaining = 0;
+    this._loopGapRemaining = 0;
+    this._checkCompletion();
+    this._notifyTimeChange();
+    this._render();
+    this._updateCssProperties();
+  }
 
   // =========================================================================
   // Internal: Font loading
@@ -1178,6 +1216,10 @@ export class TegakiEngine {
     } else {
       this._timeline = { entries: [] as TimelineEntry[], totalDuration: 0 };
     }
+    // Under reduced motion, finished text stays finished as its timeline changes (new text, a rewrap).
+    if (this._prevCompleted && this._timeControl.mode === 'uncontrolled' && this._motionReduced) {
+      this._internalTime = this._timeline.totalDuration;
+    }
     this._onChangeTimeline?.(this._timeline);
     this._loadFullFontIfNeeded();
   }
@@ -1263,8 +1305,10 @@ export class TegakiEngine {
 
   private _evaluatePlayback(): void {
     const tc = this._timeControl;
-    const shouldRun =
-      tc.mode === 'uncontrolled' && this._playing && !!this._font && this._fontReady && this._shaperReady && !this._prefersReducedMotion;
+    const ready = tc.mode === 'uncontrolled' && !!this._font && this._fontReady && this._shaperReady;
+    const reduced = this._motionReduced;
+    if (ready && reduced) this._skipToEnd();
+    const shouldRun = ready && this._playing && !reduced;
 
     if (shouldRun) {
       this._startLoop();

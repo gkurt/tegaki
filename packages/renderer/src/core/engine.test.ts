@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { TegakiBundle } from '../types.ts';
-import { warnFontLoadFailure } from './engine.ts';
+import { isMotionReduced, warnFontLoadFailure } from './engine.ts';
 
 const bundleAt = (fontUrl: string) => ({ family: 'Test', fontUrl }) as TegakiBundle;
 
@@ -32,5 +32,21 @@ describe('warnFontLoadFailure', () => {
   test('other URLs get no Vite hint', () => {
     warnFontLoadFailure(bundleAt('https://cdn.example.com/caveat.ttf'), new Error('x'));
     expect(warn.mock.calls[0][0]).not.toContain('optimizeDeps');
+  });
+});
+
+describe('isMotionReduced', () => {
+  test('animates by default, whatever the OS setting', () => {
+    expect(isMotionReduced(undefined, true)).toBe(false);
+    expect(isMotionReduced('never', true)).toBe(false);
+  });
+
+  test("'user' follows prefers-reduced-motion", () => {
+    expect(isMotionReduced('user', true)).toBe(true);
+    expect(isMotionReduced('user', false)).toBe(false);
+  });
+
+  test("'always' skips the animation even without the OS setting", () => {
+    expect(isMotionReduced('always', false)).toBe(true);
   });
 });

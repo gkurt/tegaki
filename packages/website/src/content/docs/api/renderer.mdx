@@ -44,6 +44,24 @@ Controls animation timing. Pass a number for controlled mode, or an object:
 { mode: 'css', speed?: number }
 ```
 
+### `reducedMotion`
+
+**Type:** `'never' | 'user' | 'always'` · **Default:** `'never'`
+
+Whether uncontrolled playback honours reduced motion. Under reduced motion the text is drawn finished instead of written out, and `onComplete` still fires.
+
+- `'never'`: always animate. Ink appearing in place isn't the kind of motion (parallax, zooming, sliding) that the OS setting guards against.
+- `'user'`: follow the visitor's `prefers-reduced-motion` setting, including changes while the page is open.
+- `'always'`: never animate.
+
+```tsx
+<TegakiRenderer font={caveat} reducedMotion="user">
+  Hello
+</TegakiRenderer>
+```
+
+Controlled and `css` time are driven by your own code, so this option doesn't affect them. Check `prefers-reduced-motion` yourself there if you need to.
+
 ### `effects`
 
 **Type:** `TegakiEffectConfigs`
