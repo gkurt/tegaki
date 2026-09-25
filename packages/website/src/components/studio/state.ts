@@ -29,6 +29,8 @@ export interface LoadedFont {
   info: ParsedFontInfo;
   buffer: ArrayBuffer;
   extraBuffers: ArrayBuffer[] | undefined;
+  /** Set when the font was uploaded rather than fetched from Google Fonts. */
+  fileName?: string;
 }
 
 /**
@@ -78,7 +80,7 @@ export function useFontLoader(onLoaded: (font: LoadedFont) => void) {
       run(async () => {
         const buffer = await file.arrayBuffer();
         const info = await parseFont(buffer);
-        return { info, buffer, extraBuffers: undefined };
+        return { info, buffer, extraBuffers: undefined, fileName: file.name };
       }),
     [run],
   );

@@ -25,6 +25,7 @@ import { cx, IconButton, isTypingTarget, Popover, Segmented, Spinner } from './u
 import { ZoomStage } from './ZoomStage.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+const NO_WARNINGS: string[] = [];
 
 /** Font size of the Final stage's live render — ZoomStage scales it to fit anyway. */
 const FINAL_FONT_SIZE = 320;
@@ -59,6 +60,7 @@ export function GlyphWorkspace({
   set,
   resultsCache,
   onPipelineChange,
+  onGlyphReport,
 }: {
   font: LoadedFont | null;
   charsets: CharsetInfo | null;
@@ -66,6 +68,8 @@ export function GlyphWorkspace({
   set: SetSetting;
   resultsCache: RefObject<Map<string, PipelineResult>>;
   onPipelineChange: (p: Pipeline) => void;
+  /** The inspected glyph and its warnings, for the agent prompt (null once unmounted). */
+  onGlyphReport?: (report: { char: string; warnings: string[] } | null) => void;
 }) {
   const fontInfo = font?.info ?? null;
   const { pipeline, selectedChar, options, geometryOptions, activeStage, geometryStage } = settings;
@@ -262,8 +266,13 @@ export function GlyphWorkspace({
 
   const stages = pipeline === 'raster' ? STAGES : GEOMETRY_STAGES;
   // Geometry-pipeline warnings for the selected glyph; the panel stays open while browsing glyphs.
-  const warnings = pipeline === 'geometry' && geoResult && !processing ? geoResult.warnings : [];
+  const warnings = pipeline === 'geometry' && geoResult && !processing ? geoResult.warnings : NO_WARNINGS;
   const [showWarnings, setShowWarnings] = useState(false);
+
+  useEffect(() => {
+    onGlyphReport?.(selectedChar ? { char: selectedChar, warnings } : null);
+  }, [onGlyphReport, selectedChar, warnings]);
+  useEffect(() => () => onGlyphReport?.(null), [onGlyphReport]);
   const activeResult = pipeline === 'raster' ? result : geoResult;
 
   return (

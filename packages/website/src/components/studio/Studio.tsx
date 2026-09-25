@@ -5,11 +5,23 @@ import { CHARSET_PRESETS, extractTegakiBundle, type PipelineResult } from 'tegak
 import { DEFAULT_EXAMPLE_FONT_TEXT, EXAMPLE_FONT_TEXTS, type Pipeline } from '../preview/constants.ts';
 import { strokeOrderProviders } from '../preview/stroke-order-providers.ts';
 import { defaultClipText } from '../url-state.ts';
+import { AgentPromptMenu } from './AgentPromptMenu.tsx';
 import { type CharsetInfo, charsetCoverage, fontHasChar, recommendCharset } from './charsets.ts';
 import { ExportMenu } from './ExportMenu.tsx';
 import { FontPicker } from './FontPicker.tsx';
 import { GlyphWorkspace } from './GlyphWorkspace.tsx';
-import { BookIcon, ChevronLeftIcon, GithubIcon, GlyphModeIcon, MoonIcon, MoreIcon, SlidersIcon, SunIcon, TextModeIcon } from './icons.tsx';
+import {
+  BookIcon,
+  ChevronLeftIcon,
+  GithubIcon,
+  GlyphModeIcon,
+  MoonIcon,
+  MoreIcon,
+  SlidersIcon,
+  SparklesIcon,
+  SunIcon,
+  TextModeIcon,
+} from './icons.tsx';
 import { DialThemeContext } from './inspector/dial.tsx';
 import { Inspector } from './inspector/Inspector.tsx';
 import { useFontLoader, useStudioSettings, useTheme } from './state.ts';
@@ -105,6 +117,9 @@ export function Studio() {
     }
   }, [font, settings.chars, settings.options, settings.pipeline, settings.geometryOptions]);
 
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [glyphReport, setGlyphReport] = useState<{ char: string; warnings: string[] } | null>(null);
+
   const mode = settings.previewMode;
   const showInspector = inspectorOpen;
 
@@ -168,7 +183,15 @@ export function Studio() {
                 <GithubIcon size={16} />
               </a>
             </div>
-            <OverflowMenu theme={theme} onToggleTheme={toggleTheme} />
+            <OverflowMenu theme={theme} onToggleTheme={toggleTheme} onAskAgent={() => setAgentOpen(true)} />
+            <AgentPromptMenu
+              open={agentOpen}
+              onOpenChange={setAgentOpen}
+              font={font}
+              settings={settings}
+              charsets={charsets}
+              glyph={mode === 'glyph' ? glyphReport : null}
+            />
             <ExportMenu
               getEngine={mode === 'text' ? () => rendererRef.current?.engine ?? null : null}
               text={settings.previewText}
@@ -209,6 +232,7 @@ export function Studio() {
                 set={set}
                 resultsCache={resultsCache}
                 onPipelineChange={switchPipeline}
+                onGlyphReport={setGlyphReport}
               />
             )}
           </main>
@@ -236,7 +260,15 @@ export function Studio() {
 }
 
 /** Theme + links, folded into a menu where the top bar has no room for them. */
-function OverflowMenu({ theme, onToggleTheme }: { theme: 'light' | 'dark'; onToggleTheme: () => void }) {
+function OverflowMenu({
+  theme,
+  onToggleTheme,
+  onAskAgent,
+}: {
+  theme: 'light' | 'dark';
+  onToggleTheme: () => void;
+  onAskAgent: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const item =
     'flex h-9 w-full items-center gap-2.5 rounded-md px-2 text-left text-[13px] text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800';
@@ -254,6 +286,16 @@ function OverflowMenu({ theme, onToggleTheme }: { theme: 'light' | 'dark'; onTog
           </IconButton>
         )}
       >
+        <button
+          type="button"
+          className={cx(item, 'sm:hidden')}
+          onClick={() => {
+            setOpen(false);
+            onAskAgent();
+          }}
+        >
+          <SparklesIcon size={15} /> Ask an agent
+        </button>
         <button
           type="button"
           className={item}
