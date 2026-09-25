@@ -67,6 +67,13 @@ export {
   kanjiVGUrl,
   parseKanjiVGSvg,
 } from './stroke-order/kanjivg.ts';
+export {
+  createMakeMeAHanziProvider,
+  HANZI_WRITER_DATA_VERSION,
+  MAKEMEAHANZI_LICENSE,
+  makeMeAHanziUrl,
+  parseMakeMeAHanziJson,
+} from './stroke-order/makemeahanzi.ts';
 export { matchStrokes, type StrokeMatchPair, type StrokeMatchResult } from './stroke-order/match.ts';
 export { collectReferences } from './stroke-order/providers.ts';
 export { referenceBBox, registerReference } from './stroke-order/register.ts';
