@@ -461,7 +461,10 @@ function pinchPrune(pts: import('./types.ts').AxisPoint[], epsilon: number): imp
  *   offset from the dropped point PLUS the radius it falls short by, since
  *   the far side of the dropped disk loses both. Plain RDP takes the larger
  *   of the two, which lets a chord across a bulging blob (a comma's body)
- *   leave a sliver unpainted along one side.
+ *   leave a sliver unpainted along one side. The shortfall is also judged
+ *   against the dropped point's own radius: losing 2 units is 10% of a thin
+ *   bar's ink but a sliver of a thick stem's, so a thin pen may only fall
+ *   short by `COVERAGE_SHORTFALL_SHARE` of its radius (see there).
  */
 export interface RdpOvershootOptions {
   overshootWeight?: number;
@@ -469,6 +472,16 @@ export interface RdpOvershootOptions {
   spillWeight?: number;
   coverage?: boolean;
 }
+
+/**
+ * In `coverage` mode, the share of a dropped point's radius a chord's pen may
+ * fall short by before it costs the full `epsilon` — so the shortfall allowed
+ * is min(epsilon, share · radius). A 40-unit bar between two 36-wide cap
+ * nodes lost 10% of its ink to the chord at the default epsilon. The floor
+ * keeps a tapered tip (radius → 0) from pinning every point on its way down.
+ */
+const COVERAGE_SHORTFALL_SHARE = 0.05;
+const COVERAGE_SHORTFALL_FLOOR = 0.25;
 
 /** One width-aware Ramer-Douglas-Peucker pass (see simplifyStroke), with optional pen-overshoot checks. */
 export function rdpSimplify(
@@ -513,7 +526,11 @@ export function rdpSimplify(
         const radius = (a.width + (b.width - a.width) * t) / 2;
         const excess = radius - p.width / 2;
         const widthDev = excess > 0 ? excess * overshootWeight : -excess;
-        let d = coverage && excess < 0 ? positional - excess : Math.max(positional, widthDev);
+        let d = Math.max(positional, widthDev);
+        if (coverage && excess < 0) {
+          const allowed = Math.min(epsilon, Math.max(COVERAGE_SHORTFALL_SHARE * (p.width / 2), COVERAGE_SHORTFALL_FLOOR * epsilon));
+          d = positional - (excess * epsilon) / allowed;
+        }
         if (clearance) {
           const spill = radius - clearance({ x: a.x + ab.x * t, y: a.y + ab.y * t });
           if (spill > 0) d = Math.max(d, spill * spillWeight);

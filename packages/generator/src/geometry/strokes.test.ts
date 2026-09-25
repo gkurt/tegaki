@@ -208,4 +208,28 @@ describe('rdpSimplify coverage', () => {
   test('coverage keeps it: offset and radius shortfall add up', () => {
     expect(rdpSimplify(blob, 6, { coverage: true }).length).toBe(3);
   });
+
+  // A 40-unit bar between its two 36-wide cap nodes (Playfair Display |):
+  // a 2-unit radius shortfall is under epsilon 4 but 10% of the bar's ink.
+  const bar = (width: number): AxisPoint[] => [
+    { x: 0, y: 0, width: 0.9 * width },
+    { x: 0, y: 500, width },
+    { x: 0, y: 1000, width: 0.9 * width },
+  ];
+  test('a thin pen may fall short by only a share of its own radius', () => {
+    expect(rdpSimplify(bar(40), 4, { coverage: true }).length).toBe(3);
+  });
+  test('a thick pen may fall short by up to epsilon', () => {
+    expect(
+      rdpSimplify(
+        [
+          { x: 0, y: 0, width: 197 },
+          { x: 0, y: 500, width: 200 },
+          { x: 0, y: 1000, width: 197 },
+        ],
+        4,
+        { coverage: true },
+      ).length,
+    ).toBe(2);
+  });
 });
