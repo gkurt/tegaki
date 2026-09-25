@@ -60,17 +60,41 @@ export function GeometryStageRenderer({
   return <SVGView svg={renderGeometryStage(result, stage as GeometryStage)} />;
 }
 
-/** Progressive stroke draw for the geometry pipeline, in font-unit space. */
-function GeometryAnimationView({ result, time }: { result: GeometryPipelineResult; time: number }) {
+/**
+ * The artboard the Animation stage draws on: a viewBox in font units (y down,
+ * the glyph's origin at 0,0 on the baseline) and its size on screen. The Final
+ * stage draws into the same frame so the two line up.
+ */
+export interface StageFrame {
+  vx: number;
+  vy: number;
+  vw: number;
+  vh: number;
+  /** Outer size in px, 1px border included. */
+  width: number;
+  height: number;
+}
+
+/** Geometry stages frame the outline's bbox with an 8% margin (as the SVG stages do). */
+export function geometryStageFrame(result: GeometryPipelineResult): StageFrame {
   const bb = result.pathBBox;
   const w = bb.x2 - bb.x1;
   const h = bb.y2 - bb.y1;
   const pad = Math.max(w, h) * 0.08 + 1;
-  const vx = bb.x1 - pad;
-  const vy = bb.y1 - pad;
   const vw = w + 2 * pad;
   const vh = h + 2 * pad;
-  const { width: dw, height: dh } = fitSize(vw, vh, 600);
+  return { vx: bb.x1 - pad, vy: bb.y1 - pad, vw, vh, ...fitSize(vw, vh, 600) };
+}
+
+/** Raster stages frame the rasterized bitmap, to match the bitmap-based stages. */
+export function rasterStageFrame(result: PipelineResult): StageFrame {
+  const { bitmapWidth: w, bitmapHeight: h, transform } = result;
+  return { vx: transform.offsetX, vy: transform.offsetY, vw: w / transform.scaleX, vh: h / transform.scaleY, ...fitSize(w, h, 600) };
+}
+
+/** Progressive stroke draw for the geometry pipeline, in font-unit space. */
+function GeometryAnimationView({ result, time }: { result: GeometryPipelineResult; time: number }) {
+  const { vx, vy, vw, vh, width: dw, height: dh } = geometryStageFrame(result);
 
   return (
     <svg viewBox={`${vx} ${vy} ${vw} ${vh}`} className="border border-gray-200" style={{ width: dw, height: dh }}>
@@ -137,14 +161,8 @@ function GeometryAnimationView({ result, time }: { result: GeometryPipelineResul
 }
 
 function AnimationView({ result, time }: { result: PipelineResult; time: number }) {
-  const { strokesFontUnits, lineCap, bitmapWidth: w, bitmapHeight: h, transform } = result;
-
-  // Content-box viewBox: tight fit around rasterized content to match bitmap-based stages
-  const vx = transform.offsetX;
-  const vy = transform.offsetY;
-  const vw = w / transform.scaleX;
-  const vh = h / transform.scaleY;
-  const { width: dw, height: dh } = fitSize(w, h, 600);
+  const { strokesFontUnits, lineCap } = result;
+  const { vx, vy, vw, vh, width: dw, height: dh } = rasterStageFrame(result);
 
   return (
     <svg viewBox={`${vx} ${vy} ${vw} ${vh}`} className="border border-gray-200" style={{ width: dw, height: dh }}>

@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   CHARSET_PRESETS,
   collectReferences,
@@ -16,7 +16,7 @@ import {
 } from 'tegaki-generator';
 import { GEOMETRY_STAGES, type Pipeline, STAGES } from '../preview/constants.ts';
 import { fontCacheId } from '../preview/font-cache-id.ts';
-import { GeometryStageRenderer, StageRenderer } from '../preview/stage-views.tsx';
+import { GeometryStageRenderer, geometryStageFrame, rasterStageFrame, type StageFrame, StageRenderer } from '../preview/stage-views.tsx';
 import { strokeOrderProviders } from '../preview/stroke-order-providers.ts';
 import { TegakiTextPreview } from '../preview/TegakiTextPreview.tsx';
 import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
@@ -33,9 +33,10 @@ import {
   useGsubGraphs,
 } from './GlyphForms.tsx';
 import { CheckIcon, ChevronDownIcon, CloseIcon, WarningIcon } from './icons.tsx';
+import { playbackShortcut, useShortcuts } from './shortcuts.ts';
 import type { LoadedFont, SetSetting } from './state.ts';
 import { Transport } from './Transport.tsx';
-import { cx, GlyphKey, IconButton, isTypingTarget, Popover, Spinner } from './ui.tsx';
+import { cx, GlyphKey, IconButton, Popover, Spinner } from './ui.tsx';
 import { ZoomStage } from './ZoomStage.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
@@ -298,26 +299,33 @@ export function GlyphWorkspace({
     setAnimPlaying((p) => !p);
   }, [totalDuration]);
 
-  // Keyboard: Space plays the animation stage, ←/→ step through the glyph list.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target)) return;
-      if (e.code === 'Space' && animStageActive && !(e.target instanceof HTMLButtonElement)) {
-        e.preventDefault();
-        playPause();
-      } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const pickable = chars.filter((c) => !fontInfo || availableChars.has(c));
-        const i = pickable.indexOf(selectedChar);
-        const next = pickable[i + (e.key === 'ArrowRight' ? 1 : -1)];
-        if (next) {
-          e.preventDefault();
-          selectChar(next);
-        }
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [animStageActive, playPause, chars, availableChars, fontInfo, selectedChar, selectChar]);
+  const seekAnim = (t: number) => {
+    setAnimTime(t);
+    setAnimPlaying(false);
+  };
+
+  // Keyboard: the playback keys on the animated stages, ←/→ through the glyph list, [/] through the stages.
+  useShortcuts((key, e) => {
+    if (animStageActive && animResult && playbackShortcut(key, e, { time: animTime, duration: totalDuration, playPause, seek: seekAnim })) {
+      return true;
+    }
+    if (key === 'ArrowRight' || key === 'ArrowLeft') {
+      const pickable = chars.filter((c) => !fontInfo || availableChars.has(c));
+      const next = pickable[pickable.indexOf(selectedChar) + (key === 'ArrowRight' ? 1 : -1)];
+      if (!next) return false;
+      selectChar(next);
+      return true;
+    }
+    if (key === '[' || key === ']') {
+      const list = pipeline === 'raster' ? STAGES : GEOMETRY_STAGES;
+      const next = list[list.findIndex((st) => st.key === stageValue) + (key === ']' ? 1 : -1)];
+      if (!next) return false;
+      if (pipeline === 'raster') set('activeStage', next.key as UrlState['activeStage']);
+      else set('geometryStage', next.key as UrlState['geometryStage']);
+      return true;
+    }
+    return false;
+  });
 
   const stages = pipeline === 'raster' ? STAGES : GEOMETRY_STAGES;
   // Geometry-pipeline warnings for the selected glyph; the panel stays open while browsing glyphs.
@@ -332,6 +340,11 @@ export function GlyphWorkspace({
   const activeResult = pipeline === 'raster' ? result : geoResult;
 
   // The Final stage draws a form in its example text, outlined; the default glyph alone.
+  // The Animation stage's artboard, which Final draws a lone glyph into so the two line up.
+  const stageFrame = useMemo(() => {
+    const frame = geoResult ? geometryStageFrame(geoResult) : result ? rasterStageFrame(result) : null;
+    return frame && { char: (geoResult ?? result)!.char, frame };
+  }, [geoResult, result]);
   const finalText = form ? (formExample?.text ?? null) : selectedChar;
   const finalHighlight = useMemo(() => (form && formExample ? exampleRange(form, formExample) : null), [form, formExample]);
   const finalAdvance = useMemo(() => {
@@ -435,6 +448,7 @@ export function GlyphWorkspace({
                   text={finalText}
                   highlight={finalHighlight}
                   advance={finalAdvance}
+                  frame={form ? null : stageFrame}
                   settings={settings}
                   time={animTime}
                   resultsCache={resultsCache}
@@ -454,22 +468,16 @@ export function GlyphWorkspace({
           )}
         </ZoomStage>
 
-        {animStageActive && animResult && (
-          <Transport
-            time={animTime}
-            duration={totalDuration}
-            playing={animPlaying}
-            onPlayPause={playPause}
-            onRestart={() => {
-              setAnimTime(0);
-              setAnimPlaying(false);
-            }}
-            onSeek={(t) => {
-              setAnimTime(t);
-              setAnimPlaying(false);
-            }}
-          />
-        )}
+        {/* Always there — disabled on the static stages — so switching stages never resizes (and refits) the stage. */}
+        <Transport
+          time={animTime}
+          duration={totalDuration}
+          playing={animPlaying}
+          disabled={!animStageActive || !animResult}
+          onPlayPause={playPause}
+          onRestart={() => seekAnim(0)}
+          onSeek={seekAnim}
+        />
 
         {showWarnings && warnings.length > 0 && (
           <GlyphWarnings char={selectedChar} warnings={warnings} onClose={() => setShowWarnings(false)} />
@@ -492,12 +500,18 @@ export function GlyphWorkspace({
 /**
  * The glyph as the shipped renderer draws it, with the Style and Motion
  * settings applied — a form in the text that brings it up, outlined.
+ *
+ * A lone glyph is drawn into the Animation stage's frame: the same artboard,
+ * with the renderer's glyph origin on the frame's, so the two stages line up
+ * stroke for stroke. The renderer keeps a fixed font size and the frame
+ * scales it — a new glyph then never flashes at the old one's size.
  */
 function FinalStage({
   font,
   text,
   highlight,
   advance: pendingAdvance,
+  frame,
   settings,
   time,
   resultsCache,
@@ -509,6 +523,8 @@ function FinalStage({
   highlight: { start: number; end: number } | null;
   /** Width of `text` in em. */
   advance: number;
+  /** The Animation stage's frame and the glyph it's for; null draws `text` on a card of its own. */
+  frame: { char: string; frame: StageFrame } | null;
   settings: UrlState;
   time: number;
   resultsCache: RefObject<Map<string, PipelineResult>>;
@@ -533,6 +549,46 @@ function FinalStage({
     [onDuration, text, pendingAdvance],
   );
   const advance = drawn?.advance ?? 1;
+
+  // The frame of the glyph on screen: taken up once both the glyph is drawn
+  // and its Animation result is in (either can land first), held until then.
+  const shownFrame = useRef<StageFrame | null>(null);
+  if (!frame) shownFrame.current = null;
+  else if (drawn && frame.char === drawn.text) shownFrame.current = frame.frame;
+  const artboard = shownFrame.current;
+
+  // Where the renderer puts the glyph's origin (pen position on the baseline),
+  // in its own unscaled px: the text layer's box for the glyph, whose top sits
+  // an ascender above the baseline.
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [origin, setOrigin] = useState<{ text: string; x: number; y: number } | null>(null);
+  const { ascender, unitsPerEm } = font.info;
+  useLayoutEffect(() => {
+    if (!drawn) return;
+    let raf = 0;
+    let tries = 0;
+    const measure = () => {
+      const inner = innerRef.current;
+      const node = inner?.querySelector('[data-tegaki="overlay"]')?.firstChild;
+      // The text layer can trail the ready callback by a frame.
+      if (!inner || !node || node.nodeType !== Node.TEXT_NODE || node.textContent !== drawn.text || inner.offsetWidth === 0) {
+        if (tries++ < 10) raf = requestAnimationFrame(measure);
+        return;
+      }
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const rect = [...range.getClientRects()].find((r) => r.width > 0) ?? range.getBoundingClientRect();
+      const box = inner.getBoundingClientRect();
+      const scale = box.width / inner.offsetWidth || 1;
+      setOrigin({
+        text: drawn.text,
+        x: (rect.left - box.left) / scale,
+        y: (rect.top - box.top) / scale + (ascender / unitsPerEm) * FINAL_FONT_SIZE,
+      });
+    };
+    measure();
+    return () => cancelAnimationFrame(raf);
+  }, [drawn, ascender, unitsPerEm]);
 
   // Outline the form: measure its range in the renderer's text layer, in the
   // card's own (unzoomed) pixels.
@@ -567,40 +623,67 @@ function FinalStage({
     return () => clearTimeout(id);
   }, [highlight, text, drawnText]);
 
+  // Map the frame's viewBox into its 1px-bordered box as the SVG does
+  // (centred, uniform scale), then the renderer's glyph origin onto 0,0.
+  let place: { card: CSSProperties; glyph: CSSProperties; origin: CSSProperties } | null = null;
+  if (artboard && origin && drawn && origin.text === drawn.text) {
+    const { vx, vy, vw, vh, width, height } = artboard;
+    const k = Math.min((width - 2) / vw, (height - 2) / vh);
+    place = {
+      card: { width, height },
+      glyph: {
+        position: 'absolute',
+        left: (width - 2 - vw * k) / 2 - vx * k,
+        top: (height - 2 - vh * k) / 2 - vy * k,
+        width: 'max-content',
+        transform: `scale(${(k * unitsPerEm) / FINAL_FONT_SIZE})`,
+        transformOrigin: '0 0',
+      },
+      origin: { position: 'relative', left: -origin.x, top: -origin.y },
+    };
+  }
+
   return (
     <div
       ref={cardRef}
+      style={place?.card}
       className={cx(
-        'relative overflow-hidden rounded-sm bg-white p-8 text-zinc-900 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-800',
-        !drawn && 'invisible',
+        'relative overflow-hidden bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100',
+        artboard ? 'border border-zinc-200 dark:border-zinc-800' : 'rounded-sm p-8 shadow-sm ring-1 ring-zinc-200 dark:ring-zinc-800',
+        (!drawn || (artboard && !place)) && 'invisible',
       )}
     >
       {outline && (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute rounded-md bg-indigo-500/5 ring-2 ring-indigo-500/70 dark:ring-indigo-400/70"
+          className="pointer-events-none absolute z-10 rounded-md bg-indigo-500/5 ring-2 ring-indigo-500/70 dark:ring-indigo-400/70"
           style={outline}
         />
       )}
-      <TegakiTextPreview
-        style={{ width: Math.ceil(Math.max(advance, 0.5) * FINAL_FONT_SIZE * 1.1) }}
-        fontInfo={font.info}
-        fontBuffer={font.buffer}
-        extraFontBuffers={font.extraBuffers}
-        text={text}
-        options={settings.options}
-        pipeline={settings.pipeline}
-        geometryOptions={settings.geometryOptions}
-        time={time}
-        effects={effects}
-        timing={timing}
-        quality={settings.quality}
-        fontSizePx={FINAL_FONT_SIZE}
-        lineHeightRatio={1.15}
-        resultsCache={resultsCache}
-        onReady={onReady}
-        useShaper={settings.useShaper}
-      />
+      {/* The same element tree in both layouts, so switching them never remounts the renderer. */}
+      <div style={place?.glyph}>
+        <div ref={innerRef} style={place?.origin}>
+          <TegakiTextPreview
+            style={{ width: Math.ceil(Math.max(advance, 0.5) * FINAL_FONT_SIZE * 1.1) }}
+            fontInfo={font.info}
+            fontBuffer={font.buffer}
+            extraFontBuffers={font.extraBuffers}
+            text={text}
+            options={settings.options}
+            pipeline={settings.pipeline}
+            geometryOptions={settings.geometryOptions}
+            time={time}
+            effects={effects}
+            timing={timing}
+            quality={settings.quality}
+            fontSizePx={FINAL_FONT_SIZE}
+            lineHeightRatio={1.15}
+            resultsCache={resultsCache}
+            onReady={onReady}
+            useShaper={settings.useShaper}
+          />
+        </div>
+      </div>
     </div>
   );
 }

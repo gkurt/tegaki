@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { PauseIcon, PlayIcon, RestartIcon } from './icons.tsx';
-import { IconButton } from './ui.tsx';
+import { cx, IconButton } from './ui.tsx';
 
 /** Play/pause + scrubber for a seekable timeline. */
 export function Transport({
@@ -10,6 +10,7 @@ export function Transport({
   onPlayPause,
   onRestart,
   onSeek,
+  disabled,
   trailing,
 }: {
   time: number;
@@ -18,15 +19,18 @@ export function Transport({
   onPlayPause: () => void;
   onRestart: () => void;
   onSeek: (t: number) => void;
+  /** Keeps the bar (and the space it takes) with its controls off — for a view with nothing to play. */
+  disabled?: boolean;
   trailing?: ReactNode;
 }) {
-  const pct = duration > 0 ? Math.min(time / duration, 1) * 100 : 0;
+  const off = disabled || duration <= 0;
+  const pct = !disabled && duration > 0 ? Math.min(time / duration, 1) * 100 : 0;
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 border-t border-zinc-200 bg-white px-2 dark:border-zinc-800 dark:bg-zinc-900">
-      <IconButton label={playing ? 'Pause (Space)' : 'Play (Space)'} onClick={onPlayPause} disabled={duration <= 0}>
+      <IconButton label={playing ? 'Pause (Space)' : 'Play (Space)'} onClick={onPlayPause} disabled={off}>
         {playing ? <PauseIcon size={14} /> : <PlayIcon size={14} />}
       </IconButton>
-      <IconButton label="Back to start" onClick={onRestart} disabled={duration <= 0}>
+      <IconButton label="Back to start" onClick={onRestart} disabled={off}>
         <RestartIcon size={14} />
       </IconButton>
       <input
@@ -36,12 +40,12 @@ export function Transport({
         min={0}
         max={duration || 1}
         step={0.0001}
-        value={Math.min(time, duration)}
-        disabled={duration <= 0}
+        value={disabled ? 0 : Math.min(time, duration)}
+        disabled={off}
         style={{ '--pct': `${pct}%` } as React.CSSProperties}
         onChange={(e) => onSeek(Number(e.target.value))}
       />
-      <span className="shrink-0 font-mono text-[11px] text-zinc-500 tabular-nums dark:text-zinc-400">
+      <span className={cx('shrink-0 font-mono text-[11px] text-zinc-500 tabular-nums dark:text-zinc-400', disabled && 'opacity-40')}>
         {time.toFixed(2)}
         <span className="text-zinc-300 dark:text-zinc-600"> / </span>
         {duration.toFixed(2)}s
