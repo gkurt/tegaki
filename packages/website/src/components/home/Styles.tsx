@@ -15,7 +15,6 @@ interface Specimen {
   duration?: number;
   /** The snippet printed under the card — the part of `effects` that makes the look. */
   code: string;
-  dir?: 'rtl';
 }
 
 // Each card is a fixed mood (its own paper and ink in both themes), so the
@@ -23,13 +22,13 @@ interface Specimen {
 const SPECIMENS: Specimen[] = [
   {
     id: 'fountain',
-    title: 'Fountain pen',
+    title: 'Wet ink',
     font: 'Italianno',
     text: 'Yours, always',
     size: 'clamp(64px, 8vw, 116px)',
-    effects: { pressureWidth: { strength: 1 }, taper: { startLength: 0.3, endLength: 0.4 } },
+    effects: { glow: { radius: 2.5, color: 'rgba(29, 42, 92, 0.6)' } },
     quality: { smoothing: true },
-    code: 'pressureWidth + taper',
+    code: 'glow: { radius: 2.5 }',
   },
   {
     id: 'neon',
@@ -50,7 +49,7 @@ const SPECIMENS: Specimen[] = [
     font: 'Caveat',
     text: 'Hello, color!',
     size: 'clamp(46px, 5vw, 70px)',
-    effects: { strokeGradient: { colors: 'rainbow', saturation: 78, lightness: 58 }, taper: true },
+    effects: { strokeGradient: { colors: 'rainbow', saturation: 78, lightness: 58 } },
     code: "strokeGradient: 'rainbow'",
   },
   {
@@ -72,20 +71,24 @@ const SPECIMENS: Specimen[] = [
     font: 'Tangerine',
     text: 'Golden hour',
     size: 'clamp(72px, 8vw, 120px)',
-    effects: { globalGradient: { colors: ['#ffb347', '#ff6f61', '#c2379b', '#5b3fa8'], angle: 0 }, taper: true },
+    effects: { globalGradient: { colors: ['#ffb347', '#ff6f61', '#c2379b', '#5b3fa8'], angle: 0 } },
     quality: { smoothing: true },
     code: 'globalGradient',
   },
   {
+    // Caveat is monoline with round ends — the kind of face taper suits. A
+    // face that already has its own contrast would lose its shape.
     id: 'gilded',
-    title: 'Inked inside the letter',
-    font: 'Suez One',
-    text: 'שלום',
-    size: 'clamp(64px, 7vw, 104px)',
-    effects: { pressureWidth: false, globalGradient: { colors: ['#f7e3a3', '#d4a24c', '#8a5a1c', '#e9c77b'], angle: 70 } },
-    quality: { clipText: 2.4 },
-    code: 'clipText: 2.4',
-    dir: 'rtl',
+    title: 'Brush ends on a monoline face',
+    font: 'Caveat',
+    text: 'brush strokes',
+    size: 'clamp(48px, 5.4vw, 76px)',
+    effects: {
+      taper: { startLength: 0.35, endLength: 0.45 },
+      globalGradient: { colors: ['#f7e3a3', '#d4a24c', '#8a5a1c', '#e9c77b'], angle: 20 },
+    },
+    quality: { smoothing: true },
+    code: 'taper',
   },
 ];
 
@@ -101,7 +104,6 @@ function SpecimenCard({ specimen }: { specimen: Specimen }) {
         {font && (
           <TegakiRenderer
             font={font}
-            direction={specimen.dir}
             time={{ mode: 'uncontrolled', duration: specimen.duration ?? 3.6, loop: true, loopGap: 2.2, playing: visible }}
             effects={specimen.effects}
             quality={specimen.quality}

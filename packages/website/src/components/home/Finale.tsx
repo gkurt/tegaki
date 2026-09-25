@@ -12,8 +12,6 @@ export function Finale() {
   const palette = INK[theme];
   const effects = useMemo(
     () => ({
-      pressureWidth: { strength: 1 },
-      taper: { startLength: 0.2, endLength: 0.3 },
       globalGradient: { colors: [palette.ink, palette.ink, palette.seal], angle: 0 },
     }),
     [palette],

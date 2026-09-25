@@ -142,7 +142,7 @@ packages/website/
         FontPicker.tsx ExportMenu.tsx Transport.tsx ZoomStage.tsx ui.tsx icons.tsx state.ts
       preview/                # Shared by /studio and /preview: TegakiTextPreview, stage views, export, constants
       url-state.ts            # URL <-> state serialization (short keys, only non-defaults written)
-      home/                   # Landing-page islands: Hero, ScrollLetter (scroll-bound time), Scripts, Styles, TypeIt (editable), ChatStream, Write, Finale; shared.ts (font loading, useInView, useTheme)
+      home/                   # Landing-page islands: Hero + Greetings, ControlledTime (scroll-linked `time="css"` + slider), Scripts, Styles, TypeIt (editable), ChatStream, Write, Finale; shared.ts (font loading, useInView, useTheme)
       LiveDemo.tsx            # Embeddable React demo used in docs
       astro/ solid/ svelte/ vanilla/ vue/ wc/   # Per-framework example components referenced from docs
     content/

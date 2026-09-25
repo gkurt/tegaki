@@ -2,7 +2,6 @@ import { useMemo, useRef } from 'react';
 import { TegakiRenderer } from 'tegaki';
 import { type FontName, useFont, useInView } from './shared.ts';
 
-const EFFECTS = { pressureWidth: { strength: 0.9 }, taper: { startLength: 0.12, endLength: 0.25 } };
 const QUALITY = { smoothing: true };
 
 interface WriteProps {
@@ -31,7 +30,7 @@ export function Write({ text, font: fontName = 'Caveat', className, tone = 'ink'
   return (
     <div ref={ref} className={className} style={{ color: `var(--${tone})` }}>
       {font ? (
-        <TegakiRenderer font={font} time={time} effects={EFFECTS} quality={QUALITY}>
+        <TegakiRenderer font={font} time={time} quality={QUALITY}>
           {text}
         </TegakiRenderer>
       ) : (

@@ -97,7 +97,6 @@ const SCRIPTS: Script[] = [
 /** Every word takes the same time to write, whatever its stroke count. */
 const DRAW_S = 3.4;
 const HOLD_MS = 1600;
-const EFFECTS = { pressureWidth: { strength: 1 }, taper: { startLength: 0.12, endLength: 0.2 } };
 
 /** One word — "handwriting" — written in each script in turn. */
 export function Scripts() {
@@ -141,7 +140,6 @@ export function Scripts() {
               font={font}
               direction={script.dir}
               time={{ mode: 'uncontrolled', duration: DRAW_S, delay: 0.2, playing: visible }}
-              effects={EFFECTS}
               quality={{ smoothing: true, clipText: script.clip ?? 1.3 }}
               onComplete={() => setDone(true)}
             >

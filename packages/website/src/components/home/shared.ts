@@ -114,3 +114,26 @@ export const INK = {
   light: { ink: '#1c1d2b', seal: '#d33a26' },
   dark: { ink: '#f1e9da', seal: '#ff6a4d' },
 } as const;
+
+// The hero headline finishing is the cue for the rest of the fold to fetch its
+// multi-MB bundles (Klee One, Nanum Pen Script), so they don't compete with it.
+let headlineWritten = false;
+const headlineListeners = new Set<() => void>();
+
+export function markHeadlineWritten(): void {
+  if (headlineWritten) return;
+  headlineWritten = true;
+  for (const listener of headlineListeners) listener();
+}
+
+/** Whether the hero headline has finished writing. */
+export function useHeadlineWritten(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      headlineListeners.add(onChange);
+      return () => headlineListeners.delete(onChange);
+    },
+    () => headlineWritten,
+    () => false,
+  );
+}

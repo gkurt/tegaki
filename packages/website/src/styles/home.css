@@ -237,13 +237,12 @@ p code {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-height: calc(100svh - 65px);
-  padding: clamp(40px, 9vh, 110px) clamp(16px, 4vw, 40px) clamp(56px, 10vh, 120px);
+  padding: clamp(24px, 4.5vh, 56px) clamp(16px, 4vw, 40px) 0;
   text-align: center;
 }
 
 .eyebrow {
-  margin: 0 0 clamp(16px, 4vh, 40px);
+  margin: 0 0 clamp(8px, 2vh, 20px);
   font-family: var(--mono);
   font-size: 12.5px;
   letter-spacing: 0.08em;
@@ -268,8 +267,7 @@ p code {
 
 .hero-writing {
   position: relative;
-  width: 100%;
-  max-width: 1280px;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -279,8 +277,8 @@ p code {
   position: relative;
   z-index: 1;
   padding-bottom: 0.14em;
-  font-size: clamp(58px, 11.5vw, 184px);
-  line-height: 1.08;
+  font-size: clamp(52px, 8vw, 124px);
+  line-height: 1.06;
   text-align: center;
 }
 
@@ -297,7 +295,7 @@ p code {
   left: 50%;
   z-index: 0;
   width: 1em;
-  font-size: clamp(300px, 46vw, 680px);
+  font-size: clamp(240px, 34vw, 480px);
   line-height: 1;
   color: var(--seal);
   opacity: 0.13;
@@ -313,7 +311,10 @@ p code {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
+  position: absolute;
+  right: -12px;
+  bottom: 0;
+  z-index: 2;
   padding: 6px 12px;
   border: 0;
   border-radius: 999px;
@@ -338,8 +339,8 @@ p code {
 }
 
 .lede {
-  max-width: 620px;
-  margin: clamp(20px, 4vh, 36px) 0 0;
+  max-width: 640px;
+  margin: clamp(8px, 1.5vh, 16px) 0 0;
   font-size: clamp(17px, 1.5vw, 20px);
   line-height: 1.6;
   color: var(--ink-soft);
@@ -352,7 +353,52 @@ p code {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin-top: 32px;
+  margin-top: clamp(16px, 2.6vh, 28px);
+}
+
+/* Live greetings under the fold line. */
+.greetings {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 1240px;
+  margin-top: clamp(24px, 4.5vh, 48px);
+}
+
+.greeting {
+  display: flex;
+  flex-direction: column;
+  min-height: clamp(128px, 17vh, 164px);
+  margin: 0;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--card) 80%, transparent);
+  box-shadow: 0 1px 1px rgb(60 40 10 / 0.03);
+}
+
+.greeting-ink {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  font-size: calc(clamp(34px, 3.2vw, 46px) * var(--scale));
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.greeting figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.greeting figcaption span:first-child {
+  color: var(--ink-soft);
 }
 
 .button {
@@ -425,14 +471,14 @@ p code {
 .chapter {
   max-width: 1240px;
   margin: 0 auto;
-  padding: clamp(96px, 16vh, 180px) clamp(16px, 4vw, 40px) 0;
+  padding: clamp(72px, 11vh, 128px) clamp(16px, 4vw, 40px) 0;
 }
 
 .chapter-head {
   display: grid;
-  gap: 18px;
+  gap: 14px;
   max-width: 760px;
-  margin-bottom: clamp(36px, 6vh, 64px);
+  margin-bottom: clamp(28px, 4vh, 44px);
 }
 
 .chapter-num {
@@ -456,9 +502,9 @@ p code {
 .chapter-head h2 {
   margin: 0;
   font-family: var(--serif);
-  font-size: clamp(46px, 6.4vw, 92px);
+  font-size: clamp(40px, 5vw, 72px);
   font-weight: 400;
-  line-height: 0.98;
+  line-height: 1;
   letter-spacing: -0.025em;
   text-wrap: balance;
 }
@@ -470,79 +516,127 @@ p code {
 .chapter-head p {
   margin: 0;
   max-width: 600px;
-  font-size: 18px;
+  font-size: 17px;
   color: var(--ink-soft);
   text-wrap: pretty;
 }
 
-/* --------------------------------------------------------- 01 scroll letter */
+/* ------------------------------------------------------- 01 controlled time */
 
-.scroll-track {
-  position: relative;
-  height: 340vh;
+.controlled {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
 }
 
-.scroll-stage {
-  position: sticky;
-  top: 0;
+.controlled-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 28px;
-  height: 100svh;
-}
-
-.scroll-paper {
-  --margin: clamp(36px, 6vw, 72px);
-  width: min(820px, 100%);
-  padding: 0.7lh clamp(20px, 4vw, 56px) 0.9lh calc(var(--margin) + clamp(16px, 2.5vw, 28px));
-  border-radius: 4px;
-  font-size: clamp(26px, 3.6vw, 48px);
-  line-height: 1.42;
-  box-shadow: var(--shadow);
-  transform: rotate(-0.8deg);
-  background-color: var(--card);
-  background-image:
-    linear-gradient(
-      90deg,
-      transparent calc(var(--margin) - 1px),
-      color-mix(in srgb, var(--seal) 45%, transparent) calc(var(--margin) - 1px) var(--margin),
-      transparent var(--margin)
-    ),
-    repeating-linear-gradient(to bottom, transparent 0 calc(1lh - 1px), var(--rule) calc(1lh - 1px) 1lh);
-  background-position: 0 0.7lh;
-}
-
-.scroll-letter {
-  min-height: 6lh;
-}
-
-.scroll-meter {
-  display: flex;
-  align-items: center;
   gap: 16px;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--ink);
+  min-height: 300px;
+  margin: 0;
+  padding: 28px;
+  border: 1px solid var(--rule);
+  border-radius: 24px;
+  background: var(--card);
+  box-shadow: var(--shadow);
 }
 
-.scroll-meter-total {
+.controlled-ink {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  font-size: clamp(34px, 3.4vw, 50px);
+  line-height: 1.35;
+  text-align: center;
+}
+
+.controlled-ink-script {
+  font-size: clamp(38px, 3.8vw, 56px);
+}
+
+.controlled-card figcaption {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.controlled-card figcaption code {
+  font-size: 12px;
+  font-weight: 400;
   color: var(--muted);
 }
 
-.scroll-meter-bar {
-  width: min(260px, 40vw);
-  height: 2px;
-  background: var(--rule);
-  overflow: hidden;
-  border-radius: 2px;
+/* time="css": a scroll-driven animation moves the progress property the renderer reads. */
+@keyframes tegaki-view-progress {
+  from {
+    --tegaki-progress: 0;
+  }
+  to {
+    --tegaki-progress: 1;
+  }
 }
 
-.scroll-meter-fill {
-  height: 100%;
+.scroll-linked {
+  animation: tegaki-view-progress linear both;
+  animation-timeline: view();
+  animation-range: cover 10% cover 45%;
+}
+
+.scrubber {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+.scrubber-total {
+  color: var(--muted);
+}
+
+.scrubber input {
+  flex: 1;
+  height: 18px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+
+.scrubber input::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--seal) var(--fill), var(--rule) var(--fill));
+}
+
+.scrubber input::-moz-range-track {
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--seal) var(--fill), var(--rule) var(--fill));
+}
+
+.scrubber input::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  margin-top: -6.5px;
+  border: 2px solid var(--card);
+  border-radius: 50%;
   background: var(--seal);
-  transform-origin: left;
+  box-shadow: 0 0 0 1px var(--seal);
+  appearance: none;
+}
+
+.scrubber input::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--card);
+  border-radius: 50%;
+  background: var(--seal);
+  box-shadow: 0 0 0 1px var(--seal);
 }
 
 /* ---------------------------------------------------------------- 02 scripts */
@@ -551,7 +645,7 @@ p code {
   position: relative;
   display: grid;
   grid-template-rows: 1fr auto;
-  min-height: min(68vh, 640px);
+  min-height: min(60vh, 540px);
   padding: clamp(20px, 3vw, 36px);
   border: 1px solid var(--rule);
   border-radius: 28px;
@@ -704,7 +798,7 @@ p code {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 300px;
+  min-height: 260px;
   margin: 0;
   padding: 28px;
   border-radius: 24px;
@@ -1198,7 +1292,7 @@ p code {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: clamp(140px, 24vh, 260px) clamp(16px, 4vw, 40px) clamp(96px, 16vh, 160px);
+  padding: clamp(96px, 16vh, 180px) clamp(16px, 4vw, 40px) clamp(72px, 12vh, 120px);
   text-align: center;
 }
 
@@ -1323,6 +1417,14 @@ p code {
     grid-column: span 12;
   }
 
+  .greetings {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .controlled {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .chapter-split,
   .ship-body {
     grid-template-columns: minmax(0, 1fr);
@@ -1355,17 +1457,35 @@ p code {
     height: 480px;
   }
 
-  .scroll-track {
-    height: 300vh;
-  }
-
   .install {
     width: 100%;
     justify-content: center;
   }
 
   .scripts-stage {
-    min-height: 440px;
+    min-height: 400px;
+  }
+
+  .greetings {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 46%;
+    width: calc(100% + 32px);
+    margin-inline: -16px;
+    padding-inline: 16px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 16px;
+    scrollbar-width: none;
+  }
+
+  .greeting {
+    scroll-snap-align: start;
+  }
+
+  .replay {
+    position: static;
+    align-self: flex-end;
   }
 
   .finale-writing {

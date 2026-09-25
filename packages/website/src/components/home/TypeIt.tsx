@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TegakiRenderer } from 'tegaki';
 import { type FontName, useFont, useInView } from './shared.ts';
 
@@ -9,10 +9,32 @@ const FONTS: { name: FontName; label: string; size: number }[] = [
   { name: 'Tangerine', label: 'Tangerine', size: 1.4 },
 ];
 
-const EFFECTS = { pressureWidth: { strength: 0.9 }, taper: { startLength: 0.1, endLength: 0.2 } };
 const QUALITY = { smoothing: true };
 
 const START = 'Click these words\nand write your own.';
+
+/**
+ * Keep the caret at the end of `root`'s editable overlay while it has focus.
+ * The pen writes whatever is new at the end of the timeline, so a letter typed
+ * mid-line would draw at the end of the animation, not where it appears.
+ */
+function useCaretPinnedToEnd(root: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const onSelectionChange = () => {
+      const overlay = root.current?.querySelector<HTMLElement>('[data-tegaki="overlay"]');
+      const sel = document.getSelection();
+      if (!overlay || !sel || document.activeElement !== overlay || !sel.focusNode) return;
+      const after = document.createRange();
+      after.setStart(sel.focusNode, sel.focusOffset);
+      after.setEnd(overlay, overlay.childNodes.length);
+      if (sel.isCollapsed && after.toString() === '') return;
+      sel.selectAllChildren(overlay);
+      sel.collapseToEnd();
+    };
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => document.removeEventListener('selectionchange', onSelectionChange);
+  }, [root]);
+}
 
 /**
  * The renderer in `editable` mode: the handwriting *is* the text field. New
@@ -27,6 +49,7 @@ export function TypeIt() {
   const [text, setText] = useState(START);
   const choice = FONTS[fontIndex]!;
   const font = useFont(near ? choice.name : null);
+  useCaretPinnedToEnd(ref);
 
   return (
     <div ref={ref} className="typeit">
@@ -67,7 +90,6 @@ export function TypeIt() {
             spellCheck={false}
             aria-label="Handwritten text — click to edit"
             time={{ mode: 'uncontrolled', speed: 2, catchUp: 0.8, playing: visible }}
-            effects={EFFECTS}
             quality={QUALITY}
           />
         )}

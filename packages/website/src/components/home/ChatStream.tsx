@@ -7,8 +7,6 @@ const TURNS = [
   { ask: 'And two about the morning?', reply: 'The kettle hums, the window glows,\nand every word begins in light.' },
 ];
 
-const EFFECTS = { pressureWidth: { strength: 0.8 }, taper: true };
-
 type Message = { role: 'user' | 'assistant'; text: string };
 
 /**
@@ -85,12 +83,7 @@ export function ChatStream() {
           ) : (
             <div key={`${run}-${i}`} className="chat-msg chat-assistant">
               {font && (
-                <TegakiRenderer
-                  font={font}
-                  text={m.text}
-                  time={{ mode: 'uncontrolled', speed: 3, catchUp: 0.6, playing: visible }}
-                  effects={EFFECTS}
-                />
+                <TegakiRenderer font={font} text={m.text} time={{ mode: 'uncontrolled', speed: 3, catchUp: 0.6, playing: visible }} />
               )}
             </div>
           ),

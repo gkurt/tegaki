@@ -1,10 +1,10 @@
 ---
 import { Code } from 'astro:components';
 import { ChatStream } from '../components/home/ChatStream';
+import { ControlledTime } from '../components/home/ControlledTime';
 import { Finale } from '../components/home/Finale';
-import { Hero } from '../components/home/Hero';
+import { Greetings, Hero } from '../components/home/Hero';
 import { Scripts } from '../components/home/Scripts';
-import { ScrollLetter } from '../components/home/ScrollLetter';
 import { Styles } from '../components/home/Styles';
 import { TypeIt } from '../components/home/TypeIt';
 import { Write } from '../components/home/Write';
@@ -180,8 +180,8 @@ new TegakiEngine(document.querySelector('#note'), {
         <h1 class="sr-only">Every font, written by hand.</h1>
         <Hero client:only="react" />
         <p class="lede">
-          Tegaki turns any typeface into living handwriting — every letter drawn stroke by stroke, in the order a hand would draw it. Eight
-          writing systems, every framework, and not a single video file.
+          Stroke-by-stroke handwriting animation for any font. Tegaki extracts each glyph's strokes, their order and width, and draws them on a
+          canvas over real, selectable text.
         </p>
         <div class="cta">
           <a class="button button-primary" href={`${base}/getting-started/`}>
@@ -197,27 +197,28 @@ new TegakiEngine(document.querySelector('#note'), {
             <span class="install-state" aria-live="polite">copy</span>
           </button>
         </div>
+        <Greetings client:only="react" />
       </section>
 
       <section class="chapter" id="time">
         <header class="chapter-head">
           <span class="chapter-num">01</span>
-          <h2>Time is <em>yours</em> to hold.</h2>
+          <h2>Controlled <em>time</em></h2>
           <p>
-            Keep scrolling — the pen is tied to the scrollbar. Controlled time lets you bind the writing to anything that moves: a slider, a
-            video frame, a story's progress. Seek forward, seek back; the ink follows.
+            Pass a time in seconds, a <code>'50%'</code> progress, or <code>'css'</code> to read it from the <code>--tegaki-progress</code> custom
+            property. The renderer seeks to that instant in either direction, so the pen can follow a scroll timeline, a slider, or a video frame.
           </p>
         </header>
-        <ScrollLetter client:only="react" />
+        <ControlledTime client:only="react" />
       </section>
 
       <section class="chapter" id="scripts">
         <header class="chapter-head">
           <span class="chapter-num">02</span>
-          <h2>One pen, <em>eight</em> scripts.</h2>
+          <h2>Eight writing <em>systems</em></h2>
           <p>
-            Right-to-left Hebrew and Arabic, Devanagari and Bengali headlines, and Japanese, Korean and Chinese in their textbook stroke order —
-            all from ordinary fonts, shaped with the same engine your browser uses.
+            Hebrew and Arabic right to left with positional forms, Devanagari and Bengali headlines drawn across the word, and Japanese, Korean
+            and Chinese in reference stroke order (KanjiVG, Make Me a Hanzi). Text is shaped with HarfBuzz.
           </p>
         </header>
         <Scripts client:only="react" />
@@ -226,8 +227,10 @@ new TegakiEngine(document.querySelector('#note'), {
       <section class="chapter" id="styles">
         <header class="chapter-head">
           <span class="chapter-num">03</span>
-          <h2>Style it like <em>ink</em>.</h2>
-          <p>Pressure, taper, glow, wobble, gradients, clipping to the letterform — stack effects the way you stack CSS. Every card is live.</p>
+          <h2><em>Effects</em></h2>
+          <p>
+            Glow, wobble, per-stroke and whole-text gradients, and taper, composed per renderer. Strokes keep the font's own width by default.
+          </p>
         </header>
         <Styles client:only="react" />
       </section>
@@ -235,16 +238,16 @@ new TegakiEngine(document.querySelector('#note'), {
       <section class="chapter" id="write">
         <header class="chapter-head">
           <span class="chapter-num">04</span>
-          <h2>The handwriting <em>is</em> the text field.</h2>
+          <h2><em>Editable</em> text</h2>
           <p>
-            It's real, selectable text underneath — so it copies, it's read by screen readers, and with <code>editable</code> it takes a caret.
-            Pick a pen and write.
+            The canvas draws over real DOM text, so it selects, copies and reads out to screen readers. With <code>editable</code> it takes input:
+            each letter you type is written as it arrives.
           </p>
         </header>
         <div class="typeit-wrap">
           <TypeIt client:only="react" />
           <div class="marginalia" aria-hidden="true">
-            <Write client:only="react" text="go on, it's yours" tone="seal" className="marginalia-note" />
+            <Write client:only="react" text="type here" tone="seal" className="marginalia-note" />
             <svg class="marginalia-arrow" viewBox="0 0 120 80"><path d="M104 6c2 26-14 50-44 58-14 4-28 4-42 0M28 52 16 64l14 10"></path></svg>
           </div>
         </div>
@@ -253,10 +256,10 @@ new TegakiEngine(document.querySelector('#note'), {
       <section class="chapter chapter-split" id="stream">
         <header class="chapter-head">
           <span class="chapter-num">05</span>
-          <h2>Streams as fast as <em>thought</em>.</h2>
+          <h2><em>Streaming</em> text</h2>
           <p>
-            Hand it text as it arrives from a model and it keeps writing — <code>catchUp</code> quietly speeds the pen when the stream runs ahead,
-            so a reply never lags or jumps.
+            Update <code>text</code> as tokens arrive and the pen continues from where it is. <code>catchUp</code> raises the playback speed while
+            the pen is behind the stream.
           </p>
           <Code
             class="code code-inline"
@@ -277,10 +280,10 @@ new TegakiEngine(document.querySelector('#note'), {
       <section class="chapter" id="ship">
         <header class="chapter-head">
           <span class="chapter-num">06</span>
-          <h2>Everywhere you <em>ship</em>.</h2>
+          <h2>Every <em>framework</em></h2>
           <p>
-            One engine, thin adapters. Eleven fonts ship ready to import — or bring your own: the Studio turns any font into stroke data right in
-            your browser.
+            One engine with adapters for React, Svelte, Vue, SolidJS, Astro, Web Components and vanilla JS, plus Remotion for video. Eleven fonts
+            ship ready to import; the Studio generates bundles from any other font in the browser.
           </p>
         </header>
         <div class="ship" data-fw="react">
