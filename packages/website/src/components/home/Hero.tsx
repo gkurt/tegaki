@@ -106,29 +106,39 @@ export function Hero() {
           </TegakiRenderer>
         )}
       </div>
-      <div className="hero-headline" aria-hidden="true">
-        {font ? (
-          <TegakiRenderer
-            key={`h${run}`}
-            font={font}
-            time={{ mode: 'uncontrolled', duration: 4.6, delay: 0.3 }}
-            timing={{ glyphGap: 0.02, wordGap: 0.12, lineGap: 0.25 }}
-            effects={headlineEffects}
-            quality={{ smoothing: true, pixelRatio: 1.5 }}
-            onComplete={markHeadlineWritten}
-          >
-            {HEADLINE}
-          </TegakiRenderer>
-        ) : (
-          <div className="hero-headline-placeholder">{HEADLINE}</div>
-        )}
+      {/* Keyed so the headline is replaced, not resized, when the font arrives: its
+          width follows the text, and a resized box would shift the page. */}
+      <div key={font ? 'ink' : 'placeholder'} className="hero-headline">
+        <div className="hero-headline-ink" aria-hidden="true">
+          {font ? (
+            <TegakiRenderer
+              key={`h${run}`}
+              font={font}
+              time={{ mode: 'uncontrolled', duration: 4.6, delay: 0.3 }}
+              timing={{ glyphGap: 0.02, wordGap: 0.12, lineGap: 0.25 }}
+              effects={headlineEffects}
+              quality={{ smoothing: true, pixelRatio: 1.5 }}
+              onComplete={markHeadlineWritten}
+            >
+              {HEADLINE}
+            </TegakiRenderer>
+          ) : (
+            <div className="hero-headline-placeholder">{HEADLINE}</div>
+          )}
+        </div>
+        <button
+          type="button"
+          className="replay"
+          onClick={() => setRun((r) => r + 1)}
+          disabled={!font}
+          aria-label="Write the headline again"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4.5h4.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+          Replay
+        </button>
       </div>
-      <button type="button" className="replay" onClick={() => setRun((r) => r + 1)} disabled={!font} aria-label="Write the headline again">
-        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-          <path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4.5h4.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        </svg>
-        Replay
-      </button>
     </div>
   );
 }

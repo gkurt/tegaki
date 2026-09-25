@@ -5,7 +5,7 @@ import starlight from '@astrojs/starlight';
 import svelte from '@astrojs/svelte';
 import vue from '@astrojs/vue';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'astro/config';
+import { defineConfig, fontProviders } from 'astro/config';
 import starlightThemeNova from 'starlight-theme-nova';
 
 EventEmitter.defaultMaxListeners = 12;
@@ -76,6 +76,41 @@ export default defineConfig({
     svelte(),
     vue(),
     solidJs({ include: ['**/solid/**'] }),
+  ],
+  // The home page's type (used through <Font> in index.astro). Self-hosted and
+  // preloaded, with fallbacks sized to each font's metrics; `optional` means a
+  // font that misses the first paint is skipped for that visit rather than
+  // swapped in, so the text never reflows under the reader.
+  fonts: [
+    {
+      provider: fontProviders.google(),
+      name: 'Instrument Serif',
+      cssVariable: '--font-instrument-serif',
+      styles: ['normal', 'italic'],
+      subsets: ['latin'],
+      display: 'optional',
+      fallbacks: ['serif'],
+    },
+    {
+      provider: fontProviders.google(),
+      name: 'Geist',
+      cssVariable: '--font-geist',
+      weights: ['400 600'],
+      styles: ['normal'],
+      subsets: ['latin'],
+      display: 'optional',
+      fallbacks: ['sans-serif'],
+    },
+    {
+      provider: fontProviders.google(),
+      name: 'Geist Mono',
+      cssVariable: '--font-geist-mono',
+      weights: ['400 500'],
+      styles: ['normal'],
+      subsets: ['latin'],
+      display: 'optional',
+      fallbacks: ['monospace'],
+    },
   ],
   devToolbar: {
     enabled: false,

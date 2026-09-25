@@ -16,7 +16,8 @@ function ScrollLinked() {
   const ref = useRef<HTMLDivElement>(null);
   const near = useInView(ref, { once: true, rootMargin: '400px 0px' });
   const font = useFont(near ? 'Caveat' : null);
-  const [scrollTimelines] = useState(() => CSS.supports('animation-timeline: view()'));
+  // Only used once the font is in (after hydration), so the server's `false` never reaches the markup.
+  const [scrollTimelines] = useState(() => typeof CSS !== 'undefined' && CSS.supports('animation-timeline: view()'));
 
   return (
     <figure ref={ref} className="controlled-card">
@@ -39,6 +40,9 @@ function ScrollLinked() {
     </figure>
   );
 }
+
+/** Padded to a fixed width, so the readout's text doesn't move as a number gains a digit. */
+const seconds = (s: number) => s.toFixed(2).padStart(5, ' ');
 
 /** `time={seconds}` from a range input. It sweeps once on first view, then it's the reader's. */
 function Scrubbed() {
@@ -95,7 +99,7 @@ function Scrubbed() {
           style={{ '--fill': `${duration ? (time / duration) * 100 : 0}%` } as React.CSSProperties}
         />
         <code>
-          {time.toFixed(2)}s <span className="scrubber-total">/ {duration.toFixed(2)}s</span>
+          {seconds(time)}s <span className="scrubber-total">/ {seconds(duration)}s</span>
         </code>
       </div>
       <figcaption>

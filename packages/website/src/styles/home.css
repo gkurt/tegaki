@@ -15,9 +15,10 @@
   --gold: #b8862f;
   --shadow: 0 1px 1px rgb(60 40 10 / 0.04), 0 12px 32px -12px rgb(60 40 10 / 0.18), 0 40px 80px -40px rgb(60 40 10 / 0.25);
 
-  --serif: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* From the Fonts API (astro.config.ts), each with a metric-matched fallback. */
+  --serif: var(--font-instrument-serif);
+  --sans: var(--font-geist);
+  --mono: var(--font-geist-mono);
   --kanji: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
 
   color-scheme: light;
@@ -265,9 +266,10 @@ p code {
   color: var(--ink);
 }
 
+/* Full width, so its box doesn't depend on the headline's width. */
 .hero-writing {
   position: relative;
-  max-width: 100%;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -276,17 +278,33 @@ p code {
 .hero-headline {
   position: relative;
   z-index: 1;
-  padding-bottom: 0.14em;
-  font-size: clamp(52px, 8vw, 124px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+  /* Never so large that a written line wraps once drawn: "written by hand." is
+     5.7em wide in Parisienne, and the placeholder can't know that. */
+  font-size: min(clamp(52px, 8vw, 124px), (100vw - 2 * clamp(16px, 4vw, 40px)) / 5.9);
   line-height: 1.06;
   text-align: center;
 }
 
+.hero-headline-ink {
+  max-width: 100%;
+  padding-bottom: 0.14em;
+}
+
+/* Holds the renderer's place while its bundle loads. The renderer's box is its
+   line count × line-height, so the placeholder keeps the same lines (only the
+   written breaks, no wrapping) in the parent's own font: a second font in the
+   line box would stretch it past the line-height. */
 .hero-headline-placeholder,
 .write-placeholder {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
   visibility: hidden;
-  white-space: pre-line;
-  font-family: cursive;
+  white-space: pre;
 }
 
 .hero-kanji {
@@ -592,6 +610,11 @@ p code {
   gap: 14px;
   font-family: var(--mono);
   font-size: 12.5px;
+}
+
+/* The numbers are space-padded to a fixed width (ControlledTime.tsx). */
+.scrubber code {
+  white-space: pre;
 }
 
 .scrubber-total {
@@ -1259,7 +1282,12 @@ p code {
   color: var(--muted);
 }
 
+/* Fills the cell and centers the writing in it, so its own box stays put when
+   the placeholder gives way to the renderer. */
 .ship-output-ink {
+  justify-self: stretch;
+  display: grid;
+  justify-items: center;
   font-size: 56px;
   line-height: 1.2;
 }
@@ -1296,8 +1324,10 @@ p code {
   text-align: center;
 }
 
+/* Full width, so its box doesn't depend on the line's width. */
 .finale-writing {
   position: relative;
+  align-self: stretch;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1305,7 +1335,9 @@ p code {
 }
 
 .finale-line {
-  font-size: clamp(56px, 10.5vw, 168px);
+  max-width: 100%;
+  /* "Now, write yours." is 6.2em in Parisienne; keep it on one line (see .hero-headline). */
+  font-size: min(clamp(56px, 10.5vw, 168px), (100vw - 2 * clamp(16px, 4vw, 40px)) / 6.3);
   line-height: 1.15;
 }
 

@@ -1,4 +1,5 @@
 ---
+import { Font } from 'astro:assets';
 import { Code } from 'astro:components';
 import { ChatStream } from '../components/home/ChatStream';
 import { ControlledTime } from '../components/home/ControlledTime';
@@ -120,12 +121,11 @@ new TegakiEngine(document.querySelector('#note'), {
     <meta property="og:image" content={new URL(`${base}/tegaki-card.png`, Astro.site)} />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@gkurttech" />
+    <Font cssVariable="--font-geist" preload />
+    <Font cssVariable="--font-geist-mono" preload />
+    <Font cssVariable="--font-instrument-serif" preload />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
-    />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@700&text=%E6%89%8B%E6%9B%B8&display=block" />
     <script is:inline>
       // Share the docs' theme choice (Starlight stores it here; '' follows the system) before first paint.
@@ -178,7 +178,7 @@ new TegakiEngine(document.querySelector('#note'), {
       <section class="hero">
         <p class="eyebrow"><span lang="ja">手書き</span> <i>tegaki</i> — Japanese for “handwriting”</p>
         <h1 class="sr-only">Every font, written by hand.</h1>
-        <Hero client:only="react" />
+        <Hero client:load />
         <p class="lede">
           Stroke-by-stroke handwriting animation for any font. Tegaki extracts each glyph's strokes, their order and width, and draws them on a
           canvas over real, selectable text.
@@ -197,7 +197,7 @@ new TegakiEngine(document.querySelector('#note'), {
             <span class="install-state" aria-live="polite">copy</span>
           </button>
         </div>
-        <Greetings client:only="react" />
+        <Greetings client:load />
       </section>
 
       <section class="chapter" id="time">
@@ -209,7 +209,7 @@ new TegakiEngine(document.querySelector('#note'), {
             property. The renderer seeks to that instant in either direction, so the pen can follow a scroll timeline, a slider, or a video frame.
           </p>
         </header>
-        <ControlledTime client:only="react" />
+        <ControlledTime client:load />
       </section>
 
       <section class="chapter" id="scripts">
@@ -221,7 +221,7 @@ new TegakiEngine(document.querySelector('#note'), {
             and Chinese in reference stroke order (KanjiVG, Make Me a Hanzi). Text is shaped with HarfBuzz.
           </p>
         </header>
-        <Scripts client:only="react" />
+        <Scripts client:load />
       </section>
 
       <section class="chapter" id="styles">
@@ -232,7 +232,7 @@ new TegakiEngine(document.querySelector('#note'), {
             Glow, wobble, per-stroke and whole-text gradients, and taper, composed per renderer. Strokes keep the font's own width by default.
           </p>
         </header>
-        <Styles client:only="react" />
+        <Styles client:load />
       </section>
 
       <section class="chapter" id="write">
@@ -245,9 +245,9 @@ new TegakiEngine(document.querySelector('#note'), {
           </p>
         </header>
         <div class="typeit-wrap">
-          <TypeIt client:only="react" />
+          <TypeIt client:load />
           <div class="marginalia" aria-hidden="true">
-            <Write client:only="react" text="type here" tone="seal" className="marginalia-note" />
+            <Write client:load text="type here" tone="seal" className="marginalia-note" />
             <svg class="marginalia-arrow" viewBox="0 0 120 80"><path d="M104 6c2 26-14 50-44 58-14 4-28 4-42 0M28 52 16 64l14 10"></path></svg>
           </div>
         </div>
@@ -274,7 +274,7 @@ new TegakiEngine(document.querySelector('#note'), {
 </TegakiRenderer>`}
           />
         </header>
-        <ChatStream client:only="react" />
+        <ChatStream client:load />
       </section>
 
       <section class="chapter" id="ship">
@@ -308,7 +308,7 @@ new TegakiEngine(document.querySelector('#note'), {
             </div>
             <div class="ship-output">
               <span class="ship-output-label">Output</span>
-              <Write client:only="react" text="Hello, world!" loop className="ship-output-ink" />
+              <Write client:load text="Hello, world!" loop className="ship-output-ink" />
             </div>
           </div>
           <div class="ship-links">
@@ -320,7 +320,7 @@ new TegakiEngine(document.querySelector('#note'), {
       </section>
 
       <section class="finale">
-        <Finale client:only="react" />
+        <Finale client:load />
         <div class="cta cta-center">
           <a class="button button-primary" href={`${base}/getting-started/`}>Read the docs</a>
           <a class="button" href="https://github.com/gkurt/tegaki">Star on GitHub</a>
