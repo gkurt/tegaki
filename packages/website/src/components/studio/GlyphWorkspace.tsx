@@ -21,7 +21,7 @@ import type { CharsetInfo } from './charsets.ts';
 import { CheckIcon, ChevronDownIcon, CloseIcon, WarningIcon } from './icons.tsx';
 import type { LoadedFont, SetSetting } from './state.ts';
 import { Transport } from './Transport.tsx';
-import { cx, IconButton, isTypingTarget, Popover, Spinner } from './ui.tsx';
+import { cx, GlyphKey, IconButton, isTypingTarget, Popover, Spinner } from './ui.tsx';
 import { ZoomStage } from './ZoomStage.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
@@ -598,10 +598,18 @@ function StageStatus({
   else if (processing)
     message = (
       <>
-        <Spinner className="size-3" /> Processing “{char}”…
+        <Spinner className="size-3" />
+        <span>
+          Processing <GlyphKey char={char} />…
+        </span>
       </>
     );
-  else if (!hasResult) message = `No glyph data for “${char}”`;
+  else if (!hasResult)
+    message = (
+      <span>
+        No glyph data for <GlyphKey char={char} />
+      </span>
+    );
   if (!message) return null;
   return (
     <div className="flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs text-zinc-500 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:ring-zinc-800">
@@ -680,11 +688,12 @@ function groupWarnings(warnings: string[]): [string, number][] {
 function GlyphWarnings({ char, warnings, onClose }: { char: string; warnings: string[]; onClose: () => void }) {
   const grouped = groupWarnings(warnings);
   return (
-    <div className="flex max-h-44 shrink-0 flex-col border-t border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/5">
+    // Shrinks (down to its header) before the stage does when space runs short.
+    <div className="flex max-h-44 min-h-8 shrink flex-col border-t border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/5">
       <div className="flex h-8 shrink-0 items-center gap-2 pr-1 pl-3 text-[11px] font-medium text-amber-800 dark:text-amber-300">
         <WarningIcon size={12} />
         <span className="min-w-0 flex-1 truncate">
-          {warnings.length} geometry warning{warnings.length > 1 ? 's' : ''} for “{char}”
+          {warnings.length} geometry warning{warnings.length > 1 ? 's' : ''} for <GlyphKey char={char} />
         </span>
         <IconButton label="Close warnings" onClick={onClose} className="size-6 text-amber-700 dark:text-amber-400">
           <CloseIcon size={12} />

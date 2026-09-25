@@ -251,6 +251,27 @@ export function Chip({
   );
 }
 
+/**
+ * A glyph named in running text, set as a key cap rather than in quotes.
+ * Tinted from the surrounding text colour, so it fits any status line; a
+ * whitespace glyph shows as ␣ (its code point in the tooltip).
+ */
+export function GlyphKey({ char, className }: { char: string; className?: string }) {
+  const blank = char.trim() === '';
+  const code = `U+${(char.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}`;
+  return (
+    <kbd
+      title={blank ? code : undefined}
+      className={cx(
+        'inline-flex h-[1.6em] min-w-[1.6em] items-center justify-center rounded border border-b-2 border-current/25 bg-current/5 px-1 font-sans leading-none font-medium not-italic',
+        className,
+      )}
+    >
+      {blank ? '␣' : char}
+    </kbd>
+  );
+}
+
 export function Spinner({ className }: { className?: string }) {
   return (
     <span
