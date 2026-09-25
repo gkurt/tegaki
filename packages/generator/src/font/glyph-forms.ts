@@ -20,6 +20,8 @@ export interface GlyphForm {
   contextual: boolean;
   /** The text the glyph draws — the letter, or a ligature's letters. Unset for parts. */
   text?: string;
+  /** A ligature's component glyph ids, in text order. */
+  components?: number[];
   /** Candidate example texts read off the font's rules (unverified — see `findFormExamples`). */
   hints: string[];
 }
@@ -299,9 +301,19 @@ export function glyphFormsOf(graph: GsubGraph, char: string): GlyphForm[] {
       const contextual = from.contextual || (graph.lookupContextual[edge.lookup] ?? false);
       const hints = contextHints(graph, edge, from.gid, char);
       if (kind === 'ligature' && text) hints.unshift(text);
+      const components = kind === 'ligature' ? { components: edge.input } : {};
       for (const gid of edge.output) {
         if (forms.has(gid) || forms.size >= MAX_FORMS) continue;
-        forms.set(gid, { gid, name: glyphName(gid), kind, features, contextual, ...(text === undefined ? {} : { text }), hints });
+        forms.set(gid, {
+          gid,
+          name: glyphName(gid),
+          kind,
+          features,
+          contextual,
+          ...(text === undefined ? {} : { text }),
+          ...components,
+          hints,
+        });
         queue.push(gid);
       }
     }

@@ -15,6 +15,8 @@ export interface ShapedGlyphRef {
    * up by it, as for the char-keyed glyph.
    */
   letter?: string;
+  /** The letters the glyph draws when it is the only glyph of a longer cluster — a ligature. */
+  ligature?: string;
 }
 
 /**
@@ -46,8 +48,16 @@ export function collectShapedGlyphs(shaper: BundleShaper, text: string, options?
       if (gid === 0 || !char) continue;
       seen.add(g.g);
       const cluster = line.slice(g.cl, starts.find((c) => c > g.cl) ?? line.length);
-      const letter = glyphsPerCluster.get(g.cl) === 1 && [...cluster].length === 1 ? cluster : undefined;
-      out.push(letter === undefined ? { key: g.g, subsetIdx, gid, char } : { key: g.g, subsetIdx, gid, char, letter });
+      const alone = glyphsPerCluster.get(g.cl) === 1;
+      const length = [...cluster].length;
+      out.push({
+        key: g.g,
+        subsetIdx,
+        gid,
+        char,
+        ...(alone && length === 1 ? { letter: cluster } : {}),
+        ...(alone && length > 1 ? { ligature: cluster } : {}),
+      });
     }
   }
   return out;

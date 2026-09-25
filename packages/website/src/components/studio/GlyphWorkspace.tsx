@@ -222,6 +222,7 @@ export function GlyphWorkspace({
               isRtlChar(selectedChar),
               isHeadlineScriptChar(selectedChar),
               refChar ? { char: refChar, reference: refGlyphs } : undefined,
+              form?.kind === 'ligature' ? form.components : undefined,
             )
           : processGlyphGeometry(fontInfo, selectedChar, geometryOptions, options.bezierTolerance, refGlyphs);
         if (res) geoResultsCache.current.set(geoKey, res);
@@ -235,7 +236,7 @@ export function GlyphWorkspace({
       cancelled = true;
       clearTimeout(id);
     };
-  }, [geoKey, fontInfo, selectedChar, formGid, formSubset, refChar, geometryOptions, options.bezierTolerance, refGlyphs]);
+  }, [geoKey, fontInfo, selectedChar, form, formGid, formSubset, refChar, geometryOptions, options.bezierTolerance, refGlyphs]);
 
   // The last result of the active pipeline (possibly for other inputs), and
   // whether the one for the current inputs is still being computed.

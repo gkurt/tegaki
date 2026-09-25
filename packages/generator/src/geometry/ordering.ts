@@ -200,6 +200,46 @@ export interface OrderTimingParams {
    */
   topEntry?: boolean;
   yTolerance: number;
+  /**
+   * A ligature's letters, left to right: the x positions where one
+   * component's slot ends and the next begins (see `ligatureComponentEdges`).
+   * Heuristic order then draws it letter by letter — every stroke of `w`
+   * before the `r` of Dancing Script's `w_r`, although the `r` rises higher —
+   * and only orders strokes within a letter top-to-bottom.
+   */
+  componentEdges?: readonly number[];
+}
+
+/** Arc-length midpoint x of a stroke's ink — the letter it belongs to in a ligature. */
+function inkCenterX(points: readonly { x: number; y: number }[]): number {
+  if (points.length === 1) return points[0]!.x;
+  let len = 0;
+  let sum = 0;
+  for (let i = 1; i < points.length; i++) {
+    const l = dist(points[i - 1]!, points[i]!);
+    len += l;
+    sum += l * (points[i - 1]!.x + points[i]!.x) * 0.5;
+  }
+  return len > 0 ? sum / len : points[0]!.x;
+}
+
+/**
+ * Where each component of an LTR ligature sits: its components' advances,
+ * laid end to end from x = 0 and scaled to the ligature's own advance, give
+ * the x edges between their slots. None for fewer than two components or
+ * components without advance (a ligature of combining marks).
+ */
+export function ligatureComponentEdges(componentAdvances: readonly number[], advanceWidth: number): number[] {
+  const total = componentAdvances.reduce((a, b) => a + b, 0);
+  if (componentAdvances.length < 2 || total <= 0 || advanceWidth <= 0) return [];
+  const scale = advanceWidth / total;
+  const edges: number[] = [];
+  let x = 0;
+  for (let i = 0; i < componentAdvances.length - 1; i++) {
+    x += componentAdvances[i]! * scale;
+    edges.push(x);
+  }
+  return edges;
 }
 
 /**
@@ -280,7 +320,7 @@ export function drawAdditionsAfterBodies(order: number[], strokes: AxisPoint[][]
 /** Order + time geometry strokes into the renderer's Stroke shape (font units). */
 export function orderAndTimeStrokes(strokes: GeoStroke[], params: OrderTimingParams, plan?: OrderPlan): TimedGeoStroke[] {
   if (strokes.length === 0) return [];
-  const { drawingSpeed, strokePause, rtl, headlineLast = false, topEntry = false, yTolerance } = params;
+  const { drawingSpeed, strokePause, rtl, headlineLast = false, topEntry = false, yTolerance, componentEdges = [] } = params;
 
   // Marks (accents) sit outside any reference plan: oriented like any
   // heuristic stroke, and drawn in the dot tier after the letter.
@@ -300,12 +340,18 @@ export function orderAndTimeStrokes(strokes: GeoStroke[], params: OrderTimingPar
       const headlines = findHeadlines(oriented, priorities);
       for (let i = 0; i < headlines.length; i++) if (headlines[i]) priorities[i] = HEADLINE_PRIORITY;
     }
-    // Draw-order sort: dots last (priority), then top-to-bottom with a row
-    // band, then left-to-right (right-to-left for RTL).
+    // Draw-order sort: dots last (priority), then a ligature's letters in
+    // turn, then top-to-bottom with a row band, then left-to-right
+    // (right-to-left for RTL).
     order = oriented.map((_, i) => i);
     const boxes = oriented.map(bbox);
+    const slots = oriented.map((points) => {
+      const x = inkCenterX(points);
+      return componentEdges.filter((edge) => edge <= x).length;
+    });
     order.sort((a, b) => {
       if (priorities[b]! !== priorities[a]!) return priorities[b]! - priorities[a]!;
+      if (slots[a]! !== slots[b]!) return slots[a]! - slots[b]!;
       const ay = boxes[a]!.minY;
       const by = boxes[b]!.minY;
       if (Math.abs(ay - by) > yTolerance) return ay - by;

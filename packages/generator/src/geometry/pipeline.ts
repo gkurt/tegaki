@@ -28,7 +28,7 @@ import { SegmentIndex } from './ink/spatial.ts';
 import { extendUnpairedEnds, routeJunctionPaths } from './junction-routing.ts';
 import { findMarkStrokes, hasCombiningMarks } from './marks.ts';
 import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
-import { type OrderPlan, orderAndTimeStrokes } from './ordering.ts';
+import { ligatureComponentEdges, type OrderPlan, orderAndTimeStrokes } from './ordering.ts';
 import { classifyFaces, dissolvePartitionDebris, partitionFaces } from './partition.ts';
 import { dist, pointInPolygon, sub } from './primitives.ts';
 import { partitionRegions, splitComponents } from './regions.ts';
@@ -68,6 +68,12 @@ export interface GeometryPipelineInput {
    * ink and the best-matching one is adopted.
    */
   reference?: ReferenceGlyph | ReferenceGlyph[];
+  /**
+   * A ligature's components' advance widths, in text order: without a
+   * reference, an LTR ligature is then drawn letter by letter (see
+   * `ligatureComponentEdges`).
+   */
+  componentAdvances?: readonly number[];
 }
 
 /** Union-find helper for grouping adjacent junction faces. */
@@ -808,6 +814,11 @@ export function runGeometryPipeline(
       headlineLast: input.headlineLast ?? false,
       topEntry: TOP_ENTRY_SCRIPT.test(input.char),
       yTolerance: input.unitsPerEm * 0.02,
+      // RTL ligatures stack their letters (Amiri's), and headline scripts'
+      // conjuncts share one headline: their slots don't follow the advances.
+      ...(input.componentAdvances && !input.rtl && !input.headlineLast
+        ? { componentEdges: ligatureComponentEdges(input.componentAdvances, input.advanceWidth) }
+        : {}),
     },
     plan,
   );

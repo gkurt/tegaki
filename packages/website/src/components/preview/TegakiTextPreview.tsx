@@ -50,6 +50,12 @@ function toCompactGlyph(res: PipelineResult | GeometryPipelineResult): TegakiGly
   };
 }
 
+/** A ligature's component glyphs: its letters' nominal glyphs in the font subset that drew it. */
+function ligatureComponents(fontInfo: ParsedFontInfo, subsetIdx: number, letters: string): number[] | undefined {
+  const font = subsetIdx === 0 ? fontInfo.font : fontInfo.extraFonts?.[subsetIdx - 1];
+  return font ? [...letters].map((ch) => font.charToGlyphIndex(ch)) : undefined;
+}
+
 /** Let the browser paint between glyphs while a long geometry run is in progress. */
 const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -265,7 +271,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       }
       const optionsKey = `${fontCacheId(fontInfo)}:${JSON.stringify(options)}`;
       const variants: Record<string, TegakiGlyphData> = {};
-      for (const { key: variantKey, subsetIdx, gid, char: clusterChar, letter } of collectShapedGlyphs(shaper, normalizedText, {
+      for (const { key: variantKey, subsetIdx, gid, char: clusterChar, letter, ligature } of collectShapedGlyphs(shaper, normalizedText, {
         letterSpaced,
       })) {
         // Process every glyph the shaper emits, including nominal forms
@@ -289,7 +295,12 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
               ? []
               : await collectReferences(letter, strokeOrderProviders(geometryOptions.hanLocale)).catch(() => []);
           if (cancelled) return;
-          const letterKey = letter === undefined ? '' : `:${letter}:${refs.map((r) => r.source).join('+') || 'noref'}`;
+          const letterKey =
+            letter === undefined
+              ? ligature === undefined
+                ? ''
+                : `:lig:${ligature}`
+              : `:${letter}:${refs.map((r) => r.source).join('+') || 'noref'}`;
           const cacheKey = `#${subsetIdx}:${gid}:${rtl ? 'r' : 'l'}${headline ? 'h' : ''}${letterKey}:${geoKey}`;
           res = geoCache.get(cacheKey);
           if (!res) {
@@ -302,6 +313,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
               rtl,
               headline,
               letter === undefined ? undefined : { char: letter, reference: refs },
+              ligature === undefined ? undefined : ligatureComponents(fontInfo, subsetIdx, ligature),
             );
             if (geoRes) geoCache.set(cacheKey, geoRes);
             res = geoRes ?? undefined;

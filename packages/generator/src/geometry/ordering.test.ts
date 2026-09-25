@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { findHeadlines, HEADLINE_PRIORITY, isHeadlineScriptChar, orderAndTimeStrokes } from './ordering.ts';
+import { findHeadlines, HEADLINE_PRIORITY, isHeadlineScriptChar, ligatureComponentEdges, orderAndTimeStrokes } from './ordering.ts';
 import type { GeoStroke } from './types.ts';
 
 const stroke = (...pts: [number, number][]): GeoStroke => ({
@@ -53,6 +53,45 @@ describe('headline last', () => {
     const midBar = stroke([0, -300], [700, -300]);
     expect(findHeadlines([shortBar.points, stem.points, bowl.points], [0, 0, 0])).toEqual([false, false, false]);
     expect(findHeadlines([midBar.points, stem.points, headline.points], [0, 0, 0])).toEqual([false, false, true]);
+  });
+});
+
+describe('ligature order', () => {
+  // Dancing Script's w_r in font units: the w's two strokes, then the r
+  // rising above them on the right.
+  const wLeft = stroke([30, -270], [150, 0], [260, -270]);
+  const wRight = stroke([260, -260], [370, 0], [487, -260]);
+  const r = stroke([491, -100], [600, -390], [990, -300]);
+  const firstXs = (strokes: GeoStroke[], componentEdges?: number[]) =>
+    orderAndTimeStrokes(strokes, { ...PARAMS, ...(componentEdges ? { componentEdges } : {}) }).map((s) =>
+      Math.min(...s.points.map((p) => p.x)),
+    );
+
+  test('top-to-bottom alone draws the taller r before the w', () => {
+    expect(firstXs([wLeft, wRight, r])).toEqual([491, 30, 260]);
+  });
+
+  test('component edges draw a ligature letter by letter: the w, then the r', () => {
+    expect(firstXs([wLeft, wRight, r], ligatureComponentEdges([617, 348], 966))).toEqual([30, 260, 491]);
+  });
+
+  test("a stroke belongs to the letter holding its ink's midpoint, not its leftmost point", () => {
+    // Reaches back over the w's slot, but most of its ink lies in the r's.
+    const hooked = stroke([560, -100], [600, -390], [990, -300]);
+    const reach = stroke([400, -400], [560, -100]);
+    expect(firstXs([hooked, wLeft, reach], [617])).toEqual([400, 30, 560]);
+  });
+});
+
+describe('ligatureComponentEdges', () => {
+  test("the components' advances, laid end to end and scaled to the ligature's advance", () => {
+    expect(ligatureComponentEdges([600, 400], 900)).toEqual([540]);
+    expect(ligatureComponentEdges([100, 100, 200], 400)).toEqual([100, 200]);
+  });
+
+  test('no edges for one component, or components without advance (combining marks)', () => {
+    expect(ligatureComponentEdges([500], 500)).toEqual([]);
+    expect(ligatureComponentEdges([0, 0], 0)).toEqual([]);
   });
 });
 

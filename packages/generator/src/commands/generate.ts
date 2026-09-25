@@ -407,7 +407,9 @@ export interface VariantLetter {
  * variant that draws one character — its nominal glyph as the shaper emits
  * it, or a contextual form of it — passes that `letter`: its references
  * order the strokes as they do the char-keyed glyph, and its script picks
- * the ordering rules. Without one, ordering is heuristic.
+ * the ordering rules. Without one, ordering is heuristic — for a ligature,
+ * pass its `components` (glyph ids in the same font, in text order) and the
+ * strokes are drawn letter by letter.
  */
 export function processGlyphGeometryById(
   fontInfo: ParsedFontInfo,
@@ -418,6 +420,7 @@ export function processGlyphGeometryById(
   rtl = false,
   headlineLast = false,
   letter?: VariantLetter,
+  components?: readonly number[],
 ): GeometryPipelineResult | null {
   const font = subsetIndex === 0 ? fontInfo.font : fontInfo.extraFonts?.[subsetIndex - 1];
   if (!font) return null;
@@ -425,6 +428,7 @@ export function processGlyphGeometryById(
   if (!rawGlyph) return null;
   const reference = letter?.reference;
   const hasReference = Array.isArray(reference) ? reference.length > 0 : reference != null;
+  const componentAdvances = components && components.length > 1 ? components.map((g) => font.glyphs.get(g)?.advanceWidth ?? 0) : undefined;
   return runGeometryPipeline(
     {
       char: letter?.char ?? rawGlyph.char,
@@ -438,6 +442,7 @@ export function processGlyphGeometryById(
       rtl,
       headlineLast,
       ...(hasReference && reference ? { reference } : {}),
+      ...(componentAdvances ? { componentAdvances } : {}),
     },
     rawGlyph,
     geometryOptions,
@@ -688,7 +693,7 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
     const variantIds = enumerateVariantGlyphIds(fontInfo.font, chars);
     const total = variantIds.size;
     let i = 0;
-    for (const { gid, clusterChar, letter } of variantIds.values()) {
+    for (const { gid, clusterChar, letter, components } of variantIds.values()) {
       const rtl = isRtlChar(clusterChar);
       i++;
       if (geometry) {
@@ -703,6 +708,7 @@ export async function extractTegakiBundle(input: ExtractBundleInput): Promise<Te
           rtl,
           isHeadlineScriptChar(clusterChar),
           letter === undefined ? undefined : { char: letter, reference: await geometryReferences(letter) },
+          components,
         );
         if (!result) continue;
         geometryResultsById[String(gid)] = result;

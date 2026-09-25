@@ -13,6 +13,8 @@ export interface VariantGlyph {
    * one. Stroke-order references are looked up by it.
    */
   letter?: string;
+  /** A ligature's component glyph ids, in text order (the first rule found that forms it). */
+  components?: number[];
 }
 
 /**
@@ -39,6 +41,7 @@ export interface VariantGlyph {
 export function enumerateVariantGlyphIds(font: opentype.Font, chars: readonly string[]): Map<number, VariantGlyph> {
   const ancestor = new Map<number, string>();
   const letters = new Map<number, string>();
+  const components = new Map<number, number[]>();
   for (const ch of chars) {
     const gid = font.charToGlyphIndex(ch);
     if (gid === 0) continue;
@@ -53,7 +56,7 @@ export function enumerateVariantGlyphIds(font: opentype.Font, chars: readonly st
       changed = false;
       for (const lookup of gsub.lookups) {
         for (const subtable of lookup.subtables ?? []) {
-          if (walkSubtable(lookup.lookupType, subtable, ancestor, letters)) changed = true;
+          if (walkSubtable(lookup.lookupType, subtable, ancestor, letters, components)) changed = true;
         }
       }
     }
@@ -63,7 +66,13 @@ export function enumerateVariantGlyphIds(font: opentype.Font, chars: readonly st
   for (const [gid, clusterChar] of ancestor) {
     if (gid === 0) continue;
     const letter = letters.get(gid);
-    variants.set(gid, letter === undefined ? { gid, clusterChar } : { gid, clusterChar, letter });
+    const parts = components.get(gid);
+    variants.set(gid, {
+      gid,
+      clusterChar,
+      ...(letter === undefined ? {} : { letter }),
+      ...(parts === undefined ? {} : { components: parts }),
+    });
   }
   return variants;
 }
@@ -137,10 +146,16 @@ function inheritLetter(letters: Map<number, string>, inGid: number, outGid: numb
 }
 
 /** Returns true if any ancestor mapping changed. */
-function walkSubtable(lookupType: number, st: GsubSubtable, ancestor: Map<number, string>, letters: Map<number, string>): boolean {
+function walkSubtable(
+  lookupType: number,
+  st: GsubSubtable,
+  ancestor: Map<number, string>,
+  letters: Map<number, string>,
+  components: Map<number, number[]>,
+): boolean {
   // Type 7: extension wraps another subtable type.
   if (lookupType === 7 && st.extension && st.extensionLookupType !== undefined) {
-    return walkSubtable(st.extensionLookupType, st.extension, ancestor, letters);
+    return walkSubtable(st.extensionLookupType, st.extension, ancestor, letters, components);
   }
 
   switch (lookupType) {
@@ -151,7 +166,7 @@ function walkSubtable(lookupType: number, st: GsubSubtable, ancestor: Map<number
     case 3:
       return walkAlternateSub(st, ancestor, letters);
     case 4:
-      return walkLigatureSub(st, ancestor);
+      return walkLigatureSub(st, ancestor, components);
     default:
       // Types 5/6/8 are contextual — they don't substitute directly, they
       // trigger lookups by index from the same list we're already walking.
@@ -226,7 +241,7 @@ function walkAlternateSub(st: GsubSubtable, ancestor: Map<number, string>, lette
  * the first component (any input would be a defensible choice; first matches
  * how shapers identify the cluster).
  */
-function walkLigatureSub(st: GsubSubtable, ancestor: Map<number, string>): boolean {
+function walkLigatureSub(st: GsubSubtable, ancestor: Map<number, string>, components: Map<number, number[]>): boolean {
   let changed = false;
   const cov = st.coverage;
   if (!cov || !st.ligatureSets) return false;
@@ -249,6 +264,7 @@ function walkLigatureSub(st: GsubSubtable, ancestor: Map<number, string>): boole
       }
       if (!allKnown) continue;
       if (setAncestor(ancestor, lig.ligGlyph, firstCp)) changed = true;
+      if (!components.has(lig.ligGlyph)) components.set(lig.ligGlyph, [firstGid, ...lig.components]);
     }
   }
   return changed;

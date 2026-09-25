@@ -32,3 +32,18 @@ describe('enumerateVariantGlyphIds letter', () => {
     for (const v of ligatures) expect(v.letter).toBeUndefined();
   });
 });
+
+describe('enumerateVariantGlyphIds components', () => {
+  test("a ligature records its components in text order (Caveat's f_f_i: f, f, i)", async () => {
+    const font = await load('caveat');
+    const f = font.charToGlyphIndex('f');
+    const i = font.charToGlyphIndex('i');
+    const ffi = [...enumerateVariantGlyphIds(font, ['f', 'i']).values()].find((v) => font.glyphs.get(v.gid).name === 'f_f_i');
+    expect(ffi?.components).toEqual([f, f, i]);
+  });
+
+  test('a letter records none', async () => {
+    const font = await load('caveat');
+    expect(enumerateVariantGlyphIds(font, ['a']).get(font.charToGlyphIndex('a'))!.components).toBeUndefined();
+  });
+});
