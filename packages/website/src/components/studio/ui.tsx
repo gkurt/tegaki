@@ -146,6 +146,8 @@ export function Popover({
       {trigger({ open, toggle: () => onOpenChange(!open) })}
       {open && (
         <div
+          // Keys pressed in a menu work the menu, not the studio's shortcuts.
+          data-shortcuts="off"
           className={cx(
             'absolute top-full z-50 mt-1.5 max-w-[calc(100vw-1rem)] rounded-xl border border-zinc-200 bg-white shadow-xl shadow-zinc-900/10',
             'dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/40',

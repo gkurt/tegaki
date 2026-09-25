@@ -15,6 +15,7 @@ import {
   ChevronLeftIcon,
   GithubIcon,
   GlyphModeIcon,
+  KeyboardIcon,
   MoonIcon,
   MoreIcon,
   SlidersIcon,
@@ -24,6 +25,8 @@ import {
 } from './icons.tsx';
 import { DialThemeContext } from './inspector/dial.tsx';
 import { Inspector } from './inspector/Inspector.tsx';
+import { ShortcutsDialog } from './ShortcutsDialog.tsx';
+import { useShortcuts } from './shortcuts.ts';
 import { useFontLoader, useStudioSettings, useTheme } from './state.ts';
 import { type TextPlaybackHandle, TextWorkspace } from './TextWorkspace.tsx';
 import { cx, IconButton, Popover, Segmented, useMediaQuery } from './ui.tsx';
@@ -134,6 +137,17 @@ export function Studio() {
   const mode = settings.previewMode;
   const showInspector = inspectorOpen;
 
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  useShortcuts((key) => {
+    if (key === 't') set('previewMode', 'text');
+    else if (key === 'g') set('previewMode', 'glyph');
+    else if (key === 'i') setInspectorOpen((open) => !open);
+    else if (key === 'o') set('showOverlay', (on) => !on);
+    else if (key === '?') setShortcutsOpen(true);
+    else return false;
+    return true;
+  });
+
   return (
     <DialThemeContext.Provider value={theme}>
       <div className="flex h-dvh flex-col overflow-hidden bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
@@ -173,13 +187,16 @@ export function Studio() {
             value={mode}
             onChange={(m) => set('previewMode', m)}
             options={[
-              { value: 'text', label: 'Text', icon: <TextModeIcon size={14} />, title: 'Text preview' },
-              { value: 'glyph', label: 'Glyphs', icon: <GlyphModeIcon size={14} />, title: 'Glyph inspector' },
+              { value: 'text', label: 'Text', icon: <TextModeIcon size={14} />, title: 'Text preview (T)' },
+              { value: 'glyph', label: 'Glyphs', icon: <GlyphModeIcon size={14} />, title: 'Glyph inspector (G)' },
             ]}
           />
 
           <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
             <div className="flex items-center gap-0.5 max-md:hidden">
+              <IconButton label="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}>
+                <KeyboardIcon size={16} />
+              </IconButton>
               <IconButton label={theme === 'dark' ? 'Light theme' : 'Dark theme'} onClick={toggleTheme}>
                 {theme === 'dark' ? <SunIcon size={16} /> : <MoonIcon size={16} />}
               </IconButton>
@@ -214,7 +231,7 @@ export function Studio() {
               pipeline={settings.pipeline}
             />
             <IconButton
-              label={showInspector ? 'Hide inspector' : 'Show inspector'}
+              label={showInspector ? 'Hide inspector (I)' : 'Show inspector (I)'}
               active={showInspector}
               onClick={() => setInspectorOpen(!showInspector)}
             >
@@ -265,6 +282,7 @@ export function Studio() {
           )}
         </div>
       </div>
+      {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
     </DialThemeContext.Provider>
   );
 }

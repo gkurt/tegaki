@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { FitIcon, MinusIcon, ZoomInIcon } from './icons.tsx';
+import { useShortcuts } from './shortcuts.ts';
 import { cx } from './ui.tsx';
 
 /** Floor for manual zoom-out; the fit itself goes lower when the stage is that small. */
@@ -10,7 +11,7 @@ const PAD = 24;
 /**
  * Pan/zoom viewport for the glyph stage. Starts fitted to the viewport (and
  * refits on resize) until the user zooms; ⌘/Ctrl + wheel (or a trackpad pinch)
- * zooms around the centre, and the corner controls zoom, fit, or reset to 100%.
+ * zooms around the centre, and the corner controls (or +/−, 0, 1) zoom, fit, or reset to 100%.
  * While fitted it never scrolls — only a zoom the user picked can overflow.
  */
 export function ZoomStage({ children, contentKey, overlay }: { children: ReactNode; contentKey: string; overlay?: ReactNode }) {
@@ -90,6 +91,24 @@ export function ZoomStage({ children, contentKey, overlay }: { children: ReactNo
     return () => vp.removeEventListener('wheel', onWheel);
   }, [zoomBy]);
 
+  const fit = useCallback(() => {
+    setAutoFit(true);
+    setScale(fitScale());
+  }, [setAutoFit, fitScale]);
+  const actualSize = useCallback(() => {
+    setAutoFit(false);
+    setScale(1);
+  }, [setAutoFit]);
+
+  useShortcuts((key) => {
+    if (key === '+' || key === '=') zoomBy(1.25);
+    else if (key === '-' || key === '_') zoomBy(1 / 1.25);
+    else if (key === '0') fit();
+    else if (key === '1') actualSize();
+    else return false;
+    return true;
+  });
+
   const btn =
     'inline-flex size-7 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100';
 
@@ -109,33 +128,21 @@ export function ZoomStage({ children, contentKey, overlay }: { children: ReactNo
       </div>
       {overlay && <div className="pointer-events-none absolute inset-0 flex items-center justify-center">{overlay}</div>}
       <div className="absolute right-3 bottom-3 flex items-center gap-0.5 rounded-lg border border-zinc-200 bg-white/90 p-0.5 shadow-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/90">
-        <button type="button" className={btn} onClick={() => zoomBy(1 / 1.25)} title="Zoom out" aria-label="Zoom out">
+        <button type="button" className={btn} onClick={() => zoomBy(1 / 1.25)} title="Zoom out (−)" aria-label="Zoom out">
           <MinusIcon size={14} />
         </button>
         <button
           type="button"
           className="h-7 min-w-12 rounded-md px-1 font-mono text-[11px] text-zinc-500 tabular-nums hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-          onClick={() => {
-            setAutoFit(false);
-            setScale(1);
-          }}
-          title="Reset to 100%"
+          onClick={actualSize}
+          title="Reset to 100% (1)"
         >
           {Math.round(scale * 100)}%
         </button>
-        <button type="button" className={btn} onClick={() => zoomBy(1.25)} title="Zoom in" aria-label="Zoom in">
+        <button type="button" className={btn} onClick={() => zoomBy(1.25)} title="Zoom in (+)" aria-label="Zoom in">
           <ZoomInIcon size={14} />
         </button>
-        <button
-          type="button"
-          className={btn}
-          onClick={() => {
-            setAutoFit(true);
-            setScale(fitScale());
-          }}
-          title="Fit to view"
-          aria-label="Fit to view"
-        >
+        <button type="button" className={btn} onClick={fit} title="Fit to view (0)" aria-label="Fit to view">
           <FitIcon size={14} />
         </button>
       </div>

@@ -8,10 +8,11 @@ import type { UrlState } from '../url-state.ts';
 import { fontHasChar } from './charsets.ts';
 import { GlyphPicker } from './GlyphPicker.tsx';
 import { ChevronDownIcon, ExternalLinkIcon, RestartIcon } from './icons.tsx';
+import { playbackShortcut, useShortcuts } from './shortcuts.ts';
 import type { LoadedFont, SetSetting } from './state.ts';
 import { TextFrame } from './TextFrame.tsx';
 import { Transport } from './Transport.tsx';
-import { cx, IconButton, isTypingTarget, Popover, Spinner } from './ui.tsx';
+import { cx, IconButton, Popover, Spinner } from './ui.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
@@ -167,17 +168,11 @@ export function TextWorkspace({
     setPlaying(false);
   };
 
-  // Space toggles playback while focus isn't in a text field.
-  useEffect(() => {
-    if (timeMode !== 'controlled') return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'Space' || isTypingTarget(e.target) || e.target instanceof HTMLButtonElement) return;
-      e.preventDefault();
-      playPause();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [timeMode, playPause]);
+  // Space, Home/End and frame steps drive the transport (controlled mode — the others aren't seekable).
+  useShortcuts(
+    (key, e) => playbackShortcut(key, e, { time: timeRef.current, duration: totalDuration, playPause, seek }),
+    timeMode === 'controlled',
+  );
 
   const timeProp: TimeControlProp =
     timeMode === 'controlled'
