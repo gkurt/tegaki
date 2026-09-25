@@ -49,6 +49,9 @@ export function drawFallbackGlyph(
   ctx.save();
   ctx.font = `${fontSize}px ${fontFamily}`;
   ctx.textBaseline = 'alphabetic';
+  // `x` is the glyph's left edge. The default 'start' alignment would take it
+  // as the right edge on a canvas inheriting an RTL paragraph's direction.
+  ctx.textAlign = 'left';
 
   // Glow passes
   for (const glow of glowEffects) {

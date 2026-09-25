@@ -1427,8 +1427,10 @@ export class TegakiEngine {
       // its own anyway, so nothing crosses a word gap. Anchoring words rather
       // than lines keeps the mask aligned where the canvas shapes a word
       // differently from the DOM, and needs no bidi reordering across words:
-      // the anchors carry the DOM's order. `direction` still orders a word
-      // that mixes scripts, and textAlign 'left' pins its left edge — the
+      // the anchors carry the DOM's order (a word switching direction is
+      // drawn as one piece per direction, each where bidi put it).
+      // `direction` still places neutral characters at a piece's ends, and
+      // textAlign 'left' pins its left edge — the
       // mask canvas is detached, so 'start' alignment would resolve by its
       // own direction.
       maskCtx.direction = layout.direction ?? 'ltr';

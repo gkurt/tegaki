@@ -121,6 +121,28 @@ describe('lineWords', () => {
     expect(words).toEqual([{ text: 'a\u200db', leftEm: 0.3 }]);
   });
 
+  test('a word switching direction splits into pieces anchored apart: "aכתב היד" in an LTR line has כתב at the right end', () => {
+    // Visual order: a | היד | כתב — bidi keeps the Hebrew run together, not the word.
+    const words = lineWords(
+      layout([0, 1.5, 1.25, 1, 0.75, 0.5, 0.25], [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25], [[0, 1, 2, 3, 4, 5, 6]]),
+      ['a', 'כ', 'ת', 'ב', ' ', 'ה', 'י'],
+      0,
+    );
+    expect(words).toEqual([
+      { text: 'a', leftEm: 0 },
+      { text: 'כתב', leftEm: 1 },
+      { text: 'הי', leftEm: 0.25 },
+    ]);
+  });
+
+  test('direction-neutral characters stay with the piece they follow', () => {
+    const words = lineWords(layout([0, 0.25, 0.5, 0.75], [0.25, 0.25, 0.25, 0.25], [[0, 1, 2, 3]]), ['a', '.', 'b', 'ש'], 0);
+    expect(words).toEqual([
+      { text: 'a.b', leftEm: 0 },
+      { text: 'ש', leftEm: 0.75 },
+    ]);
+  });
+
   test('reads only the requested line and drops its newline', () => {
     const l = layout(
       [0, 0, 0, 0.5],

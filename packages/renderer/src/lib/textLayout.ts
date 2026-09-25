@@ -1,4 +1,5 @@
 import type { TegakiBundle } from '../types.ts';
+import { strongDirection } from './bidi.ts';
 import type { BundleShaper, ShapedGlyph } from './shaper.ts';
 import type { Timeline } from './timeline.ts';
 import { graphemes } from './utils.ts';
@@ -45,15 +46,22 @@ export interface LineWord {
  * canvas and the DOM can disagree next to another script (Amiri's `1⁄2`
  * beside Arabic measures 19px wider in canvas). Words that measured no width
  * are left out.
+ *
+ * A word that switches direction is split there: bidi need not keep its
+ * halves together. `aכתב` opening an LTR line has its a at the left end and
+ * `כתב` at the right end, after the rest of the Hebrew run.
+ * Direction-neutral characters stay with the piece they follow.
  */
 export function lineWords(layout: TextLayout, characters: readonly string[], lineIdx: number): LineWord[] {
   const words: LineWord[] = [];
   let text = '';
   let left = Infinity;
+  let direction: 'ltr' | 'rtl' | null = null;
   const flush = () => {
     if (text && Number.isFinite(left)) words.push({ text, leftEm: left });
     text = '';
     left = Infinity;
+    direction = null;
   };
   for (const charIdx of layout.lines[lineIdx] ?? []) {
     const char = characters[charIdx] ?? '';
@@ -61,6 +69,9 @@ export function lineWords(layout: TextLayout, characters: readonly string[], lin
       flush();
       continue;
     }
+    const charDirection = strongDirection(char.codePointAt(0)!);
+    if (charDirection && direction && charDirection !== direction) flush();
+    direction ??= charDirection;
     text += char;
     if ((layout.charWidths[charIdx] ?? 0) > 0) left = Math.min(left, layout.charOffsets[charIdx] ?? 0);
   }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ShapeOptions } from '../lib/shaper.ts';
 import type { TegakiBundle } from '../types.ts';
-import harfbuzzShaper, { isShapingWhitespace, splitForShaping, strongDirection, toHbFeatureString } from './index.ts';
+import harfbuzzShaper, { isShapingWhitespace, splitForShaping, toHbFeatureString } from './index.ts';
 
 describe('toHbFeatureString', () => {
   test('returns empty string for empty list', () => {
@@ -170,23 +170,6 @@ describe('letter-spaced shaping', () => {
       const alone = [...word].flatMap((ch) => ids(shaper.shape(ch)));
       expect(ids(shaper.shape(word, { letterSpaced: true } satisfies ShapeOptions))).toEqual(alone);
     }
-  });
-});
-
-describe('strongDirection', () => {
-  const dir = (ch: string) => strongDirection(ch.codePointAt(0)!);
-
-  test('Hebrew and Arabic letters are RTL, Latin and CJK letters LTR', () => {
-    expect(['ש', 'ب'].map(dir)).toEqual(['rtl', 'rtl']);
-    expect(['a', 'Ж', '手'].map(dir)).toEqual(['ltr', 'ltr', 'ltr']);
-  });
-
-  test('digits are LTR even in an RTL script — bidi lays ١٢ out left to right', () => {
-    expect(['1', '١'].map(dir)).toEqual(['ltr', 'ltr']);
-  });
-
-  test('punctuation, combining marks and the Arabic tatweel take their neighbours’ direction', () => {
-    expect(['.', '(', '\u0301', '\u0640'].map(dir)).toEqual([null, null, null, null]);
   });
 });
 
