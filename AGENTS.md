@@ -123,13 +123,14 @@ packages/generator/src/
 
 ### Website (`packages/website`)
 
-Astro 6 site built on Starlight (theme: Nova) serving the public docs at the root and the interactive studio at `/tegaki/studio/`. Starlight handles the sidebar/content docs under `src/content/docs/`; the studio page is a standalone Astro page mounting the React `Studio`. (The tool was renamed `/generator` → `/studio`; `/tegaki/generator/` remains as a redirect so old links keep working.)
+Astro 6 site built on Starlight (theme: Nova) serving the docs, the interactive studio at `/tegaki/studio/`, and a standalone landing page at `/tegaki/`. Starlight handles the sidebar/content docs under `src/content/docs/`; the home and studio pages are standalone Astro pages outside Starlight. The home page ([index.astro](packages/website/src/pages/index.astro)) is static Astro markup with React islands from `components/home/`, each writing its own showpiece with the shipped bundles (lazy-loaded as they near the viewport; the CJK bundles are several MB) — keep its sample strings inside each bundle's character set. (The tool was renamed `/generator` → `/studio`; `/tegaki/generator/` remains as a redirect so old links keep working.)
 
 ```
 packages/website/
   astro.config.ts             # Astro config — `base: '/tegaki'`, integrations (React, Svelte, Vue, Solid, Starlight), vite aliases (`tegaki@dev`)
   public/                     # Static assets served as-is (favicon, OG card, robots.txt)
   src/
+    pages/index.astro         # Landing page: static sections + React islands from components/home/; shares Starlight's stored theme
     pages/studio.astro        # Mounts <Studio client:only="react" />; seeds <html data-theme> from Starlight's stored theme
     pages/generator.astro     # Redirect shim → /studio/ (kept for old links)
     components/
@@ -141,16 +142,15 @@ packages/website/
         FontPicker.tsx ExportMenu.tsx Transport.tsx ZoomStage.tsx ui.tsx icons.tsx state.ts
       preview/                # Shared by /studio and /preview: TegakiTextPreview, stage views, export, constants
       url-state.ts            # URL <-> state serialization (short keys, only non-defaults written)
+      home/                   # Landing-page islands: Hero, ScrollLetter (scroll-bound time), Scripts, Styles, TypeIt (editable), ChatStream, Write, Finale; shared.ts (font loading, useInView, useTheme)
       LiveDemo.tsx            # Embeddable React demo used in docs
-      HomePageExamples.tsx
-      HomePageExamplesLoader.tsx
-      StaticChatDemo.tsx
       astro/ solid/ svelte/ vanilla/ vue/ wc/   # Per-framework example components referenced from docs
     content/
       docs/                   # Starlight MDX/Markdown content
     content.config.ts         # Starlight content collections config
     assets/                   # Logo, images
     styles/global.css         # Tailwind v4 styles (imported via `@tailwindcss/vite`)
+    styles/home.css           # Landing-page styles (paper/ink palette, light + dark)
     styles/studio.css         # Studio-only styles (canvas backdrop, scrubber, DialKit tuning) on top of global.css
 ```
 
