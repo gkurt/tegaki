@@ -63,3 +63,26 @@ export function hitGlyph(boxes: readonly GlyphBox[], x: number, y: number): Glyp
   }
   return best;
 }
+
+/**
+ * One box around graphemes `start`…`end` (exclusive) — a ligature's letters —
+ * on the line of grapheme `at`. It takes the first grapheme's index, and the
+ * characters and text offset of the whole run.
+ */
+export function unionBox(boxes: readonly GlyphBox[], start: number, end: number, at: number): GlyphBox | undefined {
+  const anchor = boxes.find((b) => b.index === at);
+  const run = boxes.filter((b) => b.index >= start && b.index < end && (!anchor || Math.abs(b.y - anchor.y) < anchor.height / 2));
+  if (run.length === 0) return anchor;
+  const first = run[0]!;
+  const left = Math.min(...run.map((b) => b.x));
+  const top = Math.min(...run.map((b) => b.y));
+  return {
+    index: first.index,
+    char: run.map((b) => b.char).join(''),
+    offset: first.offset,
+    x: left,
+    y: top,
+    width: Math.max(...run.map((b) => b.x + b.width)) - left,
+    height: Math.max(...run.map((b) => b.y + b.height)) - top,
+  };
+}

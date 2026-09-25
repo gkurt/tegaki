@@ -6,7 +6,9 @@ import { TegakiTextPreview } from '../preview/TegakiTextPreview.tsx';
 import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
 import type { UrlState } from '../url-state.ts';
 import { fontHasChar } from './charsets.ts';
-import { GlyphPicker } from './GlyphPicker.tsx';
+import { formKey, formsOfChar, formTag, useGsubGraphs } from './GlyphForms.tsx';
+import { GlyphPicker, type PickedGlyph } from './GlyphPicker.tsx';
+import { clusterAt, parseGlyphKey } from './glyph-cluster.ts';
 import { ChevronDownIcon, ExternalLinkIcon, RestartIcon } from './icons.tsx';
 import { playbackShortcut, useShortcuts } from './shortcuts.ts';
 import type { LoadedFont, SetSetting } from './state.ts';
@@ -42,13 +44,40 @@ export function TextWorkspace({
   // to the character set first when the set doesn't have it.
   const hasChar = useMemo(() => (fontInfo ? fontHasChar(fontInfo) : () => false), [fontInfo]);
   const inspectGlyph = useCallback(
-    (char: string) => {
+    (char: string, form: string | null) => {
       set('chars', (chars) => ([...segmenter.segment(chars)].some((g) => g.segment === char) ? chars : chars + char));
       set('selectedChar', char);
-      set('selectedForm', null);
+      set('selectedForm', form);
       set('previewMode', 'glyph');
     },
     [set],
+  );
+
+  // Which glyph the renderer drew for a picked character — read off its
+  // timeline — and, when that isn't the character's default glyph, which of
+  // its forms it is (a ligature, a contextual alternate…).
+  const gsubGraphs = useGsubGraphs(fontInfo);
+  const graphemes = useMemo(() => [...segmenter.segment(text.normalize('NFC'))].map((s) => s.segment), [text]);
+  const [timelineVersion, setTimelineVersion] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `timelineVersion` marks a new timeline on the same engine
+  const pickGlyph = useCallback(
+    (index: number): PickedGlyph | null => {
+      const entries = rendererRef.current?.engine?.timeline.entries;
+      const cluster = entries && clusterAt(entries, index, graphemes.length);
+      const char = cluster ? graphemes[cluster.start] : undefined;
+      if (!cluster || !char || !fontInfo) return null;
+      const { subset, forms } = formsOfChar(fontInfo, gsubGraphs, char);
+      for (const id of cluster.glyphIds) {
+        const key = parseGlyphKey(id);
+        const form = key && key.subset === subset ? forms.find((f) => f.gid === key.gid && f.kind !== 'default') : undefined;
+        if (form) {
+          const label = form.kind === 'ligature' ? `${form.text} ligature` : `${form.name} · ${formTag(form)}`;
+          return { start: cluster.start, end: cluster.end, char, form: formKey(subset, form.gid), label };
+        }
+      }
+      return { start: cluster.start, end: cluster.end, char, form: null, label: null };
+    },
+    [rendererRef, graphemes, fontInfo, gsubGraphs, timelineVersion],
   );
 
   // Initial time/paused state come from the URL (controlled mode only): a non-zero
@@ -92,6 +121,7 @@ export function TextWorkspace({
       }
       setBundleReady(true);
       setTotalDuration(info.totalDuration);
+      setTimelineVersion((v) => v + 1);
       // Mirror the renderer's engine onto `window.__tegakiEngine` so an attached
       // browser-harness / devtools session can inspect timeline entries, layout
       // offsets, and shaper output without modifying the engine itself. Fires
@@ -222,7 +252,7 @@ export function TextWorkspace({
             )}
             {font && (
               <TextFrame width={settings.frameWidth} onWidthChange={(w) => set('frameWidth', w)} autoClassName="w-full max-w-3xl">
-                <GlyphPicker onInspect={inspectGlyph} canInspect={hasChar}>
+                <GlyphPicker onInspect={inspectGlyph} canInspect={hasChar} pickGlyph={pickGlyph}>
                   <TegakiTextPreview
                     ref={rendererRef}
                     className="w-full text-zinc-900 dark:text-zinc-100"

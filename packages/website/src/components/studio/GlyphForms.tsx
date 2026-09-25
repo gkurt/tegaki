@@ -34,6 +34,13 @@ function subsetOf(fontInfo: ParsedFontInfo, char: string): number {
   return subsetFonts(fontInfo).findIndex((f) => f.charToGlyphIndex(char) > 0);
 }
 
+/** The character's forms, from the font subset that maps it. */
+export function formsOfChar(fontInfo: ParsedFontInfo, graphs: GsubGraph[], char: string): { subset: number; forms: GlyphForm[] } {
+  const subset = subsetOf(fontInfo, char);
+  const graph = graphs[subset];
+  return subset < 0 || !graph ? { subset: 0, forms: [] } : { subset, forms: glyphFormsOf(graph, char) };
+}
+
 /** Each font subset's GSUB substitutions, read once per font. */
 export function useGsubGraphs(fontInfo: ParsedFontInfo | null): GsubGraph[] {
   return useMemo(() => (fontInfo ? subsetFonts(fontInfo).map(buildGsubGraph) : []), [fontInfo]);
@@ -105,8 +112,7 @@ export function useFormCounts(fontInfo: ParsedFontInfo | null, graphs: GsubGraph
     const counts = new Map<string, number>();
     if (!fontInfo || chars.length > MAX_COUNTED_CHARS) return counts;
     for (const c of chars) {
-      const graph = graphs[subsetOf(fontInfo, c)];
-      const n = graph ? glyphFormsOf(graph, c).length : 0;
+      const n = formsOfChar(fontInfo, graphs, c).forms.length;
       if (n > 1) counts.set(c, n);
     }
     return counts;
@@ -134,7 +140,7 @@ const KIND_LABEL: Record<GlyphForm['kind'], string> = {
 };
 
 /** The chip's short tag: the feature for an alternate, the letters for a ligature. */
-function formTag(form: GlyphForm): string {
+export function formTag(form: GlyphForm): string {
   if (form.kind === 'default') return 'default';
   if (form.kind === 'ligature') return form.text ?? 'liga';
   if (form.kind === 'part') return 'part';

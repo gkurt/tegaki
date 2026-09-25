@@ -1,5 +1,5 @@
-import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
-import { type GlyphBox, hitGlyph, measureGlyphBoxes } from './glyph-hit.ts';
+import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type GlyphBox, hitGlyph, measureGlyphBoxes, unionBox } from './glyph-hit.ts';
 import { ArrowUpRightIcon } from './icons.tsx';
 import { cx } from './ui.tsx';
 
@@ -37,6 +37,19 @@ function useOverlayHighlight(rootRef: RefObject<HTMLElement | null>, boxes: (Gly
   }, [rootRef, key]);
 }
 
+/** The shaping cluster under a picked character, and the form of it the renderer drew. */
+export interface PickedGlyph {
+  /** Graphemes the cluster spans — several for a ligature. */
+  start: number;
+  end: number;
+  /** The character to inspect: the cluster's first. */
+  char: string;
+  /** The form drawn (its `glyphDataById` key) when it isn't the character's default glyph. */
+  form: string | null;
+  /** Names that form, e.g. `a.ss01 · calt` or `ffi ligature`. */
+  label: string | null;
+}
+
 /**
  * Wraps the text renderer so its characters can be picked: hovering outlines
  * the character under the pointer and shows its debug overlay, clicking
@@ -47,11 +60,15 @@ export function GlyphPicker({
   children,
   onInspect,
   canInspect,
+  pickGlyph,
 }: {
   children: ReactNode;
-  onInspect: (char: string) => void;
+  /** Open the character in the glyph inspector — on `form` when the renderer drew one of its forms. */
+  onInspect: (char: string, form: string | null) => void;
   /** False for characters the font doesn't have — the inspector has nothing to show. */
   canInspect: (char: string) => boolean;
+  /** The cluster and form drawn at a grapheme (see `PickedGlyph`); without it each character is picked alone. */
+  pickGlyph?: (index: number) => PickedGlyph | null;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [boxes, setBoxes] = useState<GlyphBox[]>([]);
@@ -106,8 +123,20 @@ export function GlyphPicker({
     };
   }, [remeasure]);
 
+  // A picked character stands for its whole cluster: a ligature is outlined and picked as one.
+  const pickAt = useCallback(
+    (index: number | null): { box: GlyphBox; pick: PickedGlyph | null } | null => {
+      if (index === null) return null;
+      const pick = pickGlyph?.(index) ?? null;
+      const box = pick ? unionBox(boxes, pick.start, pick.end, index) : boxes.find((b) => b.index === index);
+      return box ? { box, pick } : null;
+    },
+    [boxes, pickGlyph],
+  );
+
   // A selection that no longer lines up with the text (it was edited) is dropped.
-  const selectedBox = selected === null ? null : (boxes.find((b) => b.index === selected) ?? null);
+  const selectedPick = useMemo(() => pickAt(selected), [pickAt, selected]);
+  const selectedBox = selectedPick?.box ?? null;
   const selectedChar = useRef<string | null>(null);
   useEffect(() => {
     if (selected === null) return;
@@ -126,8 +155,12 @@ export function GlyphPicker({
     return r ? hitGlyph(boxes, e.clientX - r.left, e.clientY - r.top) : null;
   };
 
-  const hoveredBox = hovered === null || hovered === selected ? null : (boxes.find((b) => b.index === hovered) ?? null);
-  const inspectable = selectedBox ? canInspect(selectedBox.char) : false;
+  const hoveredPick = useMemo(() => pickAt(hovered), [pickAt, hovered]);
+  const hoveredBox = !hoveredPick || hoveredPick.box.index === selectedBox?.index ? null : hoveredPick.box;
+  const pickedChar = selectedPick?.pick?.char ?? selectedBox?.char ?? '';
+  const selectedForm = selectedPick?.pick?.form ?? null;
+  const formLabel = selectedPick?.pick?.label ?? null;
+  const inspectable = selectedBox ? canInspect(pickedChar) : false;
   useOverlayHighlight(rootRef, [hoveredBox, selectedBox]);
 
   return (
@@ -143,8 +176,9 @@ export function GlyphPicker({
         // Leave real text selections alone.
         if (window.getSelection()?.toString()) return;
         const hit = pointAt(e);
-        selectedChar.current = hit?.char ?? null;
-        setSelected(hit && hit.index !== selected ? hit.index : null);
+        const box = hit ? (pickAt(hit.index)?.box ?? hit) : null;
+        selectedChar.current = box?.char ?? null;
+        setSelected(box && box.index !== selected ? box.index : null);
       }}
     >
       {children}
@@ -159,14 +193,25 @@ export function GlyphPicker({
             disabled={!inspectable}
             onClick={(e) => {
               e.stopPropagation();
-              onInspect(selectedBox.char);
+              onInspect(pickedChar, selectedForm);
             }}
-            title={inspectable ? `Inspect “${selectedBox.char}” in Glyphs` : `“${selectedBox.char}” isn't in this font`}
-            aria-label={`Inspect “${selectedBox.char}” in Glyphs`}
-            className="absolute z-10 inline-flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-indigo-600 text-white shadow-md ring-2 ring-white transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:bg-zinc-400 disabled:hover:scale-100 dark:ring-zinc-950"
+            title={
+              !inspectable
+                ? `“${pickedChar}” isn't in this font`
+                : formLabel
+                  ? `Drawn as ${formLabel} — inspect it in Glyphs`
+                  : `Inspect “${pickedChar}” in Glyphs`
+            }
+            aria-label={formLabel ? `Inspect ${formLabel} of “${pickedChar}” in Glyphs` : `Inspect “${pickedChar}” in Glyphs`}
+            className={cx(
+              'absolute z-10 inline-flex h-6 -translate-y-1/2 items-center justify-center gap-1 rounded-full bg-indigo-600 text-white shadow-md ring-2 ring-white transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:bg-zinc-400 disabled:hover:scale-100 dark:ring-zinc-950',
+              // A form's name rides along with the icon, which stays centred on the corner.
+              formLabel ? '-ml-3 pr-2 pl-1.5' : 'w-6 -translate-x-1/2',
+            )}
             style={{ left: selectedBox.x + selectedBox.width, top: selectedBox.y }}
           >
-            <ArrowUpRightIcon size={13} />
+            <ArrowUpRightIcon size={13} className="shrink-0" />
+            {formLabel && <span className="font-mono text-[10px] whitespace-nowrap">{formLabel}</span>}
           </button>
         </>
       )}
