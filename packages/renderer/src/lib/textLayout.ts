@@ -386,6 +386,11 @@ export interface PositionedGlyph {
  * glyphs inside it. A word the DOM can't measure continues from the previous
  * one.
  *
+ * A word the shaper split into several runs (`ShapedGlyph.run` — a subset or
+ * direction switch, as in `מדהיםa`) gets the same treatment per run: the runs
+ * come back in logical order, which is not the visual one when the word mixes
+ * directions, so each run is anchored where the DOM put it.
+ *
  * `letterSpacingEm` is inserted before every cluster but a word's first; the
  * gaps between words are in the DOM's measured positions.
  *
@@ -415,9 +420,10 @@ export function positionLineGlyphs(
     i = j;
   }
 
-  // Anchored runs: consecutive glyphs (in shaped order) of one span, split
-  // around each `.notdef` cluster. Each run's UTF-16 extent is the union of
-  // its clusters, a cluster ending where the next one in its span starts.
+  // Anchored runs: consecutive glyphs (in shaped order) of one span and
+  // shaper run, split around each `.notdef` cluster. Each run's UTF-16
+  // extent is the union of its clusters, a cluster ending where the next one
+  // in its span starts.
   const clusterStarts = [...new Set(shaped.map((g) => g.cl))].sort((a, b) => a - b);
   const clusterEnd = (cl: number): number => {
     const spanEnd = spans[spanOf[cl] ?? -1]?.[1] ?? lineText.length;
@@ -430,7 +436,8 @@ export function positionLineGlyphs(
     const g = shaped[i]!;
     const prev = shaped[i - 1];
     const notdef = isNotdef(g);
-    const newRun = !prev || spanOf[g.cl] !== spanOf[prev.cl] || notdef !== isNotdef(prev) || (notdef && g.cl !== prev.cl);
+    const newRun =
+      !prev || spanOf[g.cl] !== spanOf[prev.cl] || g.run !== prev.run || notdef !== isNotdef(prev) || (notdef && g.cl !== prev.cl);
     if (newRun) runExtent.push([g.cl, clusterEnd(g.cl)]);
     const extent = runExtent[runExtent.length - 1]!;
     extent[0] = Math.min(extent[0], g.cl);
@@ -471,7 +478,9 @@ export function positionLineGlyphs(
     const xEm = penEm + g.dx * emPerUnit;
     const yEm = penYEm - g.dy * emPerUnit;
     glyphs.push({ glyph: g, xEm, yEm });
-    if (!clusterLeft.has(g.cl)) clusterLeft.set(g.cl, xEm);
+    // A cluster's left edge is the pen, not the glyph origin: `dx` moves the
+    // ink, not the advance box the DOM measures and the clip mask anchors on.
+    if (!clusterLeft.has(g.cl)) clusterLeft.set(g.cl, penEm);
     if (!isNotdef(g)) clusterAdvance.set(g.cl, (clusterAdvance.get(g.cl) ?? 0) + g.ax * emPerUnit);
     penEm += g.ax * emPerUnit;
     penYEm -= g.ay * emPerUnit;

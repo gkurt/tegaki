@@ -1,4 +1,4 @@
-import { Blob, Face, Feature, Font, Buffer as HbBuffer, shape } from 'harfbuzzjs';
+import { Blob, Direction, Face, Feature, Font, Buffer as HbBuffer, shape } from 'harfbuzzjs';
 import type { ShaperFactory } from '../core/shaper-registry.ts';
 import { LETTER_SPACED_OFF_FEATURES } from '../lib/features.ts';
 import type { BundleShaper, ShapedGlyph, ShapeOptions } from '../lib/shaper.ts';
@@ -60,6 +60,30 @@ export function splitForShaping(text: string): ShapingSegment[] {
   return out;
 }
 
+/** Scripts written right to left (their letters are bidi class R / AL). */
+const RTL_SCRIPT_RE =
+  /[\p{Script=Hebrew}\p{Script=Arabic}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Mandaic}\p{Script=Adlam}]/u;
+const LETTER_RE = /\p{L}/u;
+const COMMON_SCRIPT_RE = /[\p{Script=Common}\p{Script=Inherited}]/u;
+const DIGIT_RE = /\p{Nd}/u;
+
+/**
+ * The direction a character forces on its shaping run, or `null` for one that
+ * takes its neighbours' (punctuation, marks, the Arabic tatweel). Digits are
+ * LTR even in an RTL script — bidi lays `١٢` out left to right — so they get a
+ * run of their own instead of being reversed with the Arabic around them.
+ * A simplification of the Unicode bidi classes: enough to find where a word
+ * switches direction, which harfbuzz (it shapes one direction per buffer)
+ * can't do on its own.
+ */
+export function strongDirection(cp: number): 'ltr' | 'rtl' | null {
+  const ch = String.fromCodePoint(cp);
+  if (DIGIT_RE.test(ch)) return 'ltr';
+  if (RTL_SCRIPT_RE.test(ch)) return 'rtl';
+  if (LETTER_RE.test(ch) && !COMMON_SCRIPT_RE.test(ch)) return 'ltr';
+  return null;
+}
+
 /** Build a harfbuzz feature string from bundle features, filtering shaper-managed enables. */
 export function toHbFeatureString(enabled: readonly string[]): string {
   const parts: string[] = [];
@@ -107,15 +131,26 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
   // Shape `runText` with `subsetIdx`'s font, then prefix output glyph ids with
   // the subset index so lookups in `glyphDataById` pick the right entry.
   // Glyphs from subset 0 (primary) keep their bare numeric key for backward
-  // compatibility with single-subset bundles.
-  const shapeRun = (subsetIdx: number, runText: string, runStart: number, features: Feature[]): ShapedGlyph[] => {
+  // compatibility with single-subset bundles. Every call is its own `run`
+  // (see `ShapedGlyph.run`); `direction`, when known, overrides harfbuzz's
+  // guess from the script (Arabic-Indic digits would otherwise shape RTL).
+  let nextRun = 0;
+  const shapeRun = (
+    subsetIdx: number,
+    runText: string,
+    runStart: number,
+    features: Feature[],
+    direction?: 'ltr' | 'rtl' | null,
+  ): ShapedGlyph[] => {
     const subset = subsets[subsetIdx]!;
     const buffer = new HbBuffer();
     buffer.addText(runText);
     buffer.guessSegmentProperties();
+    if (direction) buffer.setDirection(direction === 'rtl' ? Direction.RTL : Direction.LTR);
     shape(subset.font, buffer, features);
     const infos = buffer.getGlyphInfosAndPositions();
     const prefix = subsetIdx === 0 ? '' : `${subsetIdx}:`;
+    const run = nextRun++;
     return infos.map((g) => ({
       g: `${prefix}${g.codepoint}`,
       cl: runStart + g.cluster,
@@ -123,6 +158,7 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
       ay: g.yAdvance ?? 0,
       dx: g.xOffset ?? 0,
       dy: g.yOffset ?? 0,
+      run,
     }));
   };
 
@@ -138,28 +174,36 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
     return -1;
   };
 
-  // Shape a contiguous run that is already known not to cross a whitespace
-  // or subset boundary. Returns glyphs with `cl` already offset to the
-  // original text.
+  // Shape a whitespace-free segment as one harfbuzz run per subset and
+  // direction: a subset switch changes the font, a direction switch (Hebrew
+  // then Latin in one word) the buffer direction harfbuzz shapes with — one
+  // buffer would reverse the Latin letters with the Hebrew. Direction-neutral
+  // characters stay in the run they're in. Returns glyphs with `cl` already
+  // offset to the original text.
   const shapeSegment = (segText: string, segOffset: number, features: Feature[]): ShapedGlyph[] => {
-    if (subsets.length === 1) return shapeRun(0, segText, segOffset, features);
     const out: ShapedGlyph[] = [];
     let runStart = 0;
     let runSubset = -2;
+    let runDirection: 'ltr' | 'rtl' | null = null;
     const flush = (endUtf16: number) => {
       if (endUtf16 === runStart) return;
       const effective = runSubset < 0 ? 0 : runSubset;
-      out.push(...shapeRun(effective, segText.slice(runStart, endUtf16), segOffset + runStart, features));
+      out.push(...shapeRun(effective, segText.slice(runStart, endUtf16), segOffset + runStart, features, runDirection));
     };
     for (let i = 0; i < segText.length; ) {
       const cp = segText.codePointAt(i) ?? segText.charCodeAt(i);
       const step = cp > 0xffff ? 2 : 1;
-      const subset = pickSubset(cp);
-      if (subset !== runSubset) {
+      // A single-subset bundle shapes uncovered characters with its only font
+      // too, so they don't split the run.
+      const subset = subsets.length === 1 ? 0 : pickSubset(cp);
+      const direction = strongDirection(cp);
+      if (subset !== runSubset || (direction && runDirection && direction !== runDirection)) {
         flush(i);
         runStart = i;
         runSubset = subset;
+        runDirection = null;
       }
+      runDirection ??= direction;
       i += step;
     }
     flush(segText.length);
@@ -179,6 +223,7 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
   return {
     shape(text: string, options?: ShapeOptions): ShapedGlyph[] {
       if (!text) return [];
+      nextRun = 0;
       const features = options?.letterSpaced ? spacedFeatures : defaultFeatures;
       // Browsers tokenise at whitespace before shaping (each word is its
       // own HB run), so contextual features like `calt`, `liga`, and

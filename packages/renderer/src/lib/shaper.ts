@@ -15,6 +15,13 @@ export interface ShapedGlyph {
   dx: number;
   /** Y offset (displacement from pen position) in font units. */
   dy: number;
+  /**
+   * The shaping run the glyph came from, when the shaper splits a word into
+   * several (a subset or direction switch). Runs come back in logical order,
+   * each in its own visual order, so the layout anchors each where the DOM's
+   * bidi put it instead of walking one into the next.
+   */
+  run?: number;
 }
 
 export interface ShapeOptions {

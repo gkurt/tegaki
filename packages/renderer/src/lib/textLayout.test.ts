@@ -65,6 +65,34 @@ describe('positionLineGlyphs', () => {
     expect(placed.map((p) => p.xEm)).toEqual([0, 1, 1.5]);
   });
 
+  test('a word the shaper split into runs anchors each run where the DOM put it: "מדהיםa" in an RTL line has the a at its left', () => {
+    // Hebrew run (visual RTL) then the Latin run, in logical order.
+    const shaped = glyphs([4, 3, 2, 1, 0]).map((g) => ({ ...g, run: 0 }));
+    shaped.push({ g: '9', cl: 5, ax: 400, ay: 0, dx: 0, dy: 0, run: 1 });
+    const { glyphs: placed } = positionLineGlyphs(shaped, 'מדהיםa', anchors({ '0-5': 0.4, '5-6': 0 }), 1000);
+    expect(placed.map((p) => [p.glyph.cl, p.xEm])).toEqual([
+      [4, 0.4],
+      [3, 0.9],
+      [2, 1.4],
+      [1, 1.9],
+      [0, 2.4],
+      [5, 0],
+    ]);
+  });
+
+  test('a GPOS x-offset moves the glyph, not its cluster left edge', () => {
+    // Cardo's final mem opening "מדהים" visually carries dx 125/2048 em: the
+    // ink shifts, but the DOM (and the clip mask anchored on charOffsets) puts
+    // the word where the pen is.
+    const shaped: ShapedGlyph[] = [
+      { g: '78', cl: 1, ax: 1300, ay: 0, dx: 125, dy: 0 },
+      { g: '79', cl: 0, ax: 1300, ay: 0, dx: 0, dy: 0 },
+    ];
+    const { glyphs: placed, clusterLeft } = positionLineGlyphs(shaped, 'מם', anchors({ '0-2': 0 }), 2048);
+    expect(placed[0]!.xEm).toBeCloseTo(125 / 2048);
+    expect(clusterLeft.get(1)).toBe(0);
+  });
+
   test('offsets are y-down: a positive harfbuzz dy moves the glyph up', () => {
     const shaped: ShapedGlyph[] = [{ g: '1', cl: 0, ax: 0, ay: 0, dx: 100, dy: 250 }];
     const { glyphs: placed } = positionLineGlyphs(shaped, 'a', anchors({ '0-1': 1 }), 1000);
