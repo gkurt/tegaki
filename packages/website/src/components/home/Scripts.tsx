@@ -108,11 +108,12 @@ export function Scripts() {
   const script = SCRIPTS[index]!;
   const font = useFont(near ? script.font : null);
 
-  // Warm the next script's bundle while this one draws.
+  // Warm every bundle, one at a time in carousel order, so each script's font
+  // is in before its turn — the CJK ones are megabytes, more than one turn fetches.
   useEffect(() => {
     if (!near) return;
-    void loadFont(SCRIPTS[(index + 1) % SCRIPTS.length]!.font);
-  }, [near, index]);
+    SCRIPTS.reduce<Promise<unknown>>((chain, s) => chain.then(() => loadFont(s.font)), Promise.resolve());
+  }, [near]);
 
   // Hold the finished word, then move on — only while someone is watching.
   useEffect(() => {

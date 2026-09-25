@@ -27,12 +27,18 @@ export type FontName = keyof typeof FONT_IMPORTS;
 const loaded = new Map<FontName, TegakiBundle>();
 const pending = new Map<FontName, Promise<TegakiBundle>>();
 
-/** Load a bundled font once; later calls share the same promise. */
+/**
+ * Load a bundled font once; later calls share the same promise. It resolves
+ * once the font faces and the shaper are ready too, so a renderer handed the
+ * bundle starts writing on its first frame instead of waiting on them — a
+ * looping tile would otherwise spend its first loop blank.
+ */
 export function loadFont(name: FontName): Promise<TegakiBundle> {
   let promise = pending.get(name);
   if (!promise) {
-    promise = FONT_IMPORTS[name]().then((mod) => {
+    promise = FONT_IMPORTS[name]().then(async (mod) => {
       const bundle = mod.default as unknown as TegakiBundle;
+      await TegakiEngine.preload(bundle);
       loaded.set(name, bundle);
       return bundle;
     });
@@ -115,8 +121,7 @@ export const INK = {
   dark: { ink: '#f1e9da', seal: '#ff6a4d' },
 } as const;
 
-// The hero headline finishing is the cue for the rest of the fold to fetch its
-// multi-MB bundles (Klee One, Nanum Pen Script), so they don't compete with it.
+// The hero headline finishing is the cue for the 書 behind it.
 let headlineWritten = false;
 const headlineListeners = new Set<() => void>();
 

@@ -1,6 +1,6 @@
-import { type CSSProperties, useMemo, useRef, useState } from 'react';
-import { TegakiRenderer } from 'tegaki';
-import { type FontName, INK, markHeadlineWritten, useFont, useHeadlineWritten, useInView, useTheme } from './shared.ts';
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import { type TegakiBundle, TegakiRenderer } from 'tegaki';
+import { type FontName, INK, loadFont, markHeadlineWritten, useFont, useHeadlineWritten, useInView, useTheme } from './shared.ts';
 
 const HEADLINE = 'Every font,\nwritten by hand.';
 
@@ -12,26 +12,22 @@ interface Greeting {
   /** Relative size — some faces run small or wide. */
   scale?: number;
   dir?: 'rtl';
-  /** The CJK bundles are several MB: wait for the headline before fetching them. */
-  heavy?: boolean;
   /** Clip to the letterform — for a heavy display face whose round caps bulge past it. */
   clip?: number;
 }
 
 const GREETINGS: Greeting[] = [
   { word: 'Hello!', language: 'English', lang: 'en', font: 'Caveat', scale: 1.1 },
-  { word: 'こんにちは', language: 'Japanese', lang: 'ja', font: 'Klee One', scale: 0.6, heavy: true },
+  { word: 'こんにちは', language: 'Japanese', lang: 'ja', font: 'Klee One', scale: 0.6 },
   { word: 'مرحبا', language: 'Arabic', lang: 'ar', font: 'Amiri', dir: 'rtl' },
   { word: 'नमस्ते', language: 'Hindi', lang: 'hi', font: 'Tillana', scale: 0.9 },
   { word: 'שלום', language: 'Hebrew', lang: 'he', font: 'Suez One', scale: 0.85, dir: 'rtl', clip: 1.6 },
-  { word: '반가워요', language: 'Korean', lang: 'ko', font: 'Nanum Pen Script', scale: 0.95, heavy: true },
+  { word: '반가워요', language: 'Korean', lang: 'ko', font: 'Nanum Pen Script', scale: 0.95 },
 ];
 
-function GreetingTile({ greeting, ready }: { greeting: Greeting; ready: boolean }) {
+function GreetingTile({ greeting, font }: { greeting: Greeting; font: TegakiBundle | undefined }) {
   const ref = useRef<HTMLElement>(null);
-  const near = useInView(ref, { once: true });
   const visible = useInView(ref);
-  const font = useFont(near && ready ? greeting.font : null);
 
   return (
     <figure ref={ref} className="greeting" style={{ '--scale': greeting.scale ?? 1 } as CSSProperties}>
@@ -55,13 +51,31 @@ function GreetingTile({ greeting, ready }: { greeting: Greeting; ready: boolean 
   );
 }
 
-/** A row of greetings, looping. The CJK bundles wait for the headline. */
+/**
+ * A row of greetings, looping in step. Every tile waits for all six fonts — the
+ * CJK bundles are the slow ones — so the row writes its first round together
+ * rather than the CJK tiles joining a loop late. Fetching starts once the
+ * headline's own font is in, so they don't compete with it.
+ */
 export function Greetings() {
-  const written = useHeadlineWritten();
+  const [fonts, setFonts] = useState<Partial<Record<FontName, TegakiBundle>>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    loadFont('Parisienne')
+      .then(() => Promise.all(GREETINGS.map((g) => loadFont(g.font).then((bundle) => [g.font, bundle] as const))))
+      .then((entries) => {
+        if (!cancelled) setFonts(Object.fromEntries(entries));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="greetings">
       {GREETINGS.map((g) => (
-        <GreetingTile key={g.lang} greeting={g} ready={!g.heavy || written} />
+        <GreetingTile key={g.lang} greeting={g} font={fonts[g.font]} />
       ))}
     </div>
   );
@@ -69,7 +83,7 @@ export function Greetings() {
 
 /**
  * The headline writes itself, then a giant 書 ("to write") is drawn behind it.
- * Klee One is an 8 MB bundle, so it only loads once the headline is done.
+ * It waits for the headline, which also gives Klee One (8 MB) time to arrive.
  */
 export function Hero() {
   const font = useFont('Parisienne');

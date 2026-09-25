@@ -583,7 +583,7 @@ p code {
 .scroll-linked {
   animation: tegaki-view-progress linear both;
   animation-timeline: view();
-  animation-range: cover 10% cover 45%;
+  animation-range: cover 10% cover 70%;
 }
 
 .scrubber {
