@@ -448,6 +448,9 @@ const GUIDED_STROKE_ORDER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakan
  */
 const GUIDE_MAX_DISTANCE = 0.06;
 
+/** Scripts whose letters hang from the top line, each stroke entering at its top (see `OrderTimingParams.topEntry`). */
+const TOP_ENTRY_SCRIPT = /\p{Script=Hebrew}/u;
+
 export function hasCanonicalStrokeOrder(char: string): boolean {
   return CANONICAL_STROKE_ORDER.test(char);
 }
@@ -758,6 +761,7 @@ export function runGeometryPipeline(
       strokePause: STROKE_PAUSE,
       rtl: input.rtl ?? false,
       headlineLast: input.headlineLast ?? false,
+      topEntry: TOP_ENTRY_SCRIPT.test(input.char),
       yTolerance: input.unitsPerEm * 0.02,
     },
     plan,

@@ -22,10 +22,18 @@ function polylineLength(points: { x: number; y: number }[]): number {
   return len;
 }
 
+/**
+ * How much a stroke's entry prefers its top end over its right end in
+ * scripts whose letters hang from the top line (Hebrew): the x weight of the
+ * entry score, a tiebreak against the default's side-first weight.
+ */
+const TOP_ENTRY_X_WEIGHT = 0.25;
+
 /** Orient a stroke so the natural pen entry comes first (see raster stroke-order.ts). */
-function orient(points: AxisPoint[], isLoop: boolean, rtl: boolean): AxisPoint[] {
+function orient(points: AxisPoint[], isLoop: boolean, rtl: boolean, topEntry = false): AxisPoint[] {
   if (points.length < 2) return points;
-  const xWeight = rtl ? -ORIENT_X_WEIGHT : ORIENT_X_WEIGHT;
+  const sideWeight = topEntry ? TOP_ENTRY_X_WEIGHT : ORIENT_X_WEIGHT;
+  const xWeight = rtl ? -sideWeight : sideWeight;
   const start = points[0]!;
   const end = points[points.length - 1]!;
 
@@ -185,6 +193,12 @@ export interface OrderTimingParams {
   rtl: boolean;
   /** The glyph's script writes its headline last (see `isHeadlineScriptChar`). */
   headlineLast?: boolean;
+  /**
+   * Strokes enter at their top end, the side only breaking ties — letters
+   * that hang from the top line (Hebrew: ה starts at its top-left corner, not
+   * the foot of its right leg).
+   */
+  topEntry?: boolean;
   yTolerance: number;
 }
 
@@ -200,14 +214,77 @@ export interface OrderPlan {
   reverse: boolean[];
 }
 
+/**
+ * A stroke planted on another: its lower end sits on the other stroke's ink,
+ * away from that stroke's ends, and it rises from there — ط's stem standing
+ * on its bowl. Strokes that meet end to end (ح's bar running into its bowl)
+ * are one pen path broken at a corner, not an addition.
+ */
+function plantedOn(strokes: AxisPoint[][], priorities: number[]): number[] {
+  return strokes.map((points, i) => {
+    if (points.length < 2) return -1;
+    const a = points[0]!;
+    const b = points[points.length - 1]!;
+    const foot = a.y >= b.y ? a : b;
+    const head = foot === a ? b : a;
+    if (foot.y - head.y < foot.width) return -1;
+    for (let j = 0; j < strokes.length; j++) {
+      const body = strokes[j]!;
+      if (j === i || body.length < 2 || priorities[j] !== priorities[i]) continue;
+      let best = Infinity;
+      let bestArc = 0;
+      let arc = 0;
+      let bodyWidth = 0;
+      for (let k = 1; k < body.length; k++) {
+        const p = body[k - 1]!;
+        const q = body[k]!;
+        const dx = q.x - p.x;
+        const dy = q.y - p.y;
+        const l2 = dx * dx + dy * dy;
+        const u = l2 > 0 ? Math.max(0, Math.min(1, ((foot.x - p.x) * dx + (foot.y - p.y) * dy) / l2)) : 0;
+        const d = Math.hypot(p.x + dx * u - foot.x, p.y + dy * u - foot.y);
+        if (d < best) {
+          best = d;
+          bestArc = arc + u * Math.sqrt(l2);
+          bodyWidth = p.width + (q.width - p.width) * u;
+        }
+        arc += Math.sqrt(l2);
+      }
+      const reach = Math.max(foot.width, bodyWidth);
+      const margin = PLANT_END_MARGIN * reach;
+      if (best <= reach && bestArc > margin && arc - bestArc > margin) return j;
+    }
+    return -1;
+  });
+}
+
+/** A planted stroke's foot must sit this many ink widths from either end of the stroke it stands on. */
+const PLANT_END_MARGIN = 2;
+
+/** Move each stroke planted on a later one to just after it: the body first, then what is added onto it. */
+export function drawAdditionsAfterBodies(order: number[], strokes: AxisPoint[][], priorities: number[]): number[] {
+  const planted = plantedOn(strokes, priorities);
+  const out = [...order];
+  for (let i = 0; i < planted.length; i++) {
+    const body = planted[i]!;
+    if (body < 0 || planted[body] === i) continue;
+    const from = out.indexOf(i);
+    const to = out.indexOf(body);
+    if (from > to) continue;
+    out.splice(from, 1);
+    out.splice(out.indexOf(body) + 1, 0, i);
+  }
+  return out;
+}
+
 /** Order + time geometry strokes into the renderer's Stroke shape (font units). */
 export function orderAndTimeStrokes(strokes: GeoStroke[], params: OrderTimingParams, plan?: OrderPlan): TimedGeoStroke[] {
   if (strokes.length === 0) return [];
-  const { drawingSpeed, strokePause, rtl, headlineLast = false, yTolerance } = params;
+  const { drawingSpeed, strokePause, rtl, headlineLast = false, topEntry = false, yTolerance } = params;
 
   const oriented = plan
     ? strokes.map((s, i) => (plan.reverse[i] ? [...s.points].reverse() : s.points))
-    : strokes.map((s) => orient(s.points, s.isLoop, rtl));
+    : strokes.map((s) => orient(s.points, s.isLoop, rtl, topEntry));
   const priorities = oriented.map(() => 0);
   let order: number[];
   if (plan) {
@@ -234,6 +311,7 @@ export function orderAndTimeStrokes(strokes: GeoStroke[], params: OrderTimingPar
       const bx = boxes[b]!.minX;
       return rtl ? bx - ax : ax - bx;
     });
+    if (rtl) order = drawAdditionsAfterBodies(order, oriented, priorities);
   }
 
   const result: TimedGeoStroke[] = [];

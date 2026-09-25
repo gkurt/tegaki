@@ -65,3 +65,40 @@ describe('isHeadlineScriptChar', () => {
     expect(['T', 'ה', 'ب', ''].map(isHeadlineScriptChar)).toEqual([false, false, false, false]);
   });
 });
+
+describe('right-to-left order', () => {
+  const RTL = { ...PARAMS, rtl: true };
+  /** Index of each drawn stroke among the inputs, matched by its point set. */
+  const order = (strokes: GeoStroke[], params = RTL) =>
+    orderAndTimeStrokes(strokes, params).map((s) =>
+      strokes.findIndex((g) => g.points.some((p) => p.x === s.points[0]!.x && p.y === s.points[0]!.y)),
+    );
+
+  test('a stroke planted on another draws after it (ط: the bowl, then the stem standing on it)', () => {
+    const tStem = stroke([300, -700], [300, -120]);
+    const tBowl = stroke([600, -100], [450, -250], [200, -100], [0, 0]);
+    expect(order([tStem, tBowl])).toEqual([1, 0]);
+  });
+
+  test('strokes meeting end to end keep top-to-bottom (ح: the bar, then the bowl it runs into)', () => {
+    const bar = stroke([500, -500], [100, -500]);
+    const hBowl = stroke([100, -500], [0, -250], [300, 0], [600, -50]);
+    expect(order([hBowl, bar])).toEqual([1, 0]);
+  });
+
+  test('a detached stroke is not planted, even rising from beside another', () => {
+    const hBowl = stroke([600, -100], [300, -150], [0, -100]);
+    const apart = stroke([300, -700], [300, -300]);
+    expect(order([hBowl, apart])).toEqual([1, 0]);
+  });
+
+  test('without topEntry an RTL stroke enters at its right end, even from the foot of a leg', () => {
+    const he = stroke([0, -600], [500, -600], [500, 0]);
+    expect(orderAndTimeStrokes([he], RTL)[0]!.points[0]).toMatchObject({ x: 500, y: 0 });
+  });
+
+  test('topEntry enters at the top end (Hebrew ה: its top-left corner, across, then down the right leg)', () => {
+    const he = stroke([500, 0], [500, -600], [0, -600]);
+    expect(orderAndTimeStrokes([he], { ...RTL, topEntry: true })[0]!.points[0]).toMatchObject({ x: 0, y: -600 });
+  });
+});
