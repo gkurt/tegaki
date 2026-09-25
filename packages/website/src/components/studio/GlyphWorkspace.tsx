@@ -21,7 +21,7 @@ import type { CharsetInfo } from './charsets.ts';
 import { CheckIcon, ChevronDownIcon, CloseIcon, WarningIcon } from './icons.tsx';
 import type { LoadedFont, SetSetting } from './state.ts';
 import { Transport } from './Transport.tsx';
-import { cx, IconButton, isTypingTarget, Popover, Segmented, Spinner } from './ui.tsx';
+import { cx, IconButton, isTypingTarget, Popover, Spinner } from './ui.tsx';
 import { ZoomStage } from './ZoomStage.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
@@ -59,7 +59,6 @@ export function GlyphWorkspace({
   settings,
   set,
   resultsCache,
-  onPipelineChange,
   onGlyphReport,
 }: {
   font: LoadedFont | null;
@@ -67,7 +66,6 @@ export function GlyphWorkspace({
   settings: UrlState;
   set: SetSetting;
   resultsCache: RefObject<Map<string, PipelineResult>>;
-  onPipelineChange: (p: Pipeline) => void;
   /** The inspected glyph and its warnings, for the agent prompt (null once unmounted). */
   onGlyphReport?: (report: { char: string; warnings: string[] } | null) => void;
 }) {
@@ -296,17 +294,7 @@ export function GlyphWorkspace({
       />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-zinc-200 bg-white pl-2 dark:border-zinc-800 dark:bg-zinc-900">
-          <Segmented
-            size="sm"
-            value={pipeline}
-            onChange={onPipelineChange}
-            options={[
-              { value: 'geometry', label: 'Geometry' },
-              { value: 'raster', label: 'Raster' },
-            ]}
-          />
-          <div className="h-5 w-px shrink-0 bg-zinc-200 dark:bg-zinc-800" />
+        <div className="flex h-11 shrink-0 items-center border-b border-zinc-200 bg-white pl-2 dark:border-zinc-800 dark:bg-zinc-900">
           <div
             className="studio-scroll-x flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto pr-2"
             role="tablist"

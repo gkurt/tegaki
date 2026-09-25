@@ -242,7 +242,6 @@ export function Studio() {
                 settings={settings}
                 set={set}
                 resultsCache={resultsCache}
-                onPipelineChange={switchPipeline}
                 onGlyphReport={setGlyphReport}
               />
             )}
