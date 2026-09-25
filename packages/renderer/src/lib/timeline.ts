@@ -1,4 +1,5 @@
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
+import { trailingScript } from './itemize.ts';
 import type { BundleShaper, ShapeOptions } from './shaper.ts';
 import { graphemes, lookupGlyphData } from './utils.ts';
 
@@ -547,7 +548,7 @@ function computeShapedTimeline(
 
     const lineText = text.slice(lineStart, i);
     if (lineText.length > 0) {
-      const shaped = shaper.shape(lineText, shapeOptions);
+      const shaped = shaper.shape(lineText, { ...shapeOptions, scriptBefore: trailingScript(text.slice(0, lineStart)) });
       // Harfbuzz emits glyphs in visual order (left-to-right on screen) regardless
       // of script direction. Sort by cluster offset so animation follows the
       // logical / reading order — matching how each script is actually

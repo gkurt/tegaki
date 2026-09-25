@@ -40,6 +40,13 @@ export interface ShapeOptions {
    * pick for the text shaped — pass it when shaping a paragraph line by line.
    */
   direction?: 'ltr' | 'rtl';
+  /**
+   * The script the text before this line ends in (see `trailingScript`).
+   * The DOM itemizes the whole text, so punctuation opening a line takes the
+   * script of the line above — `Hi` then `(العالم)` draws a Latin `(` —
+   * where the line shaped alone would give it the Arabic after it.
+   */
+  scriptBefore?: string | null;
 }
 
 export interface BundleShaper {

@@ -155,6 +155,24 @@ describe('lineWords', () => {
     expect(alone.map((w) => w.direction)).toEqual(['rtl']);
   });
 
+  test('brackets resolved LTR and Latin around an Arabic word are pieces of their own: "Hello [مرحبا]"', () => {
+    // The DOM draws the brackets with the font's Latin bracket; inside the
+    // Arabic piece the canvas would draw its wider Arabic one.
+    const chars = ['H', 'i', ' ', '[', 'م', 'ر', ']'];
+    const l = layout([0, 0.5, 0.75, 1, 1.5, 1.25, 1.75], [0.5, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25], [[0, 1, 2, 3, 4, 5, 6]]);
+    expect(lineWords(l, chars, 0)).toEqual([
+      { text: 'Hi', leftEm: 0, direction: 'ltr' },
+      { text: '[', leftEm: 1, direction: 'ltr' },
+      { text: 'مر', leftEm: 1.25, direction: 'rtl' },
+      { text: ']', leftEm: 1.75, direction: 'ltr' },
+    ]);
+  });
+
+  test('brackets opening and closing an RTL line stay in its Arabic piece: "(العالم)"', () => {
+    const l: TextLayout = { ...layout([0.75, 0.5, 0.25, 0], [0.25, 0.25, 0.25, 0.25], [[0, 1, 2, 3]]), direction: 'rtl' };
+    expect(lineWords(l, ['(', 'ع', 'م', ')'], 0)).toEqual([{ text: '(عم)', leftEm: 0, direction: 'rtl' }]);
+  });
+
   test('reads only the requested line and drops its newline', () => {
     const l = layout(
       [0, 0, 0, 0.5],

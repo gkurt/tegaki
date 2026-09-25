@@ -1,5 +1,6 @@
 import type { TegakiBundle } from '../types.ts';
-import { neutralRunDirection, strongDirection } from './bidi.ts';
+import { resolvedDirections } from './bidi.ts';
+import { resolvedScripts, scriptsDiffer, trailingScript } from './itemize.ts';
 import type { BundleShaper, ShapedGlyph } from './shaper.ts';
 import type { Timeline } from './timeline.ts';
 import { graphemes } from './utils.ts';
@@ -52,43 +53,46 @@ export interface LineWord {
  * beside Arabic measures 19px wider in canvas). Words that measured no width
  * are left out.
  *
- * A word that switches direction is split there, as the shaper splits it into
- * runs: bidi need not keep its halves together. `aכתב` opening an LTR line has
- * its a at the left end and `כתב` at the right end, after the rest of the
- * Hebrew run. Direction-neutral characters stay with the piece they follow,
- * which is drawn in its letters' direction; a piece of nothing but them (a
- * lone bracket) in the direction bidi resolves it to, from the line and the
- * paragraph's direction.
+ * A word is split where its direction or script switches, as the shaper
+ * splits it into runs: bidi need not keep the halves together. `aכתב` opening
+ * an LTR line has its a at the left end and `כתב` at the right end, after the
+ * rest of the Hebrew run. Neutral characters go by the direction and script
+ * resolved over the line (see `resolvedDirections` / `resolvedScripts`), so
+ * the brackets of `Hello [مرحبا]` are pieces of their own, LTR as the DOM
+ * draws them — inside the Arabic piece they'd take its direction and script,
+ * and Amiri's wider Arabic bracket.
  */
 export function lineWords(layout: TextLayout, characters: readonly string[], lineIdx: number): LineWord[] {
   const indices = layout.lines[lineIdx] ?? [];
   const lineText = indices.map((idx) => characters[idx] ?? '').join('');
-  const base = layout.direction ?? 'ltr';
+  const directions = resolvedDirections(lineText, layout.direction ?? 'ltr');
+  const scripts = resolvedScripts(lineText);
   const words: LineWord[] = [];
   let text = '';
   let left = Infinity;
-  let direction: 'ltr' | 'rtl' | null = null;
-  let start = 0;
-  let at = 0;
+  let direction: 'ltr' | 'rtl' = 'ltr';
+  let script: string | null = null;
   const flush = () => {
-    if (text && Number.isFinite(left)) {
-      words.push({ text, leftEm: left, direction: direction ?? neutralRunDirection(lineText, start, start + text.length, base) });
-    }
+    if (text && Number.isFinite(left)) words.push({ text, leftEm: left, direction });
     text = '';
     left = Infinity;
-    direction = null;
   };
+  let at = 0;
   for (const charIdx of indices) {
     const char = characters[charIdx] ?? '';
+    const start = at;
     at += char.length;
     if (!char || WHITESPACE_RE.test(char)) {
       flush();
       continue;
     }
-    const charDirection = strongDirection(char.codePointAt(0)!);
-    if (charDirection && direction && charDirection !== direction) flush();
-    if (!text) start = at - char.length;
-    direction ??= charDirection;
+    const charDirection = directions[start] ?? 'ltr';
+    const charScript = scripts[start] ?? null;
+    if (text && (charDirection !== direction || scriptsDiffer(charScript, script))) flush();
+    if (!text) {
+      direction = charDirection;
+      script = charScript;
+    }
     text += char;
     if ((layout.charWidths[charIdx] ?? 0) > 0) left = Math.min(left, layout.charOffsets[charIdx] ?? 0);
   }
@@ -371,7 +375,11 @@ export function applyShaperPositions(
     // shaper. See positionLineGlyphs.
     const lineText = text.slice(lineStartU, lineEndU);
     // Each line alone would pick its own `dir="auto"` direction; the DOM's is the paragraph's.
-    const shaped = shaper.shape(lineText, { letterSpaced: letterSpacingEm !== 0, direction: layout.direction ?? 'ltr' });
+    const shaped = shaper.shape(lineText, {
+      letterSpaced: letterSpacingEm !== 0,
+      direction: layout.direction ?? 'ltr',
+      scriptBefore: trailingScript(text.slice(0, lineStartU)),
+    });
     if (shaped.length === 0) continue;
     const spanLeftEm = (start: number, end: number): number | undefined => {
       range.setStart(textNode, lineStartU + start);

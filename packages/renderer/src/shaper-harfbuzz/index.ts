@@ -1,9 +1,16 @@
 import { Blob, Direction, Face, Feature, Font, Buffer as HbBuffer, shape } from 'harfbuzzjs';
 import type { ShaperFactory } from '../core/shaper-registry.ts';
-import { neutralRunDirection, paragraphDirection, strongDirection } from '../lib/bidi.ts';
+import { paragraphDirection, resolvedDirections } from '../lib/bidi.ts';
 import { LETTER_SPACED_OFF_FEATURES } from '../lib/features.ts';
+import { resolvedScripts, scriptsDiffer } from '../lib/itemize.ts';
 import type { BundleShaper, ShapedGlyph, ShapeOptions } from '../lib/shaper.ts';
 import type { TegakiBundle } from '../types.ts';
+
+/** Each character's resolved direction and script, by UTF-16 offset into the shaped line. */
+interface LineItems {
+  directions: ('ltr' | 'rtl')[];
+  scripts: (string | null)[];
+}
 
 const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig', 'frac', 'numr', 'dnom']);
 
@@ -82,9 +89,15 @@ function toHbFeatures(enabled: readonly string[]): Feature[] {
   return out;
 }
 
-async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
+/**
+ * A harfbuzz shaper for `bundle`, from its font files' bytes — `fontUrl`'s,
+ * then each of `extraFontUrls`'s — or fetched from those URLs when omitted.
+ * Passing the bytes lets Node (whose `fetch` can't read `file:` URLs) shape
+ * too, as the `tegaki` CLI does.
+ */
+export async function createHarfbuzzShaper(bundle: TegakiBundle, fonts?: readonly ArrayBuffer[]): Promise<BundleShaper> {
   const urls = [bundle.fontUrl, ...(bundle.extraFontUrls ?? [])];
-  const buffers = await Promise.all(urls.map(async (url) => (await fetch(url)).arrayBuffer()));
+  const buffers = fonts ?? (await Promise.all(urls.map(async (url) => (await fetch(url)).arrayBuffer())));
   const subsets = buffers.map((buf) => {
     const blob = new Blob(buf);
     const face = new Face(blob, 0);
@@ -110,7 +123,9 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
   // Glyphs from subset 0 (primary) keep their bare numeric key for backward
   // compatibility with single-subset bundles. Every call is its own `run`
   // (see `ShapedGlyph.run`); `direction`, when known, overrides harfbuzz's
-  // guess from the script (Arabic-Indic digits would otherwise shape RTL).
+  // guess from the script (Arabic-Indic digits would otherwise shape RTL),
+  // and `script` its guess from the text (a lone bracket has none, and
+  // harfbuzz would skip the font's Latin or Arabic substitutions for it).
   const outlines = new Map<string, string | null>();
   let nextRun = 0;
   const shapeRun = (
@@ -119,12 +134,14 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
     runStart: number,
     features: Feature[],
     direction?: 'ltr' | 'rtl' | null,
+    script?: string | null,
   ): ShapedGlyph[] => {
     const subset = subsets[subsetIdx]!;
     const buffer = new HbBuffer();
     buffer.addText(runText);
     buffer.guessSegmentProperties();
     if (direction) buffer.setDirection(direction === 'rtl' ? Direction.RTL : Direction.LTR);
+    if (script) buffer.setScript(script);
     shape(subset.font, buffer, features);
     const infos = buffer.getGlyphInfosAndPositions();
     const prefix = subsetIdx === 0 ? '' : `${subsetIdx}:`;
@@ -152,25 +169,27 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
     return -1;
   };
 
-  // Shape a whitespace-free segment as one harfbuzz run per subset and
-  // direction: a subset switch changes the font, a direction switch (Hebrew
-  // then Latin in one word) the buffer direction harfbuzz shapes with — one
-  // buffer would reverse the Latin letters with the Hebrew. Direction-neutral
-  // characters stay in the run they're in; a run of nothing but them takes
-  // the direction bidi resolves it to from `text` (the whole line) and the
-  // paragraph's `base` — harfbuzz would guess LTR and leave a bracket in RTL
-  // text unmirrored. Returns glyphs with `cl` already offset to the original
+  // Shape a whitespace-free segment as one harfbuzz run per subset,
+  // direction and script, as browsers itemize text: a subset switch changes
+  // the font, a direction switch (Hebrew then Latin in one word) the buffer
+  // direction harfbuzz shapes with — one buffer would reverse the Latin
+  // letters with the Hebrew — and a script switch the font's substitutions.
+  // `line` has each character's direction and script resolved over the whole
+  // line (see `resolvedDirections` / `resolvedScripts`), so a neutral one
+  // goes where bidi puts it: `[` in `Hello [مرحبا]` is LTR and Latin, drawn
+  // unmirrored with the font's Latin bracket as the browser draws it, not in
+  // the Arabic run. Returns glyphs with `cl` already offset to the original
   // text.
-  const shapeSegment = (text: string, base: 'ltr' | 'rtl', segText: string, segOffset: number, features: Feature[]): ShapedGlyph[] => {
+  const shapeSegment = (line: LineItems, segText: string, segOffset: number, features: Feature[]): ShapedGlyph[] => {
     const out: ShapedGlyph[] = [];
     let runStart = 0;
     let runSubset = -2;
     let runDirection: 'ltr' | 'rtl' | null = null;
+    let runScript: string | null = null;
     const flush = (endUtf16: number) => {
       if (endUtf16 === runStart) return;
       const effective = runSubset < 0 ? 0 : runSubset;
-      const direction = runDirection ?? neutralRunDirection(text, segOffset + runStart, segOffset + endUtf16, base);
-      out.push(...shapeRun(effective, segText.slice(runStart, endUtf16), segOffset + runStart, features, direction));
+      out.push(...shapeRun(effective, segText.slice(runStart, endUtf16), segOffset + runStart, features, runDirection, runScript));
     };
     for (let i = 0; i < segText.length; ) {
       const cp = segText.codePointAt(i) ?? segText.charCodeAt(i);
@@ -178,14 +197,15 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
       // A single-subset bundle shapes uncovered characters with its only font
       // too, so they don't split the run.
       const subset = subsets.length === 1 ? 0 : pickSubset(cp);
-      const direction = strongDirection(cp);
-      if (subset !== runSubset || (direction && runDirection && direction !== runDirection)) {
+      const direction = line.directions[segOffset + i] ?? null;
+      const script = line.scripts[segOffset + i] ?? null;
+      if (subset !== runSubset || direction !== runDirection || scriptsDiffer(script, runScript)) {
         flush(i);
         runStart = i;
         runSubset = subset;
-        runDirection = null;
+        runDirection = direction;
+        runScript = script;
       }
-      runDirection ??= direction;
       i += step;
     }
     flush(segText.length);
@@ -208,6 +228,7 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
       nextRun = 0;
       const features = options?.letterSpaced ? spacedFeatures : defaultFeatures;
       const base = options?.direction ?? paragraphDirection(text);
+      const line: LineItems = { directions: resolvedDirections(text, base), scripts: resolvedScripts(text, options?.scriptBefore ?? null) };
       // Browsers tokenise at whitespace before shaping (each word is its
       // own HB run), so contextual features like `calt`, `liga`, and
       // `clig` never see characters across a space. Mirror that here:
@@ -230,7 +251,7 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
       for (let i = 0; i < segments.length; i++) {
         const seg = segments[i]!;
         if (!seg.isWhitespace) {
-          out.push(...shapeSegment(text, base, seg.text, seg.offset, features));
+          out.push(...shapeSegment(line, seg.text, seg.offset, features));
           continue;
         }
         // Prefer a preceding neighbour — for scripts whose contextual rules
@@ -254,7 +275,7 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
         }
         if (neighbourIdx < 0) {
           // All-whitespace input — no context to borrow, shape standalone.
-          out.push(...shapeSegment(text, base, seg.text, seg.offset, features));
+          out.push(...shapeSegment(line, seg.text, seg.offset, features));
           continue;
         }
         const neighbour = segments[neighbourIdx]!;
@@ -302,7 +323,7 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
 const harfbuzzShaper: ShaperFactory = (bundle) => {
   if (typeof fetch === 'undefined') return null;
   if (!bundle.glyphDataById) return null;
-  return buildShaper(bundle);
+  return createHarfbuzzShaper(bundle);
 };
 
 export default harfbuzzShaper;

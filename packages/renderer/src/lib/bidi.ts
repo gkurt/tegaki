@@ -39,7 +39,7 @@ export function paragraphDirection(text: string): 'ltr' | 'rtl' {
 type Direction = 'ltr' | 'rtl';
 
 /** Opening → closing bracket, for the pairs bidi resolves together (Bidi_Paired_Bracket). */
-const BRACKET_PAIRS = new Map([
+export const BRACKET_PAIRS: ReadonlyMap<string, string> = new Map([
   ['(', ')'],
   ['[', ']'],
   ['{', '}'],
@@ -51,31 +51,17 @@ const BRACKET_PAIRS = new Map([
   ['\uff3b', '\uff3d'],
   ['\uff5b', '\uff5d'],
 ]);
-const CLOSING_BRACKETS = new Map([...BRACKET_PAIRS].map(([open, close]) => [close, open]));
+/** Closing → opening bracket. */
+export const CLOSING_BRACKETS: ReadonlyMap<string, string> = new Map([...BRACKET_PAIRS].map(([open, close]) => [close, open]));
 
-/**
- * Each strong character of `text` (by UTF-16 offset) with the direction it
- * resolves to: a digit counts as the letter before it — after Latin it is LTR,
- * after Hebrew it stands with the Hebrew (rules W7, N0 and N1), and before any
- * letter it takes the paragraph's `base`.
- */
-function resolvedStrongs(text: string, base: Direction): { at: number; direction: Direction }[] {
-  const out: { at: number; direction: Direction }[] = [];
-  let letter = base;
-  for (let i = 0; i < text.length; ) {
-    const cp = text.codePointAt(i)!;
-    const strong = strongDirection(cp);
-    if (strong) {
-      const digit = DIGIT_RE.test(String.fromCodePoint(cp));
-      if (!digit) letter = strong;
-      out.push({ at: i, direction: digit ? letter : strong });
-    }
-    i += cp > 0xffff ? 2 : 1;
-  }
-  return out;
-}
+/** Separators a number keeps inside it when they stand between two digits (`1:2`, `3.5`) — bidi rule W4. */
+const SEPARATOR_RE = /^[,.:/+\-\u00a0\u060c\u066b\u066c]$/u;
+/** Signs a number takes in when next to its digits (`50%`, `$5`) — rule W5. */
+const TERMINATOR_RE = /^[#$%\u00b0\u2030\u2031\u066a\p{Sc}]$/u;
+/** Marks and format characters (ZWJ) go with the character before them — rule W1. */
+const ATTACHED_RE = /^[\p{M}\p{Cf}]$/u;
 
-/** Bracket pairs of `text` as [open, close] UTF-16 offsets, matched the way bidi rule BD16 does. */
+/** Bracket pairs of `text` as [open, close] UTF-16 offsets, matched the way bidi rule BD16 does, in order of opening. */
 function bracketPairs(text: string): [number, number][] {
   const pairs: [number, number][] = [];
   const stack: { at: number; close: string }[] = [];
@@ -94,42 +80,98 @@ function bracketPairs(text: string): [number, number][] {
       break;
     }
   }
-  return pairs;
+  return pairs.sort((a, b) => a[0] - b[0]);
+}
+
+/**
+ * The direction each character of `text` is laid out in, by UTF-16 offset,
+ * in a paragraph of direction `base` — a single-level take on the Unicode
+ * bidi algorithm, enough to split text into the runs the browser shapes:
+ *
+ * - letters have their own direction, and a number is LTR — with the
+ *   separators between its digits and the signs next to them (`1:2`, `50%`);
+ * - a bracket pair goes by what it encloses (rule N0): the paragraph's
+ *   direction if any of it is, else the other when the text before the pair
+ *   is too — so `( b )` stays LTR after a Latin word in an RTL paragraph —
+ *   and a resolved bracket counts as strong for what follows it;
+ * - other neutral characters between two strong ones of one direction take
+ *   it, and the paragraph's otherwise (N1/N2). A digit counts as the letter
+ *   before it here: after Hebrew it keeps a bracket RTL.
+ * - marks and joiners go with the character before them.
+ */
+export function resolvedDirections(text: string, base: Direction): Direction[] {
+  const n = text.length;
+  const own: (Direction | 'digit' | null)[] = new Array(n).fill(null);
+  const attached: boolean[] = new Array(n).fill(false);
+  for (let i = 0; i < n; ) {
+    const cp = text.codePointAt(i)!;
+    const ch = String.fromCodePoint(cp);
+    const strong = strongDirection(cp);
+    const type = strong ? (DIGIT_RE.test(ch) ? 'digit' : strong) : null;
+    const isAttached = !strong && i > 0 && ATTACHED_RE.test(ch);
+    for (let k = i; k < i + ch.length; k++) {
+      own[k] = isAttached ? own[i - 1]! : type;
+      attached[k] = isAttached;
+    }
+    i += ch.length;
+  }
+  for (let i = 1; i < n - 1; i++) {
+    if (own[i] === null && own[i - 1] === 'digit' && own[i + 1] === 'digit' && SEPARATOR_RE.test(text[i]!)) own[i] = 'digit';
+  }
+  for (let i = 0; i < n; i++) {
+    if (own[i] !== null || !TERMINATOR_RE.test(text[i]!)) continue;
+    let end = i;
+    while (end < n && own[end] === null && TERMINATOR_RE.test(text[end]!)) end++;
+    if (own[i - 1] === 'digit' || own[end] === 'digit') own.fill('digit', i, end);
+    i = end - 1;
+  }
+
+  // The direction each character counts as for resolving neutrals.
+  const type: (Direction | null)[] = new Array(n).fill(null);
+  let letter = base;
+  for (let i = 0; i < n; i++) {
+    const t = own[i];
+    if (t === 'digit') type[i] = letter;
+    else if (t) type[i] = letter = t;
+  }
+  const before = (at: number): Direction => {
+    for (let k = at - 1; k >= 0; k--) if (type[k]) return type[k]!;
+    return base;
+  };
+  for (const [open, close] of bracketPairs(text)) {
+    let embedding = false;
+    let opposite = false;
+    for (let k = open + 1; k < close; k++) {
+      if (type[k] === base) embedding = true;
+      else if (type[k]) opposite = true;
+    }
+    if (!embedding && !opposite) continue;
+    type[open] = type[close] = embedding ? base : before(open);
+  }
+  for (let i = 0; i < n; ) {
+    if (type[i]) {
+      i++;
+      continue;
+    }
+    let end = i;
+    while (end < n && !type[end]) end++;
+    const prev = before(i);
+    const next = end < n ? type[end]! : base;
+    type.fill(prev === next ? prev : base, i, end);
+    i = end;
+  }
+
+  const out: Direction[] = own.map((t, i) => (t === 'digit' ? 'ltr' : (t ?? type[i]!)));
+  for (let i = 1; i < n; i++) if (attached[i]) out[i] = out[i - 1]!;
+  return out;
 }
 
 /**
  * The direction bidi resolves a run of direction-neutral characters to —
  * `text.slice(start, end)`, say a bracket with a space either side. It decides
- * whether the run is mirrored: bidi draws `(` as `)` in RTL text.
- *
- * A bracket of a matched pair goes by what the pair encloses (rule N0): a
- * strong character of the paragraph's `base` direction makes it `base`; only
- * characters of the other direction make it that direction when the text
- * before the pair is too — so `( b )` in an RTL paragraph stays LTR after a
- * Latin word. Anything else between two strong characters of one direction
- * takes it, and the rest the paragraph's `base` (rules N1/N2).
+ * whether the run is mirrored: bidi draws `(` as `)` in RTL text. See
+ * {@link resolvedDirections}; this reads its first character.
  */
-export function neutralRunDirection(text: string, start: number, end: number, base: Direction): Direction {
-  const strongs = resolvedStrongs(text, base);
-  const before = (at: number): Direction => {
-    let direction = base;
-    for (const s of strongs) {
-      if (s.at >= at) break;
-      direction = s.direction;
-    }
-    return direction;
-  };
-
-  for (const [open, close] of bracketPairs(text)) {
-    if (!((open >= start && open < end) || (close >= start && close < end))) continue;
-    const inside = strongs.filter((s) => s.at > open && s.at < close);
-    if (inside.length === 0) continue;
-    if (inside.some((s) => s.direction === base)) return base;
-    const other = inside[0]!.direction;
-    return before(open) === other ? other : base;
-  }
-
-  const after = strongs.find((s) => s.at >= end)?.direction ?? base;
-  const prev = before(start);
-  return prev === after ? prev : base;
+export function neutralRunDirection(text: string, start: number, _end: number, base: Direction): Direction {
+  return resolvedDirections(text, base)[start] ?? base;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { neutralRunDirection, paragraphDirection, strongDirection } from './bidi.ts';
+import { neutralRunDirection, paragraphDirection, resolvedDirections, strongDirection } from './bidi.ts';
 
 describe('strongDirection', () => {
   const dir = (ch: string) => strongDirection(ch.codePointAt(0)!);
@@ -64,5 +64,36 @@ describe('neutralRunDirection — bracket pairs', () => {
 
   test('a pair enclosing only the other direction takes the paragraph direction when the text before it differs', () => {
     expect(neutralRunDirection('שלום ( b )', 5, 6, 'rtl')).toBe('rtl');
+  });
+});
+
+describe('resolvedDirections', () => {
+  test('brackets around an Arabic word after a Latin one are LTR in an LTR line', () => {
+    expect(resolvedDirections('Hi [مر]', 'ltr')).toEqual(['ltr', 'ltr', 'ltr', 'ltr', 'rtl', 'rtl', 'ltr']);
+  });
+
+  test('brackets around an RTL line are RTL, so they mirror', () => {
+    expect(resolvedDirections('(عم)', 'rtl')).toEqual(['rtl', 'rtl', 'rtl', 'rtl']);
+  });
+
+  test('a full stop ending an Arabic word in an LTR line is LTR, as bidi places it at the end', () => {
+    expect(resolvedDirections('مر.', 'ltr')).toEqual(['rtl', 'rtl', 'ltr']);
+  });
+
+  test('a resolved bracket counts as strong after it: "[مر]. (عم)" keeps the full stop and the second pair LTR', () => {
+    const dirs = resolvedDirections('[مر]. (عم)', 'ltr');
+    expect(dirs[4]).toBe('ltr');
+    expect(dirs[6]).toBe('ltr');
+    expect(dirs[9]).toBe('ltr');
+  });
+
+  test('a mark stays with its letter at the end of an Arabic word in an LTR line', () => {
+    // مَ then a space and Latin: the fatha would otherwise resolve to the paragraph's LTR.
+    expect(resolvedDirections('مَ a', 'ltr')).toEqual(['rtl', 'rtl', 'ltr', 'ltr']);
+  });
+
+  test('a number keeps the separators between its digits and the signs beside it, LTR in Arabic', () => {
+    expect(resolvedDirections('ع 1:2', 'rtl')).toEqual(['rtl', 'rtl', 'ltr', 'ltr', 'ltr']);
+    expect(resolvedDirections('ع 50%', 'rtl')).toEqual(['rtl', 'rtl', 'ltr', 'ltr', 'ltr']);
   });
 });

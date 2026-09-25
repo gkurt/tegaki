@@ -201,6 +201,8 @@ export class TegakiEngine {
   private _overlayEl: HTMLElement;
   private _canvasFallbackEl: HTMLSpanElement;
   private _maskCanvas: HTMLCanvasElement | null = null;
+  /** Parsed glyph outlines for the clip mask, by path data, for the shaper they came from. */
+  private _maskPaths: { shaper: BundleShaper | null; paths: Map<string, Path2D> } = { shaper: null, paths: new Map() };
 
   // --- Options ---
   private _text = '';
@@ -1458,6 +1460,20 @@ export class TegakiEngine {
     return out;
   }
 
+  /** A `Path2D` per outline, parsed once per shaper. */
+  private _outlinePaths(outlines: SvgGlyphOutline[]): Path2D[] {
+    if (this._maskPaths.shaper !== this._shaper) this._maskPaths = { shaper: this._shaper, paths: new Map() };
+    const cache = this._maskPaths.paths;
+    return outlines.map((g) => {
+      let path = cache.get(g.d);
+      if (!path) {
+        path = new Path2D(g.d);
+        cache.set(g.d, path);
+      }
+      return path;
+    });
+  }
+
   /**
    * The stroke subdivision threshold in font units — Infinity for the raw
    * polyline. It collapses every input that matters (segmentSize in CSS px,
@@ -1663,6 +1679,12 @@ export class TegakiEngine {
     // mask can be applied as a single destination-in drawImage call. Doing
     // fillText per-character with destination-in would erase previously-clipped
     // strokes.
+    //
+    // With the shaper's outlines, the mask is the glyphs the strokes draw,
+    // filled where they draw them. Otherwise it's the text set in the font:
+    // close, but the canvas can shape it otherwise — Chrome caches a shaped
+    // `(` per canvas regardless of the script it was shaped in, so after
+    // `(ا` a lone `(` next to Latin comes out as Amiri's wide Arabic paren.
     if (clipText) {
       if (!this._maskCanvas) this._maskCanvas = document.createElement('canvas');
       const maskCanvas = this._maskCanvas;
@@ -1674,6 +1696,18 @@ export class TegakiEngine {
       maskCtx.setTransform(effectiveDpr, 0, 0, effectiveDpr, 0, 0);
       maskCtx.clearRect(0, 0, w, h);
       maskCtx.translate(padH, padV);
+      const outlines = this._glyphOutlines(graphemeToLine);
+      if (outlines) {
+        const paths = this._outlinePaths(outlines);
+        for (let i = 0; i < outlines.length; i++) {
+          const g = outlines[i]!;
+          maskCtx.save();
+          maskCtx.translate(g.x, g.y);
+          maskCtx.scale(g.scale, -g.scale);
+          maskCtx.fill(paths[i]!);
+          maskCtx.restore();
+        }
+      }
       maskCtx.font = `${fontSize}px ${cssFontFamily(font, this._fallbackFont)}`;
       maskCtx.textBaseline = 'alphabetic';
       // Draw each word where the DOM put it, as a single string so the
@@ -1692,7 +1726,7 @@ export class TegakiEngine {
       maskCtx.textAlign = 'left';
       if ('letterSpacing' in maskCtx) maskCtx.letterSpacing = `${this._letterSpacing}px`;
       let clipY = 0;
-      for (let li = 0; li < layout.lines.length; li++) {
+      for (let li = 0; !outlines && li < layout.lines.length; li++) {
         const baseline = clipY + halfLeading + (font.ascender / font.unitsPerEm) * fontSize;
         for (const word of lineWords(layout, characters, li)) {
           maskCtx.direction = word.direction;
