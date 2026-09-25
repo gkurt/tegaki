@@ -1,10 +1,12 @@
 import { copyFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import MagicString from 'magic-string';
 import { defineConfig } from 'tsdown';
 
 const configDir = dirname(fileURLToPath(import.meta.url));
+const harfbuzzDist = dirname(createRequire(import.meta.url).resolve('harfbuzzjs'));
 
 // Matches a leading `'use client'` / `"use client"` directive prologue.
 const USE_CLIENT_RE = /^\s*(['"])use client\1\s*;?/;
@@ -106,30 +108,40 @@ function fontBundlePlugin() {
   };
 }
 
-export default defineConfig({
-  entry: {
-    index: 'src/index.ts',
-    cli: 'src/cli.ts',
-    'core/index': 'src/core/index.ts',
-    'react/index': 'src/react/index.ts',
-    // Solid is shipped as source (compiled by the consumer's solid plugin via
-    // the `solid` export condition) — tsdown/rolldown can't run babel-preset-solid,
-    // so a prebuilt dist emits an invalid `solid-js/jsx-runtime` import. See ./package.json.
-    'wc/index': 'src/wc/index.ts',
-    'shaper-harfbuzz/index': 'src/shaper-harfbuzz/index.ts',
-    'fonts/caveat/bundle': 'fonts/caveat/bundle.ts',
-    'fonts/italianno/bundle': 'fonts/italianno/bundle.ts',
-    'fonts/tangerine/bundle': 'fonts/tangerine/bundle.ts',
-    'fonts/parisienne/bundle': 'fonts/parisienne/bundle.ts',
-    'fonts/suez-one/bundle': 'fonts/suez-one/bundle.ts',
-    'fonts/amiri/bundle': 'fonts/amiri/bundle.ts',
-    'fonts/klee-one/bundle': 'fonts/klee-one/bundle.ts',
-    'fonts/tillana/bundle': 'fonts/tillana/bundle.ts',
-    'fonts/nanum-pen-script/bundle': 'fonts/nanum-pen-script/bundle.ts',
-    'fonts/atma/bundle': 'fonts/atma/bundle.ts',
-    'fonts/lxgw-wenkai/bundle': 'fonts/lxgw-wenkai/bundle.ts',
+export default defineConfig([
+  {
+    entry: {
+      index: 'src/index.ts',
+      'core/index': 'src/core/index.ts',
+      'react/index': 'src/react/index.ts',
+      // Solid is shipped as source (compiled by the consumer's solid plugin via
+      // the `solid` export condition) — tsdown/rolldown can't run babel-preset-solid,
+      // so a prebuilt dist emits an invalid `solid-js/jsx-runtime` import. See ./package.json.
+      'wc/index': 'src/wc/index.ts',
+      'shaper-harfbuzz/index': 'src/shaper-harfbuzz/index.ts',
+      'fonts/caveat/bundle': 'fonts/caveat/bundle.ts',
+      'fonts/italianno/bundle': 'fonts/italianno/bundle.ts',
+      'fonts/tangerine/bundle': 'fonts/tangerine/bundle.ts',
+      'fonts/parisienne/bundle': 'fonts/parisienne/bundle.ts',
+      'fonts/suez-one/bundle': 'fonts/suez-one/bundle.ts',
+      'fonts/amiri/bundle': 'fonts/amiri/bundle.ts',
+      'fonts/klee-one/bundle': 'fonts/klee-one/bundle.ts',
+      'fonts/tillana/bundle': 'fonts/tillana/bundle.ts',
+      'fonts/nanum-pen-script/bundle': 'fonts/nanum-pen-script/bundle.ts',
+      'fonts/atma/bundle': 'fonts/atma/bundle.ts',
+      'fonts/lxgw-wenkai/bundle': 'fonts/lxgw-wenkai/bundle.ts',
+    },
+    dts: true,
+    sourcemap: true,
+    plugins: [fontBundlePlugin(), preserveUseClientPlugin()],
   },
-  dts: true,
-  sourcemap: true,
-  plugins: [fontBundlePlugin(), preserveUseClientPlugin()],
-});
+  // The CLI is its own build so it can bundle harfbuzzjs — an optional peer of the library, which
+  // `npx tegaki` wouldn't install — with the wasm it loads from beside the module.
+  {
+    entry: { cli: 'src/cli.ts' },
+    noExternal: ['harfbuzzjs'],
+    copy: [{ from: resolve(harfbuzzDist, 'harfbuzz.wasm'), to: 'dist' }],
+    clean: false,
+    dts: false,
+  },
+]);

@@ -10,7 +10,12 @@
  * export (PNG/GIF/WebM) lives in the browser studio at gkurt.com/tegaki/studio.
  */
 import { readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { EASINGS, type EasingName } from './lib/easings.ts';
+import type { BundleShaper } from './lib/shaper.ts';
 import { type TextToSvgMode, textToSvg } from './lib/textToSvg.ts';
+import { computeTimeline, type TimelineConfig } from './lib/timeline.ts';
+import { createHarfbuzzShaper } from './shaper-harfbuzz/index.ts';
 import type { TegakiBundle } from './types.ts';
 
 /** Bundled fonts the CLI can load, keyed by `--font` name. */
@@ -25,10 +30,14 @@ const FONTS: Record<string, string> = {
   'klee-one': 'Klee One (Japanese + Latin)',
   'nanum-pen-script': 'Nanum Pen Script (Korean + Latin)',
   'lxgw-wenkai': 'LXGW WenKai (Simplified Chinese + Latin)',
+  atma: 'Atma (Bengali + Latin)',
 };
 
-/** Fonts whose scripts need shaping the headless CLI does not apply (RTL / complex GPOS). */
-const NEEDS_SHAPING = new Set(['suez-one', 'amiri', 'tillana']);
+/** Fonts whose scripts need shaping (RTL / complex GPOS) — warned about under `--no-shaping`. */
+const NEEDS_SHAPING = new Set(['suez-one', 'amiri', 'tillana', 'atma']);
+
+/** The studio's default Clip to text for the geometry pipeline, which every bundled font is generated with. */
+const DEFAULT_CLIP = 1.2;
 
 const MODES: TextToSvgMode[] = ['loop', 'once', 'static'];
 
@@ -47,6 +56,14 @@ interface CliOptions {
   segmentSize?: number;
   speed?: number;
   loopHold?: number;
+  letterSpacing?: number;
+  shaping: boolean;
+  /** Stroke scale before clipping to the text; false = no clip. */
+  clip: number | false;
+  strokeEasing?: EasingName;
+  glyphEasing?: EasingName;
+  effects?: Record<string, unknown>;
+  seed?: number;
 }
 
 const HELP = `tegaki — animated handwriting SVG generator
@@ -69,7 +86,19 @@ Options:
       --stagger-duration <s|auto>   Per-glyph duration when staggering (default: auto)
       --speed <x>           Playback speed multiplier (default: 1)
       --loop-hold <s>       loop: seconds the finished text holds before fading (default: 1.5)
-      --pressure <0-1>      Variable stroke width (default: 1; 0 in loop mode)
+      --letter-spacing <px> Extra space after each character (default: 0)
+      --stroke-easing <name>  Each stroke's draw easing (default: ease-out-quad)
+      --glyph-easing <name>   Each glyph's time easing (default: linear)
+                              ${Object.keys(EASINGS).join(', ')}
+      --pressure <0-1>      Variable stroke width (default: 1)
+      --clip <scale>        Clip strokes to the letter outlines, scaling their width by
+                              <scale> first (default: ${DEFAULT_CLIP}); --no-clip draws bare strokes
+      --effects <json>      Renderer effects, e.g. '{"glow":{"radius":8,"color":"#0cf"}}'
+                              (glow, wobble, taper, strokeGradient, globalGradient);
+                              the clip trims a glow too — pair glow with --no-clip
+      --seed <n>            Seed for wobble / gradient variation (default: 0)
+      --no-shaping          Place glyphs one per character by advance width (no ligatures,
+                              joining or bidi)
       --smoothing           Smooth strokes onto a spline
       --segment-size <px>   Stroke subdivision threshold (default: 2 when applicable)
   -h, --help                Show this help
@@ -80,6 +109,8 @@ Examples:
   tegaki "Tegaki is awesome"
   tegaki "Hello World" --font tangerine --mode once -o hello.svg
   tegaki "ABC" --stagger 80% --size 140 --color "#222"
+  tegaki "مرحبا بالعالم" --font amiri --mode once
+  tegaki "Glow" --effects '{"glow":{"radius":10,"color":"#f0a"}}' --no-clip
 `;
 
 function fail(message: string): never {
@@ -108,6 +139,8 @@ function parseArgs(argv: string[]): CliOptions {
     color: '#1a1a1a',
     mode: 'loop',
     smoothing: false,
+    shaping: true,
+    clip: DEFAULT_CLIP,
   };
 
   // Pull the value for a flag, supporting both `--flag value` and `--flag=value`.
@@ -186,6 +219,43 @@ function parseArgs(argv: string[]): CliOptions {
       case '--loop-hold':
         opts.loopHold = numeric(flag, expectValue(flag, inline, idx));
         break;
+      case '--letter-spacing':
+        opts.letterSpacing = numeric(flag, expectValue(flag, inline, idx));
+        break;
+      case '--stroke-easing':
+      case '--glyph-easing': {
+        const name = expectValue(flag, inline, idx) as EasingName;
+        if (!(name in EASINGS)) fail(`unknown easing "${name}" (expected: ${Object.keys(EASINGS).join(', ')})`);
+        if (flag === '--stroke-easing') opts.strokeEasing = name;
+        else opts.glyphEasing = name;
+        break;
+      }
+      case '--clip': {
+        const v = numeric(flag, expectValue(flag, inline, idx));
+        if (v <= 0) fail('option --clip expects a positive stroke scale');
+        opts.clip = v;
+        break;
+      }
+      case '--no-clip':
+        opts.clip = false;
+        break;
+      case '--effects': {
+        const raw = expectValue(flag, inline, idx);
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+          opts.effects = parsed as Record<string, unknown>;
+        } catch {
+          fail(`option --effects expects a JSON object, got ${JSON.stringify(raw)}`);
+        }
+        break;
+      }
+      case '--seed':
+        opts.seed = numeric(flag, expectValue(flag, inline, idx));
+        break;
+      case '--no-shaping':
+        opts.shaping = false;
+        break;
       case '--smoothing':
         opts.smoothing = true;
         break;
@@ -249,6 +319,26 @@ async function loadBundle(name: string): Promise<TegakiBundle> {
   fail(`could not load font bundle "${name}".`);
 }
 
+/**
+ * A bundle's font URL is a `file:` URL in the built package (`new URL('./x.ttf', import.meta.url)`)
+ * and a plain path under Bun's dev loader; Node's fetch reads neither, so read the file directly.
+ */
+async function readFontFile(url: string): Promise<ArrayBuffer> {
+  const bytes = await readFile(url.startsWith('file:') ? fileURLToPath(url) : url);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+/** Shape with harfbuzz (WASM) like the renderer does: ligatures, contextual forms, joining, marks and bidi. */
+async function loadShaper(font: TegakiBundle): Promise<BundleShaper | null> {
+  try {
+    const buffers = await Promise.all([font.fontUrl, ...(font.extraFontUrls ?? [])].map(readFontFile));
+    return await createHarfbuzzShaper(font, buffers);
+  } catch (err) {
+    process.stderr.write(`tegaki: warning — shaping unavailable (${(err as Error).message}); laying out by advance width.\n`);
+    return null;
+  }
+}
+
 async function main(): Promise<void> {
   await resolveVersion();
   const opts = parseArgs(process.argv.slice(2));
@@ -258,37 +348,58 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  if (NEEDS_SHAPING.has(opts.font)) {
+  const font = await loadBundle(opts.font);
+  const shaper = opts.shaping ? await loadShaper(font) : null;
+  if (!shaper && NEEDS_SHAPING.has(opts.font)) {
     process.stderr.write(
-      `tegaki: note — "${opts.font}" is a complex/RTL script. The CLI lays glyphs out by ` +
-        `advance width without shaping, so joins and direction may be wrong. ` +
-        `Use the browser studio (gkurt.com/tegaki/studio) for shaped output.\n`,
+      `tegaki: note — "${opts.font}" is a complex/RTL script. Without shaping, glyphs are laid out ` +
+        `by advance width, so joins and direction may be wrong.\n`,
     );
   }
 
-  const font = await loadBundle(opts.font);
-
-  const timing =
-    opts.stagger !== undefined
+  const timing: TimelineConfig = {
+    ...(opts.stagger !== undefined
       ? {
           stagger: {
             advance: /%$/.test(opts.stagger) ? (opts.stagger as `${number}%`) : Number(opts.stagger),
             duration: opts.staggerDuration ?? ('auto' as const),
           },
         }
-      : undefined;
+      : {}),
+    ...(opts.strokeEasing ? { strokeEasing: EASINGS[opts.strokeEasing] } : {}),
+    ...(opts.glyphEasing ? { glyphEasing: EASINGS[opts.glyphEasing] } : {}),
+  };
+
+  // The engine draws characters the bundle has no strokes for from a fallback font; an SVG can't.
+  const missing = [
+    ...new Set(
+      computeTimeline(opts.text, font, timing, shaper)
+        .entries.filter((e) => !e.hasGlyph && /\S/u.test(e.char))
+        .map((e) => e.char),
+    ),
+  ];
+  if (missing.length > 0) {
+    process.stderr.write(
+      `tegaki: warning — "${opts.font}" has no strokes for ${missing.map((c) => JSON.stringify(c)).join(' ')}; left out.\n`,
+    );
+  }
 
   const svg = textToSvg(opts.text, font, {
     fontSize: opts.fontSize,
     lineHeight: opts.lineHeight,
+    letterSpacing: opts.letterSpacing,
     color: opts.color,
     mode: opts.mode,
-    pressure: opts.pressure,
+    pressure: opts.pressure ?? 1,
     smoothing: opts.smoothing,
     segmentSize: opts.segmentSize,
     timing,
     speed: opts.speed,
     loopHold: opts.loopHold,
+    shaper,
+    clipText: opts.clip,
+    effects: opts.effects,
+    seed: opts.seed,
   });
 
   if (opts.output === '-') {

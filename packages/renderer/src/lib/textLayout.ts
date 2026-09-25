@@ -1,5 +1,5 @@
 import type { TegakiBundle } from '../types.ts';
-import { resolvedDirections } from './bidi.ts';
+import { paragraphDirection, resolvedDirections } from './bidi.ts';
 import { resolvedScripts, scriptsDiffer, trailingScript } from './itemize.ts';
 import type { BundleShaper, ShapedGlyph } from './shaper.ts';
 import type { Timeline } from './timeline.ts';
@@ -307,15 +307,64 @@ export function applyShaperPositions(
   timeline?: Timeline,
   letterSpacingEm = 0,
 ): TextLayout {
-  const chars = graphemes(text);
-  if (!chars.length) return layout;
-
   const textNode = el.firstChild;
   if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return layout;
   const elRect = el.getBoundingClientRect();
   const elLeft = elRect.left;
   const scale = el.offsetWidth > 0 ? elRect.width / el.offsetWidth : 1;
   const range = document.createRange();
+  return placeShapedGlyphs(layout, text, font, shaper, timeline, letterSpacingEm, (_lineText, _shaped, lineStartU, lineEndU) => {
+    // Measure the whole line's visual-left edge via a single Range. The
+    // line's own aggregate rect is reliable even when per-grapheme rects
+    // inside a shaped cluster are not.
+    range.setStart(textNode, lineStartU);
+    range.setEnd(textNode, lineEndU);
+    const lineRects = range.getClientRects();
+    if (lineRects.length === 0) return null;
+    let lineLeftPx = Infinity;
+    for (const r of lineRects) if (r.left < lineLeftPx) lineLeftPx = r.left;
+    const lineLeftEm = (lineLeftPx - elLeft) / scale / fontSize;
+    // Word order comes from the browser; glyph order within a word from the
+    // shaper. See positionLineGlyphs.
+    const spanLeftEm = (start: number, end: number): number | undefined => {
+      range.setStart(textNode, lineStartU + start);
+      range.setEnd(textNode, lineStartU + end);
+      let left = Infinity;
+      for (const r of range.getClientRects()) if (r.width > 0 && r.left < left) left = r.left;
+      return Number.isFinite(left) ? (left - elLeft) / scale / fontSize - lineLeftEm : undefined;
+    };
+    return { lineLeftEm, spanLeftEm };
+  });
+}
+
+/**
+ * Where a line's words go: its visual-left edge and each word's (em from that
+ * edge, over a UTF-16 span of the line), or null to leave the line as laid out.
+ */
+type LineAnchors = (
+  lineText: string,
+  shaped: ShapedGlyph[],
+  lineStartU: number,
+  lineEndU: number,
+) => { lineLeftEm: number; spanLeftEm: (start: number, end: number) => number | undefined } | null;
+
+/**
+ * The shaper-positioned layout shared by the DOM path (`applyShaperPositions`,
+ * anchoring words where the browser put them) and the headless one
+ * (`headlessShapedLayout`, anchoring them by the bidi algorithm): shape each
+ * line, walk its glyphs from their word anchors, and write the offsets back.
+ */
+function placeShapedGlyphs(
+  layout: TextLayout,
+  text: string,
+  font: TegakiBundle,
+  shaper: BundleShaper,
+  timeline: Timeline | undefined,
+  letterSpacingEm: number,
+  anchors: LineAnchors,
+): TextLayout {
+  const chars = graphemes(text);
+  if (!chars.length) return layout;
 
   // utf16 start offset of each grapheme.
   const graphemeStartU: number[] = [];
@@ -359,20 +408,6 @@ export function applyShaperPositions(
     const lastReal = realIndices[realIndices.length - 1]!;
     const lineEndU = graphemeStartU[lastReal]! + chars[lastReal]!.length;
 
-    // Measure the whole line's visual-left edge via a single Range. The
-    // line's own aggregate rect is reliable even when per-grapheme rects
-    // inside a shaped cluster are not.
-    range.setStart(textNode, lineStartU);
-    range.setEnd(textNode, lineEndU);
-    const lineRects = range.getClientRects();
-    if (lineRects.length === 0) continue;
-    let lineLeftPx = Infinity;
-    for (const r of lineRects) if (r.left < lineLeftPx) lineLeftPx = r.left;
-    const lineLeftEm = (lineLeftPx - elLeft) / scale / fontSize;
-    lineLefts[li] = lineLeftEm;
-
-    // Word order comes from the browser; glyph order within a word from the
-    // shaper. See positionLineGlyphs.
     const lineText = text.slice(lineStartU, lineEndU);
     // Each line alone would pick its own `dir="auto"` direction; the DOM's is the paragraph's.
     const shaped = shaper.shape(lineText, {
@@ -381,13 +416,10 @@ export function applyShaperPositions(
       scriptBefore: trailingScript(text.slice(0, lineStartU)),
     });
     if (shaped.length === 0) continue;
-    const spanLeftEm = (start: number, end: number): number | undefined => {
-      range.setStart(textNode, lineStartU + start);
-      range.setEnd(textNode, lineStartU + end);
-      let left = Infinity;
-      for (const r of range.getClientRects()) if (r.width > 0 && r.left < left) left = r.left;
-      return Number.isFinite(left) ? (left - elLeft) / scale / fontSize - lineLeftEm : undefined;
-    };
+    const anchor = anchors(lineText, shaped, lineStartU, lineEndU);
+    if (!anchor) continue;
+    const { lineLeftEm, spanLeftEm } = anchor;
+    lineLefts[li] = lineLeftEm;
     const { glyphs, clusterLeft, clusterAdvance } = positionLineGlyphs(shaped, lineText, spanLeftEm, font.unitsPerEm, letterSpacingEm);
     if (timeline) {
       for (const { glyph: g, xEm, yEm } of glyphs) {
@@ -431,6 +463,121 @@ export function applyShaperPositions(
   }
 
   return { ...layout, charOffsets, charWidths, lineLefts };
+}
+
+/**
+ * Lay text out without a DOM, from the shaper: lines break at `\n` only, each
+ * line's words are ordered by the bidi algorithm (UAX #9 rule L2 over the
+ * resolved directions) and advanced by their shaped widths, and a
+ * right-to-left paragraph is right-aligned, as the browser would set it.
+ * Fills each timeline entry's `xOffsetEm` / `yOffsetEm`, as
+ * `applyShaperPositions` does. `widthEm` is the widest line.
+ */
+export function headlessShapedLayout(
+  text: string,
+  font: TegakiBundle,
+  shaper: BundleShaper,
+  timeline?: Timeline,
+  letterSpacingEm = 0,
+): TextLayout & { lineLefts: number[]; widthEm: number } {
+  const chars = graphemes(text);
+  const direction = paragraphDirection(text);
+  const lines: number[][] = [[]];
+  for (let i = 0; i < chars.length; i++) {
+    lines[lines.length - 1]!.push(i);
+    if (chars[i] === '\n') lines.push([]);
+  }
+  if (lines[lines.length - 1]!.length === 0) lines.pop();
+  const base: TextLayout = { lines, charOffsets: new Array(chars.length).fill(0), charWidths: new Array(chars.length).fill(0), direction };
+
+  const widths: number[] = [];
+  const placed = placeShapedGlyphs(base, text, font, shaper, timeline, letterSpacingEm, (lineText, shaped) => {
+    const { anchors, width } = bidiWordAnchors(lineText, shaped, direction, font.unitsPerEm, letterSpacingEm);
+    widths.push(width);
+    return { lineLeftEm: 0, spanLeftEm: (start) => anchors.get(start) };
+  });
+
+  // Right-align an RTL paragraph's lines to the widest one.
+  const widthEm = Math.max(0, ...widths);
+  const lineLefts = placed.lineLefts ?? new Array(lines.length).fill(0);
+  if (direction === 'rtl') {
+    let wi = 0;
+    for (let li = 0; li < lines.length; li++) {
+      if (!lines[li]!.some((idx) => chars[idx] !== '\n')) continue;
+      const shift = widthEm - (widths[wi++] ?? widthEm);
+      lineLefts[li] = (lineLefts[li] ?? 0) + shift;
+      for (const idx of lines[li]!) placed.charOffsets[idx] = (placed.charOffsets[idx] ?? 0) + shift;
+    }
+  }
+  return { ...placed, lineLefts, widthEm };
+}
+
+/**
+ * Visual-left anchors (em) of a shaped line's words and runs, keyed by their
+ * first UTF-16 offset, and the line's width. The shaper returns words in
+ * logical order; each word — or run of one, where it switches font subset or
+ * direction — takes a bidi level from its resolved direction, and rule L2
+ * reverses every sequence at or above each odd level to get the visual order.
+ */
+export function bidiWordAnchors(
+  lineText: string,
+  shaped: ShapedGlyph[],
+  base: 'ltr' | 'rtl',
+  unitsPerEm: number,
+  letterSpacingEm = 0,
+): { anchors: Map<number, number>; width: number } {
+  const resolved = resolvedDirections(lineText, base);
+  // Which whitespace / non-whitespace span each UTF-16 offset is in.
+  const spanOf = new Int32Array(lineText.length + 1);
+  for (let u = 1; u <= lineText.length; u++) {
+    const changed = WHITESPACE_RE.test(lineText[u] ?? '') !== WHITESPACE_RE.test(lineText[u - 1]!);
+    spanOf[u] = spanOf[u - 1]! + (changed ? 1 : 0);
+  }
+  const spanId = (cl: number) => spanOf[cl] ?? -1;
+  // Units: consecutive glyphs of one whitespace/non-whitespace span and shaper run.
+  const units: { start: number; width: number; level: number; clusters: Set<number> }[] = [];
+  let prev: ShapedGlyph | undefined;
+  const baseLevel = base === 'rtl' ? 1 : 0;
+  for (const g of shaped) {
+    const unit = units[units.length - 1];
+    if (!unit || !prev || g.run !== prev.run || spanId(g.cl) !== spanId(prev.cl)) {
+      const dir = resolved[g.cl] ?? base;
+      units.push({ start: g.cl, width: 0, level: dir === base ? baseLevel : baseLevel + 1, clusters: new Set() });
+    }
+    const u = units[units.length - 1]!;
+    u.start = Math.min(u.start, g.cl);
+    u.width += g.ax / unitsPerEm;
+    u.clusters.add(g.cl);
+    prev = g;
+  }
+  // Letter spacing follows every character (cluster).
+  for (const u of units) u.width += u.clusters.size * letterSpacingEm;
+
+  // L2: from the highest level down to the lowest odd one, reverse each run at or above it.
+  const order = units.map((_, i) => i);
+  const maxLevel = Math.max(0, ...units.map((u) => u.level));
+  const lowestOdd = Math.min(...units.map((u) => u.level).filter((l) => l % 2 === 1), Infinity);
+  for (let level = maxLevel; level >= lowestOdd && level >= 1; level--) {
+    for (let i = 0; i < order.length; ) {
+      if (units[order[i]!]!.level < level) {
+        i++;
+        continue;
+      }
+      let j = i;
+      while (j < order.length && units[order[j]!]!.level >= level) j++;
+      order.splice(i, j - i, ...order.slice(i, j).reverse());
+      i = j;
+    }
+  }
+
+  const anchors = new Map<number, number>();
+  let pen = 0;
+  for (const i of order) {
+    const u = units[i]!;
+    anchors.set(u.start, pen);
+    pen += u.width;
+  }
+  return { anchors, width: pen };
 }
 
 /** A shaped glyph with its draw origin, in em from the line's visual-left edge (y down). */
