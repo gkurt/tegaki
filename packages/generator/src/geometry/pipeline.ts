@@ -15,6 +15,7 @@ import { guideOrderByReference } from '../stroke-order/guide.ts';
 import { matchStrokes, type StrokeMatchResult } from '../stroke-order/match.ts';
 import { registerReference } from '../stroke-order/register.ts';
 import type { ReferenceGlyph } from '../stroke-order/types.ts';
+import { splitBentStrokes } from './bends.ts';
 import { buildContours, findContourOverlaps } from './contours.ts';
 import { detectCorners } from './corners.ts';
 import { generateCuts } from './cuts.ts';
@@ -448,6 +449,9 @@ const GUIDED_STROKE_ORDER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakan
  */
 const GUIDE_MAX_DISTANCE = 0.06;
 
+/** Scripts whose strokes turn corners only as 横折 / 竖折 do (see bends.ts). */
+const BENT_STROKE_SCRIPT = /[\p{Script=Han}\p{Script=Katakana}]/u;
+
 /** Scripts whose letters hang from the top line, each stroke entering at its top (see `OrderTimingParams.topEntry`). */
 const TOP_ENTRY_SCRIPT = /\p{Script=Hebrew}/u;
 
@@ -575,6 +579,10 @@ export function runGeometryPipeline(
       geoStrokes.push({ ...gs, segmentIndices: gs.segmentIndices.map((s) => s + segOffset) });
     }
   }
+
+  // Han and katakana strokes turn corners only one way round; the ink graph
+  // runs through all of them (口 as one loop). Cut the others (see bends.ts).
+  if (BENT_STROKE_SCRIPT.test(input.char)) geoStrokes.splice(0, geoStrokes.length, ...splitBentStrokes(geoStrokes));
 
   // Stage 7: order + timing across all regions at once. When a stroke-order
   // reference is present (and not disabled), a clean match REPLACES the
