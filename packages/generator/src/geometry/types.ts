@@ -310,8 +310,13 @@ export interface GeometryPipelineResult {
    * the 'reference' visualization stage and dataset-driven ordering.
    */
   reference?: RegisteredReference;
-  /** Whether the final draw order/direction came from the dataset or the heuristics. */
-  strokeOrderSource: 'dataset' | 'heuristic';
+  /**
+   * Where the final draw order/direction came from: a clean 1:1 match with
+   * the dataset, the dataset ordering strokes it could not match 1:1
+   * ('guided' — standardized-order scripts only, see guide.ts), or the
+   * heuristics.
+   */
+  strokeOrderSource: 'dataset' | 'guided' | 'heuristic';
   /**
    * True when the strokes themselves were re-grouped (split at reference
    * seams / chained along one reference stroke) to match the dataset's

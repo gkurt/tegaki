@@ -56,6 +56,7 @@ export { type GeometryStage, renderGeometryStage } from './geometry/visualize.ts
 export { glyphToAnimatedSVG } from './processing/animated-svg.ts';
 export { isRtlChar, isRtlCodepoint } from './processing/rtl.ts';
 export { renderStage, STROKE_COLORS, type VisualizationStage } from './processing/visualize.ts';
+export { createHangulProvider, decomposeHangul, HANGUL_LICENSE } from './stroke-order/hangul.ts';
 export { createHersheyProvider, createHersheySimplexProvider, HERSHEY_LICENSE } from './stroke-order/hershey.ts';
 export {
   createKanjiVGProvider,

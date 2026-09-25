@@ -16,6 +16,12 @@ export interface ReferenceStroke {
   points: Point[];
   /** Dataset stroke-type label when available (e.g. KanjiVG kvg:type "㇐"). */
   type?: string;
+  /**
+   * Component the stroke belongs to (Hangul: which jamo of the syllable).
+   * Guided ordering re-fits each component onto the ink on its own, since
+   * handwriting fonts place components far from a textbook layout.
+   */
+  group?: number;
 }
 
 /** All prescribed strokes for one character, in draw order. */

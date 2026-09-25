@@ -8,6 +8,7 @@ const glyph = (over: Partial<GlyphStrokeOrderReport>): GlyphStrokeOrderReport =>
   meanCost: 0.05,
   applied: true,
   regrouped: false,
+  guided: false,
   warnings: [],
   ...over,
 });
@@ -37,6 +38,19 @@ describe('summarizeStrokeOrderReports', () => {
     );
     expect(s.applied).toBe(2);
     expect(s.regrouped).toBe(1);
+  });
+
+  test('guided counts reference-ordered glyphs outside the applied ones', () => {
+    const s = summarizeStrokeOrderReports(
+      [
+        glyph({ char: '한', applied: false, guided: true }),
+        glyph({ char: '가' }),
+        glyph({ char: 'A', reference: null, applied: false, guided: false }),
+      ],
+      0,
+    );
+    expect(s.applied).toBe(1);
+    expect(s.guided).toBe(1);
   });
 
   test('worst count mismatches sort by |difference|, largest first', () => {

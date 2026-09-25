@@ -11,6 +11,7 @@ import type { BBox, Point } from 'tegaki';
 import { DRAWING_SPEED, STROKE_PAUSE } from '../constants.ts';
 import type { RawGlyphData } from '../font/parse.ts';
 import { computePathBBox, flattenPath } from '../processing/bezier.ts';
+import { guideOrderByReference } from '../stroke-order/guide.ts';
 import { matchStrokes, type StrokeMatchResult } from '../stroke-order/match.ts';
 import { registerReference } from '../stroke-order/register.ts';
 import type { ReferenceGlyph } from '../stroke-order/types.ts';
@@ -433,6 +434,19 @@ function processRegion(
  * reference dataset rather than the other way round (KanjiVG's coverage).
  */
 const CANONICAL_STROKE_ORDER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+/**
+ * Scripts whose reference orders the ink even when the strokes can't be
+ * matched 1:1: the canonical ones, and Hangul — whose order is standard too,
+ * but whose cursive fonts join a jamo's strokes, and splitting them to match
+ * would retrace the font's own trajectory (see guide.ts).
+ */
+const GUIDED_STROKE_ORDER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+/**
+ * Farthest the ink may sit from the reference, on average (fraction of the
+ * glyph diagonal), for the reference to order strokes it can't match 1:1.
+ */
+const GUIDE_MAX_DISTANCE = 0.06;
 
 export function hasCanonicalStrokeOrder(char: string): boolean {
   return CANONICAL_STROKE_ORDER.test(char);
@@ -713,12 +727,26 @@ export function runGeometryPipeline(
             `stroke order: forced dataset match with ${match.referenceCount} reference vs ${match.extractedCount} extracted strokes`,
           );
         }
-      } else if (!countsAgree) {
-        warnings.push(
-          `stroke order: ${match.referenceCount} reference vs ${match.extractedCount} extracted strokes — heuristic order kept`,
-        );
       } else {
-        warnings.push(`stroke order: match cost ${match.meanCost.toFixed(3)} above ${AUTO_MAX_MEAN_COST} — heuristic order kept`);
+        const why = countsAgree
+          ? `match cost ${match.meanCost.toFixed(3)} above ${AUTO_MAX_MEAN_COST}`
+          : `${match.referenceCount} reference vs ${match.extractedCount} extracted strokes`;
+        // Where the order is standardized, the reference still orders ink it
+        // can't pair 1:1 with (a cursive font's merged jamo).
+        const guided = GUIDED_STROKE_ORDER.test(input.char)
+          ? guideOrderByReference(
+              outStrokes.map((s) => s.points),
+              reference.strokes,
+              glyphDiag,
+            )
+          : null;
+        if (guided && guided.meanDistance <= GUIDE_MAX_DISTANCE) {
+          plan = { sequence: guided.sequence, reverse: guided.reverse };
+          strokeOrderSource = 'guided';
+          warnings.push(`stroke order: ${why} — ordered along the '${reference.source}' reference`);
+        } else {
+          warnings.push(`stroke order: ${why} — heuristic order kept`);
+        }
       }
     }
   }

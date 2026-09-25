@@ -26,6 +26,8 @@ export interface GlyphStrokeOrderReport {
   applied: boolean;
   /** True when applying required re-grouping the strokes (split/merge to the dataset segmentation). */
   regrouped: boolean;
+  /** True when no 1:1 match held but the strokes were ordered along the reference instead. */
+  guided: boolean;
   warnings: string[];
 }
 
@@ -41,6 +43,8 @@ export interface StrokeOrderSummary {
   applied: number;
   /** Of applied: needed stroke re-grouping (split/merge) to match the dataset. */
   regrouped: number;
+  /** Of withReference: not applied, but ordered along the reference. */
+  guided: number;
   /** Mean cost over applied glyphs (0 when none). */
   meanCostApplied: number;
   /** Worst count mismatches, largest |extracted - reference| first. */
@@ -69,6 +73,7 @@ export function summarizeStrokeOrderReports(glyphs: GlyphStrokeOrderReport[], mi
     countsAgree: agree.length,
     applied: applied.length,
     regrouped: applied.filter((g) => g.regrouped).length,
+    guided: withRef.filter((g) => g.guided).length,
     meanCostApplied,
     worstCountMismatches,
     highestCostApplied,
@@ -123,6 +128,7 @@ export async function runStrokeOrderReport(
       meanCost,
       applied: result.strokeOrderSource === 'dataset',
       regrouped: result.strokeOrderRegrouped === true,
+      guided: result.strokeOrderSource === 'guided',
       warnings: result.warnings,
     });
   }
@@ -141,6 +147,7 @@ export function formatStrokeOrderSummary(s: StrokeOrderSummary): string {
     `count agreement:    ${s.countsAgree}/${s.withReference} (${pct(s.countsAgree, s.withReference)})`,
     `dataset applied:    ${s.applied}/${s.withReference} (${pct(s.applied, s.withReference)})`,
     `  via re-grouping:  ${s.regrouped}/${s.applied} (${pct(s.regrouped, s.applied)})`,
+    `reference-guided:   ${s.guided}/${s.withReference} (${pct(s.guided, s.withReference)})`,
     `mean cost (applied): ${s.meanCostApplied.toFixed(4)}`,
   ];
   if (s.worstCountMismatches.length > 0) {

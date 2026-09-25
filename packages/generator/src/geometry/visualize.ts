@@ -367,7 +367,11 @@ function renderReference(result: GeometryPipelineResult): string {
   });
 
   const applied =
-    result.strokeOrderSource === 'dataset' ? ` · ${ref.source} order applied${result.strokeOrderRegrouped ? ' (re-grouped)' : ''}` : '';
+    result.strokeOrderSource === 'dataset'
+      ? ` · ${ref.source} order applied${result.strokeOrderRegrouped ? ' (re-grouped)' : ''}`
+      : result.strokeOrderSource === 'guided'
+        ? ` · ordered along ${ref.source}`
+        : '';
   const counts = `${result.strokesFontUnits.length} extracted / ${n} reference${applied}`;
   const countColor = result.strokesFontUnits.length === n ? '#3a7d44' : '#c0392b';
   parts.push(

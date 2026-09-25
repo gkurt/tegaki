@@ -67,6 +67,7 @@ export function registerReference(ref: ReferenceGlyph, inkBBox: BBox): Registere
 
   const strokes: ReferenceStroke[] = ref.strokes.map((s) => ({
     ...(s.type !== undefined ? { type: s.type } : {}),
+    ...(s.group !== undefined ? { group: s.group } : {}),
     points: s.points.map((p) => ({ x: p.x * scaleX + offsetX, y: p.y * scaleY + offsetY })),
   }));
 
