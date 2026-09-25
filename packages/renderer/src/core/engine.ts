@@ -36,7 +36,7 @@ import {
   type SvgTextRun,
 } from '../lib/svgExport.ts';
 import type { TextLayout } from '../lib/textLayout.ts';
-import { applyShaperPositions, computeLayoutBbox, computeTextLayout, lineWords, midWordBreaks } from '../lib/textLayout.ts';
+import { applyShaperPositions, computeLayoutBbox, computeTextLayout, lineWords, softBreaks } from '../lib/textLayout.ts';
 import type { Timeline, TimelineConfig, TimelineEntry } from '../lib/timeline.ts';
 import { computeTimeline } from '../lib/timeline.ts';
 import { cssFontFamily, drawsFallbackGlyphs, graphemes, lookupGlyphData } from '../lib/utils.ts';
@@ -1173,8 +1173,8 @@ export class TegakiEngine {
 
   private _recomputeTimeline(): void {
     if (this._font && this._text) {
-      const softBreaks = this._softBreaks?.text === this._text ? this._softBreaks.offsets : undefined;
-      this._timeline = computeTimeline(this._text, this._font, this._timing, this._shaper, this._shapeOptions(), softBreaks);
+      const wraps = this._softBreaks?.text === this._text ? this._softBreaks.offsets : undefined;
+      this._timeline = computeTimeline(this._text, this._font, this._timing, this._shaper, this._shapeOptions(), wraps);
     } else {
       this._timeline = { entries: [] as TimelineEntry[], totalDuration: 0 };
     }
@@ -1222,11 +1222,11 @@ export class TegakiEngine {
       this._layoutKey = key;
       let layout = computeTextLayout(this._overlayEl, this._fontSize);
       if (this._shaper && this._font) {
-        // A word wrapped inside is shaped in two pieces, as the browser draws
-        // it: a ligature across the wrap splits back into its letters. The
-        // timeline was shaped without knowing the wraps, so reshape it when
-        // they change.
-        const breaks = midWordBreaks(layout, this._text);
+        // The browser reshapes the text around each wrap: a ligature across
+        // one splits back into its letters, and the word after it loses the
+        // contextual forms the words before gave it. The timeline was shaped
+        // without knowing the wraps, so reshape it when they change.
+        const breaks = softBreaks(layout, this._text);
         const known = this._softBreaks?.text === this._text ? this._softBreaks.offsets : [];
         if (breaks.join() !== known.join()) {
           this._softBreaks = { text: this._text, offsets: breaks };
@@ -1770,8 +1770,9 @@ export class TegakiEngine {
       // Draw each word where the DOM put it, as a single string so the
       // browser's shaper sees the whole word — per-character fillText would
       // drop ligatures, kerning, and script-specific contextual forms (Arabic
-      // init/medi/fina, Indic conjuncts, etc.). Browsers shape each word on
-      // its own anyway, so nothing crosses a word gap. Anchoring words rather
+      // init/medi/fina, Indic conjuncts, etc.). A contextual form reaching
+      // across a space (Caveat's calt) is lost, but this path only runs when
+      // the text draws characters the shaper has no outline for. Anchoring words rather
       // than lines keeps the mask aligned where the canvas shapes a word
       // differently from the DOM, and needs no bidi reordering across words:
       // the anchors carry the DOM's order (a word switching direction is

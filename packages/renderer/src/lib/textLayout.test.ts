@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ShapedGlyph } from './shaper.ts';
-import { lineWords, midWordBreaks, positionLineGlyphs, type TextLayout } from './textLayout.ts';
+import { lineWords, positionLineGlyphs, softBreaks, type TextLayout } from './textLayout.ts';
 
 /** One glyph per UTF-16 unit, each `ax` units wide, in the order given. */
 function glyphs(clusters: number[], ax = 500): ShapedGlyph[] {
@@ -186,14 +186,14 @@ describe('lineWords', () => {
   });
 });
 
-describe('midWordBreaks', () => {
+describe('softBreaks', () => {
   /** A layout of `lines` grapheme indices; offsets and widths don't matter here. */
   const layout = (lines: number[][]): TextLayout => ({ lines, charOffsets: [], charWidths: [] });
 
-  test('a word wrapped inside breaks at the first grapheme of the next line ("Handw" / "riting")', () => {
+  test('each wrap breaks at the first grapheme of the next line, inside a word ("Handw" / "riting") or after a space', () => {
     const text = 'Handwriting is';
     expect(
-      midWordBreaks(
+      softBreaks(
         layout([
           [0, 1, 2, 3, 4],
           [5, 6, 7, 8, 9, 10, 11],
@@ -201,23 +201,14 @@ describe('midWordBreaks', () => {
         ]),
         text,
       ),
-    ).toEqual([5]);
+    ).toEqual([5, 12]);
   });
 
-  test('wraps at spaces and newlines are not breaks inside a word', () => {
-    expect(
-      midWordBreaks(
-        layout([
-          [0, 1],
-          [2, 3],
-        ]),
-        'a b',
-      ),
-    ).toEqual([]);
-    expect(midWordBreaks(layout([[0, 1], [2]]), 'a\nb')).toEqual([]);
+  test('a line ended by a newline is not a wrap', () => {
+    expect(softBreaks(layout([[0, 1], [2]]), 'a\nb')).toEqual([]);
   });
 
   test('offsets are UTF-16, past graphemes wider than one unit', () => {
-    expect(midWordBreaks(layout([[0, 1], [2]]), '👍🏽ab')).toEqual([5]);
+    expect(softBreaks(layout([[0, 1], [2]]), '👍🏽ab')).toEqual([5]);
   });
 });

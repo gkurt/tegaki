@@ -233,11 +233,10 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // harfbuzz needs wasm. Nominal glyphs still go through the char-keyed
   // `glyphData` path below.
   //
-  // The renderer's own shaper, not a re-implementation: it shapes each word
-  // in isolation (as the browser does for the clip mask), so a line shaped
-  // whole picks different contextual alternates. Caveat's calt cycles three
-  // forms of d; every glyph missing from glyphDataById falls back to the base
-  // letter's strokes, drawn under the alternate's clip mask.
+  // The renderer's own shaper, not a re-implementation, so the contextual
+  // alternates match what it draws — Caveat's calt cycles three forms of d,
+  // across spaces too. Every glyph missing from glyphDataById falls back to
+  // the base letter's strokes, drawn under the alternate's clip mask.
   const [variantData, setVariantData] = useState<{ key: string; data: Record<string, TegakiGlyphData> } | null>(null);
   const variantShaper = useMemo(
     () =>

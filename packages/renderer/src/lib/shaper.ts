@@ -16,8 +16,9 @@ export interface ShapedGlyph {
   /** Y offset (displacement from pen position) in font units. */
   dy: number;
   /**
-   * The shaping run the glyph came from, when the shaper splits a word into
-   * several (a subset or direction switch). Runs come back in logical order,
+   * The shaping run the glyph came from, when the shaper splits the text into
+   * several (a subset, direction or script switch, or a wrapped line's ends
+   * reshaped on their own). Runs come back in logical order,
    * each in its own visual order, so the layout anchors each where the DOM's
    * bidi put it instead of walking one into the next.
    */
@@ -47,6 +48,14 @@ export interface ShapeOptions {
    * where the line shaped alone would give it the Arabic after it.
    */
   scriptBefore?: string | null;
+  /**
+   * The UTF-16 offsets where the layout wraps the text onto a new line (not
+   * `\n`s: shape each paragraph on its own). The text is shaped whole as one
+   * paragraph, as the browser shapes it, and each wrapped line's ends are
+   * reshaped where the browser reshapes them — so pass the wraps the DOM
+   * made, or the glyphs around them won't be the ones it draws.
+   */
+  lineBreaks?: readonly number[];
 }
 
 export interface BundleShaper {

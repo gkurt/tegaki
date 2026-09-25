@@ -84,18 +84,24 @@ const CASES: PreviewCase[] = [
     params: { t: 'ss', tm: 'controlled', ct: 1000, fs: 128, w: 300, h: 220 },
   },
   {
-    // Regression: harfbuzz used to see "s s" as one buffer, so Caveat's calt
-    // fired across the space and the canvas drew a variant glyph for the
-    // second `s` that the DOM-rendered overlay never produced. The shaper
-    // now tokenises at whitespace, mirroring how the browser shapes each
-    // word independently — both `s`s should be the nominal glyph.
-    name: 'calt-not-across-space',
-    params: { t: 's s', tm: 'controlled', ct: 1000, fs: 128, w: 400, h: 220 },
+    // Regression: the shaper used to shape each word on its own, but Chrome
+    // shapes the paragraph whole and Caveat's calt reaches across the space,
+    // so the overlay drew the second `s` as an alternate the canvas didn't.
+    // The overlay (ol=1) under the ink shows any glyph that differs.
+    name: 'calt-across-space',
+    params: { t: 's s', tm: 'controlled', ct: 1000, fs: 128, w: 400, h: 220, ol: 1 },
+  },
+  {
+    // Chrome reshapes a wrapped line's start on its own — up to the first
+    // glyph safe to break before — and keeps the rest as the paragraph shaped
+    // it: the `Wor` of the second line lose the alternates `Hello` gave them,
+    // the `ld` keep theirs. The overlay (ol=1) shows any glyph that differs.
+    name: 'calt-reshaped-at-wrap',
+    params: { t: 'Hello World ss', tm: 'controlled', ct: 1000, fs: 96, w: 330, h: 260, ol: 1 },
   },
   {
     // Three consecutive `s`s exercise multiple within-word calt
-    // substitutions in a single segment. Pairs with `calt-not-across-space`
-    // to lock in "split at whitespace, but only at whitespace".
+    // substitutions in a single run.
     name: 'calt-triple-s',
     params: { t: 'sss', tm: 'controlled', ct: 1000, fs: 128, w: 400, h: 220 },
   },

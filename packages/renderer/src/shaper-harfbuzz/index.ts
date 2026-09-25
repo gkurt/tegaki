@@ -1,4 +1,4 @@
-import { Blob, Direction, Face, Feature, Font, Buffer as HbBuffer, shape } from 'harfbuzzjs';
+import { Blob, Direction, Face, Feature, Font, GlyphFlag, Buffer as HbBuffer, shape } from 'harfbuzzjs';
 import type { ShaperFactory } from '../core/shaper-registry.ts';
 import { paragraphDirection, resolvedDirections } from '../lib/bidi.ts';
 import { LETTER_SPACED_OFF_FEATURES } from '../lib/features.ts';
@@ -15,9 +15,9 @@ interface LineItems {
 const SHAPER_MANAGED_FEATURES = new Set(['init', 'medi', 'fina', 'isol', 'rlig', 'frac', 'numr', 'dnom']);
 
 /**
- * Whitespace boundaries split shaping runs (see `BundleShaper.shape`).
- * Covers ASCII whitespace plus the Unicode space block — anything browsers
- * also treat as a word separator for line-breaking and text shaping.
+ * A line wrapped at whitespace keeps its end as the paragraph shaped it (see
+ * `lineReshapeSpans`). Covers ASCII whitespace plus the Unicode space block —
+ * anything browsers also treat as a word separator for line-breaking.
  */
 export function isShapingWhitespace(code: number): boolean {
   return (
@@ -37,35 +37,39 @@ export function isShapingWhitespace(code: number): boolean {
   );
 }
 
-/** A run of consecutive characters with the same `isWhitespace` classification. */
-export interface ShapingSegment {
-  text: string;
-  /** UTF-16 offset of `text` in the original input. */
-  offset: number;
-  isWhitespace: boolean;
+/** A cluster of a shaped paragraph: its first UTF-16 offset, and whether the text can be broken before it without changing the shaping. */
+export interface ShapedCluster {
+  cl: number;
+  safe: boolean;
 }
 
 /**
- * Tokenise `text` into alternating whitespace / non-whitespace segments.
- * Browsers shape each non-whitespace word in isolation, so contextual
- * features (calt/liga/clig) never bridge a space; we want the same here so
- * canvas output matches the DOM overlay's glyphs.
+ * How Chrome sets one line `[start, end)` of a wrapped paragraph: it shapes
+ * the paragraph once, then reshapes only what a break changes. The line's
+ * head, `[start, headEnd)`, up to the first cluster the paragraph can be
+ * broken before (harfbuzz's unsafe-to-break flag), is shaped on its own: the
+ * context before the wrap is gone. So is its tail, `[tailStart, end)`, back
+ * from the last such cluster, when `reshapeEnd` — a break inside a word;
+ * Chrome keeps a line ending at a space as the paragraph shaped it. The body
+ * between keeps the paragraph's glyphs. Caveat's `calt` reaches across
+ * spaces, so in `Hello World` wrapped before `World` the `Wor` are drawn as
+ * they are alone and the `ld` as they are after `Hello`. A line with no safe
+ * cluster is shaped whole (`headEnd === end`).
+ *
+ * `clusters` are the paragraph's, ascending by `cl`.
  */
-export function splitForShaping(text: string): ShapingSegment[] {
-  const out: ShapingSegment[] = [];
-  if (!text) return out;
-  let segStart = 0;
-  let segIsWs = isShapingWhitespace(text.charCodeAt(0));
-  for (let i = 1; i <= text.length; i++) {
-    const atEnd = i === text.length;
-    const isWs = !atEnd && isShapingWhitespace(text.charCodeAt(i));
-    if (atEnd || isWs !== segIsWs) {
-      out.push({ text: text.slice(segStart, i), offset: segStart, isWhitespace: segIsWs });
-      segStart = i;
-      segIsWs = isWs;
-    }
-  }
-  return out;
+export function lineReshapeSpans(
+  clusters: readonly ShapedCluster[],
+  start: number,
+  end: number,
+  reshapeEnd: boolean,
+): { headEnd: number; tailStart: number } {
+  const headEnd = clusters.find((c) => c.cl >= start && c.cl < end && c.safe)?.cl ?? end;
+  if (!reshapeEnd || headEnd === end || clusters.some((c) => c.cl === end && c.safe)) return { headEnd, tailStart: end };
+  let tailStart = headEnd;
+  for (const c of clusters) if (c.cl > headEnd && c.cl < end && c.safe) tailStart = c.cl;
+  // Nothing safe between the head and the end: the whole line is shaped alone.
+  return tailStart === headEnd ? { headEnd: end, tailStart: end } : { headEnd, tailStart };
 }
 
 /** Build a harfbuzz feature string from bundle features, filtering shaper-managed enables. */
@@ -126,6 +130,8 @@ export async function createHarfbuzzShaper(bundle: TegakiBundle, fonts?: readonl
   // guess from the script (Arabic-Indic digits would otherwise shape RTL),
   // and `script` its guess from the text (a lone bracket has none, and
   // harfbuzz would skip the font's Latin or Arabic substitutions for it).
+  // The cluster of each glyph harfbuzz flags unsafe to break before goes
+  // into `unsafe`, when given.
   const outlines = new Map<string, string | null>();
   let nextRun = 0;
   const shapeRun = (
@@ -135,6 +141,7 @@ export async function createHarfbuzzShaper(bundle: TegakiBundle, fonts?: readonl
     features: Feature[],
     direction?: 'ltr' | 'rtl' | null,
     script?: string | null,
+    unsafe?: Set<number>,
   ): ShapedGlyph[] => {
     const subset = subsets[subsetIdx]!;
     const buffer = new HbBuffer();
@@ -146,6 +153,7 @@ export async function createHarfbuzzShaper(bundle: TegakiBundle, fonts?: readonl
     const infos = buffer.getGlyphInfosAndPositions();
     const prefix = subsetIdx === 0 ? '' : `${subsetIdx}:`;
     const run = nextRun++;
+    if (unsafe) for (const g of infos) if (g.flags & GlyphFlag.UNSAFE_TO_BREAK) unsafe.add(runStart + g.cluster);
     return infos.map((g) => ({
       g: `${prefix}${g.codepoint}`,
       cl: runStart + g.cluster,
@@ -169,7 +177,7 @@ export async function createHarfbuzzShaper(bundle: TegakiBundle, fonts?: readonl
     return -1;
   };
 
-  // Shape a whitespace-free segment as one harfbuzz run per subset,
+  // Shape a span of the paragraph as one harfbuzz run per subset,
   // direction and script, as browsers itemize text: a subset switch changes
   // the font, a direction switch (Hebrew then Latin in one word) the buffer
   // direction harfbuzz shapes with — one buffer would reverse the Latin
@@ -180,7 +188,7 @@ export async function createHarfbuzzShaper(bundle: TegakiBundle, fonts?: readonl
   // unmirrored with the font's Latin bracket as the browser draws it, not in
   // the Arabic run. Returns glyphs with `cl` already offset to the original
   // text.
-  const shapeSegment = (line: LineItems, segText: string, segOffset: number, features: Feature[]): ShapedGlyph[] => {
+  const shapeSegment = (line: LineItems, segText: string, segOffset: number, features: Feature[], unsafe?: Set<number>): ShapedGlyph[] => {
     const out: ShapedGlyph[] = [];
     let runStart = 0;
     let runSubset = -2;
@@ -189,7 +197,7 @@ export async function createHarfbuzzShaper(bundle: TegakiBundle, fonts?: readonl
     const flush = (endUtf16: number) => {
       if (endUtf16 === runStart) return;
       const effective = runSubset < 0 ? 0 : runSubset;
-      out.push(...shapeRun(effective, segText.slice(runStart, endUtf16), segOffset + runStart, features, runDirection, runScript));
+      out.push(...shapeRun(effective, segText.slice(runStart, endUtf16), segOffset + runStart, features, runDirection, runScript, unsafe));
     };
     for (let i = 0; i < segText.length; ) {
       const cp = segText.codePointAt(i) ?? segText.charCodeAt(i);
@@ -212,16 +220,6 @@ export async function createHarfbuzzShaper(bundle: TegakiBundle, fonts?: readonl
     return out;
   };
 
-  // Pick the dominant subset of a non-whitespace segment from its first
-  // codepoint. Used to route an adjacent whitespace segment through the
-  // matching font when shaping with neighbour context.
-  const dominantSubset = (segText: string): number => {
-    if (!segText) return 0;
-    const cp = segText.codePointAt(0) ?? segText.charCodeAt(0);
-    const sub = pickSubset(cp);
-    return sub < 0 ? 0 : sub;
-  };
-
   return {
     shape(text: string, options?: ShapeOptions): ShapedGlyph[] {
       if (!text) return [];
@@ -229,64 +227,26 @@ export async function createHarfbuzzShaper(bundle: TegakiBundle, fonts?: readonl
       const features = options?.letterSpaced ? spacedFeatures : defaultFeatures;
       const base = options?.direction ?? paragraphDirection(text);
       const line: LineItems = { directions: resolvedDirections(text, base), scripts: resolvedScripts(text, options?.scriptBefore ?? null) };
-      // Browsers tokenise at whitespace before shaping (each word is its
-      // own HB run), so contextual features like `calt`, `liga`, and
-      // `clig` never see characters across a space. Mirror that here:
-      // shape each whitespace-delimited segment in isolation so canvas
-      // output matches what the DOM overlay renders. Without this, fonts
-      // like Caveat would calt the second `s` of "s s" via the first one
-      // — the canvas would diverge from CSS-shaped text.
-      //
-      // Whitespace segments themselves still need GPOS context: many
-      // Arabic fonts (e.g. Aref Ruqaa) shrink the space advance via a
-      // contextual lookup when it's flanked by Arabic letters — shaping
-      // " " in isolation misses that and the canvas drifts from the DOM
-      // overlay by the leftover advance. So for whitespace segments,
-      // shape together with a non-whitespace neighbour and emit only the
-      // glyphs whose cluster falls inside the whitespace range. The
-      // neighbour's own glyphs are still produced by its own isolated
-      // shapeSegment call, so cross-space calt/liga stay suppressed.
-      const segments = splitForShaping(text);
+      // Chrome shapes the paragraph whole — contextual lookups reach across
+      // spaces (Caveat's `calt` swaps `World`'s letters after `Hello`), and an
+      // Arabic font's GPOS narrows the space between two words — so shape it
+      // whole too, then reshape each wrapped line's ends as Chrome's line
+      // breaker does (see `lineReshapeSpans`).
+      const unsafe = new Set<number>();
+      const paragraph = shapeSegment(line, text, 0, features, unsafe);
+      const breaks = [...new Set(options?.lineBreaks ?? [])].filter((b) => b > 0 && b < text.length).sort((a, b) => a - b);
+      if (breaks.length === 0) return paragraph;
+      const clusters = [...new Set(paragraph.map((g) => g.cl))].sort((a, b) => a - b).map((cl) => ({ cl, safe: !unsafe.has(cl) }));
+      const bounds = [0, ...breaks, text.length];
       const out: ShapedGlyph[] = [];
-      for (let i = 0; i < segments.length; i++) {
-        const seg = segments[i]!;
-        if (!seg.isWhitespace) {
-          out.push(...shapeSegment(line, seg.text, seg.offset, features));
-          continue;
-        }
-        // Prefer a preceding neighbour — for scripts whose contextual rules
-        // care about post-letter position (Arabic space-after-letter), the
-        // preceding word is the relevant context. Fall back to the next
-        // neighbour for leading whitespace.
-        let neighbourIdx = -1;
-        for (let j = i - 1; j >= 0; j--) {
-          if (!segments[j]!.isWhitespace) {
-            neighbourIdx = j;
-            break;
-          }
-        }
-        if (neighbourIdx < 0) {
-          for (let j = i + 1; j < segments.length; j++) {
-            if (!segments[j]!.isWhitespace) {
-              neighbourIdx = j;
-              break;
-            }
-          }
-        }
-        if (neighbourIdx < 0) {
-          // All-whitespace input — no context to borrow, shape standalone.
-          out.push(...shapeSegment(line, seg.text, seg.offset, features));
-          continue;
-        }
-        const neighbour = segments[neighbourIdx]!;
-        const subset = dominantSubset(neighbour.text);
-        const composite = neighbourIdx < i ? `${neighbour.text}${seg.text}` : `${seg.text}${neighbour.text}`;
-        const compositeOffset = neighbourIdx < i ? neighbour.offset : seg.offset;
-        const wsStart = seg.offset;
-        const wsEnd = seg.offset + seg.text.length;
-        for (const g of shapeRun(subset, composite, compositeOffset, features)) {
-          if (g.cl >= wsStart && g.cl < wsEnd) out.push(g);
-        }
+      for (let i = 0; i + 1 < bounds.length; i++) {
+        const start = bounds[i]!;
+        const end = bounds[i + 1]!;
+        const reshapeEnd = end < text.length && !isShapingWhitespace(text.charCodeAt(end - 1));
+        const { headEnd, tailStart } = lineReshapeSpans(clusters, start, end, reshapeEnd);
+        if (headEnd > start) out.push(...shapeSegment(line, text.slice(start, headEnd), start, features));
+        for (const g of paragraph) if (g.cl >= headEnd && g.cl < tailStart) out.push(g);
+        if (tailStart < end) out.push(...shapeSegment(line, text.slice(tailStart, end), tailStart, features));
       }
       return out;
     },

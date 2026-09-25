@@ -101,13 +101,15 @@ export function lineWords(layout: TextLayout, characters: readonly string[], lin
 }
 
 /**
- * The UTF-16 offsets of `text` where the layout wraps a line inside a word —
- * a word too long for the line, broken by `overflow-wrap: break-word`. The
- * browser shapes each side of the break on its own: Dancing Script's `wr`
- * ligature broken as `Handw` / `riting` draws a plain w and a plain r. Wraps
- * at whitespace and `\n` aren't listed; the shaper never shapes across those.
+ * The UTF-16 offsets of `text` where the layout wraps a line — after a space,
+ * or inside a word too long for the line (`overflow-wrap: break-word`). The
+ * browser reshapes the text around each (see `ShapeOptions.lineBreaks`):
+ * Caveat's `World` wrapped after `Hello` loses the alternates `Hello` gave
+ * its first letters, and Dancing Script's `wr` ligature broken as `Handw` /
+ * `riting` draws a plain w and a plain r. Breaks at `\n` aren't listed; the
+ * shaper shapes each paragraph on its own.
  */
-export function midWordBreaks(layout: TextLayout, text: string): number[] {
+export function softBreaks(layout: TextLayout, text: string): number[] {
   const chars = graphemes(text);
   const startU: number[] = [];
   let u = 0;
@@ -120,11 +122,7 @@ export function midWordBreaks(layout: TextLayout, text: string): number[] {
   for (const line of layout.lines) {
     const first = line[0];
     if (first === undefined) continue;
-    const before = prev === undefined ? undefined : chars[prev];
-    const after = chars[first];
-    if (before !== undefined && after !== undefined && !WHITESPACE_RE.test(before) && !WHITESPACE_RE.test(after)) {
-      breaks.push(startU[first]!);
-    }
+    if (prev !== undefined && chars[prev] !== '\n') breaks.push(startU[first]!);
     prev = line[line.length - 1];
   }
   return breaks;
@@ -399,22 +397,48 @@ function placeShapedGlyphs(
     }
   }
 
-  for (let li = 0; li < layout.lines.length; li++) {
-    const lineIndices = layout.lines[li]!;
+  // Each line's UTF-16 span, without its `\n`; null for a line of only a `\n`.
+  const lineSpans = layout.lines.map((lineIndices): [number, number] | null => {
     const realIndices = lineIndices.filter((idx) => chars[idx] !== '\n');
-    if (realIndices.length === 0) continue;
-
-    const lineStartU = graphemeStartU[realIndices[0]!]!;
+    if (realIndices.length === 0) return null;
     const lastReal = realIndices[realIndices.length - 1]!;
-    const lineEndU = graphemeStartU[lastReal]! + chars[lastReal]!.length;
+    return [graphemeStartU[realIndices[0]!]!, graphemeStartU[lastReal]! + chars[lastReal]!.length];
+  });
 
-    const lineText = text.slice(lineStartU, lineEndU);
+  // Shape each paragraph (the lines up to a `\n`) whole, as the DOM does,
+  // with its wraps, and hand each line its own glyphs, clusters from its start.
+  const lineShaped: ShapedGlyph[][] = layout.lines.map(() => []);
+  let paraFirst = 0;
+  for (let li = 0; li < layout.lines.length; li++) {
+    if (li < layout.lines.length - 1 && !layout.lines[li]!.some((idx) => chars[idx] === '\n')) continue;
+    const members: number[] = [];
+    for (let l = paraFirst; l <= li; l++) if (lineSpans[l]) members.push(l);
+    paraFirst = li + 1;
+    if (members.length === 0) continue;
+    const paraStartU = lineSpans[members[0]!]![0];
+    const paraEndU = lineSpans[members[members.length - 1]!]![1];
     // Each line alone would pick its own `dir="auto"` direction; the DOM's is the paragraph's.
-    const shaped = shaper.shape(lineText, {
+    const shaped = shaper.shape(text.slice(paraStartU, paraEndU), {
       letterSpaced: letterSpacingEm !== 0,
       direction: layout.direction ?? 'ltr',
-      scriptBefore: trailingScript(text.slice(0, lineStartU)),
+      scriptBefore: trailingScript(text.slice(0, paraStartU)),
+      lineBreaks: members.slice(1).map((l) => lineSpans[l]![0] - paraStartU),
     });
+    for (const l of members) {
+      const [start, end] = lineSpans[l]!;
+      const from = start - paraStartU;
+      const to = end - paraStartU;
+      for (const g of shaped) if (g.cl >= from && g.cl < to) lineShaped[l]!.push({ ...g, cl: g.cl - from });
+    }
+  }
+
+  for (let li = 0; li < layout.lines.length; li++) {
+    const span = lineSpans[li];
+    if (!span) continue;
+    const [lineStartU, lineEndU] = span;
+    const lineText = text.slice(lineStartU, lineEndU);
+    const realIndices = layout.lines[li]!.filter((idx) => chars[idx] !== '\n');
+    const shaped = lineShaped[li]!;
     if (shaped.length === 0) continue;
     const anchor = anchors(lineText, shaped, lineStartU, lineEndU);
     if (!anchor) continue;
@@ -514,9 +538,9 @@ export function headlessShapedLayout(
 
 /**
  * Visual-left anchors (em) of a shaped line's words and runs, keyed by their
- * first UTF-16 offset, and the line's width. The shaper returns words in
- * logical order; each word — or run of one, where it switches font subset or
- * direction — takes a bidi level from its resolved direction, and rule L2
+ * first UTF-16 offset, and the line's width. Each word — or run of one, where
+ * it switches font subset or direction — in logical order takes a bidi level
+ * from its resolved direction, and rule L2
  * reverses every sequence at or above each odd level to get the visual order.
  */
 export function bidiWordAnchors(
@@ -552,6 +576,9 @@ export function bidiWordAnchors(
   }
   // Letter spacing follows every character (cluster).
   for (const u of units) u.width += u.clusters.size * letterSpacingEm;
+  // A right-to-left run of several words comes back in visual order, its
+  // last word first; L2 needs the logical one.
+  units.sort((a, b) => a.start - b.start);
 
   // L2: from the highest level down to the lowest odd one, reverse each run at or above it.
   const order = units.map((_, i) => i);
@@ -588,9 +615,9 @@ export interface PositionedGlyph {
 }
 
 /**
- * Place one line's shaped glyphs. The shaper shapes each whitespace-delimited
- * word on its own and returns the words in LOGICAL order, each word's glyphs
- * already in visual order (an RTL word comes out right to left). Arranging
+ * Place one line's shaped glyphs. The shaper returns its runs in LOGICAL
+ * order, each run's glyphs already in visual order (an RTL run comes out
+ * right to left, its last word first). Arranging
  * the words visually is the Unicode bidi algorithm's job, with the
  * paragraph's base direction — which `dir="auto"` takes from the first strong
  * character, so an Arabic line opening with a Latin word is laid out LTR. The
@@ -601,7 +628,8 @@ export interface PositionedGlyph {
  * one.
  *
  * A word the shaper split into several runs (`ShapedGlyph.run` — a subset or
- * direction switch, as in `מדהיםa`) gets the same treatment per run: the runs
+ * direction switch, as in `מדהיםa`, or a wrapped line's reshaped head) gets
+ * the same treatment per run: the runs
  * come back in logical order, which is not the visual one when the word mixes
  * directions, so each run is anchored where the DOM put it.
  *

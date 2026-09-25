@@ -20,21 +20,25 @@ export interface ShapedGlyphRef {
 }
 
 /**
- * Every distinct glyph the renderer's shaper emits for `text`, line by line
- * as the engine lays it out. Collecting from the renderer's own shaper keeps
- * the bundle's `glyphDataById` in step with what gets drawn: it shapes each
- * word in isolation, so contextual alternates (Caveat's calt) differ from a
- * line shaped whole, and any glyph missing here would be drawn with its base
- * letter's strokes under the alternate's clip mask. `options` must match the
- * renderer's (letter-spaced text drops ligatures and contextual alternates).
- * Each line is shaped in the whole text's `dir="auto"` direction, as the
- * engine does, unless `options.direction` names one.
+ * Every distinct glyph the renderer's shaper emits for `text`, paragraph by
+ * paragraph as the engine lays it out. Collecting from the renderer's own
+ * shaper keeps the bundle's `glyphDataById` in step with what gets drawn:
+ * contextual alternates (Caveat's calt) depend on the letters before, across
+ * spaces too, and any glyph missing here would be drawn with its base letter's
+ * strokes under the alternate's clip mask. A wrap drops the context before it,
+ * so each word is also shaped as a line of its own — the forms it takes where
+ * the text wraps before it. `options` must match the renderer's (letter-spaced
+ * text drops ligatures and contextual alternates). Each paragraph is shaped in
+ * the whole text's `dir="auto"` direction, as the engine does, unless
+ * `options.direction` names one.
  */
 export function collectShapedGlyphs(shaper: BundleShaper, text: string, options?: ShapeOptions): ShapedGlyphRef[] {
   const out: ShapedGlyphRef[] = [];
   const seen = new Set<string>();
   const shapeOptions: ShapeOptions = { ...options, direction: options?.direction ?? paragraphDirection(text) };
-  for (const line of text.split('\n')) {
+  const paragraphs = text.split('\n');
+  const words = paragraphs.flatMap((p) => p.split(/\s+/u)).filter(Boolean);
+  for (const line of [...paragraphs, ...words]) {
     const shaped = shaper.shape(line, shapeOptions);
     const starts = [...new Set(shaped.map((g) => g.cl))].sort((a, b) => a - b);
     const glyphsPerCluster = new Map<number, number>();

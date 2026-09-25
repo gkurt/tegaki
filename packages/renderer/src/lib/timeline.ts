@@ -139,9 +139,10 @@ export interface Timeline {
 /**
  * `shapeOptions` must describe the text as it is laid out (letter-spaced or
  * not) so the shaper picks the glyphs the DOM draws. So must `softBreaks`:
- * the UTF-16 offsets where the layout wraps a line inside a word (see
- * `midWordBreaks`). The browser shapes each side of such a break on its own —
- * no ligature or contextual form spans it — and so does the timeline.
+ * the UTF-16 offsets where the layout wraps a line (see `softBreaks` in
+ * textLayout.ts). The browser reshapes the text around a wrap — no ligature
+ * or contextual form spans it — and so does the timeline (see
+ * `ShapeOptions.lineBreaks`).
  */
 export function computeTimeline(
   text: string,
@@ -537,18 +538,17 @@ function computeShapedTimeline(
     : null;
   const sched = staggerSched ? null : new Scheduler(glyphGap, wordGap, lineGap);
 
-  // Shape each line separately so shaping never crosses a break: the DOM
-  // layout breaks at `\n`, and wraps words it can't fit (`softBreaks`).
-  const wraps = new Set(softBreaks);
+  // Shape each paragraph (the text between `\n`s) whole, as the DOM does,
+  // with the wraps the layout made in it.
   let lineStart = 0;
   for (let i = 0; i <= text.length; i++) {
     const atEnd = i === text.length;
-    const wrap = !atEnd && i > lineStart && wraps.has(i);
-    if (!atEnd && text[i] !== '\n' && !wrap) continue;
+    if (!atEnd && text[i] !== '\n') continue;
 
     const lineText = text.slice(lineStart, i);
     if (lineText.length > 0) {
-      const shaped = shaper.shape(lineText, { ...shapeOptions, scriptBefore: trailingScript(text.slice(0, lineStart)) });
+      const lineBreaks = softBreaks.filter((b) => b > lineStart && b < i).map((b) => b - lineStart);
+      const shaped = shaper.shape(lineText, { ...shapeOptions, scriptBefore: trailingScript(text.slice(0, lineStart)), lineBreaks });
       // Harfbuzz emits glyphs in visual order (left-to-right on screen) regardless
       // of script direction. Sort by cluster offset so animation follows the
       // logical / reading order — matching how each script is actually
@@ -606,9 +606,7 @@ function computeShapedTimeline(
       }
     }
 
-    // A wrap inside a word continues the word on the next line, with no pause.
-    if (wrap) lineStart = i;
-    else if (!atEnd) {
+    if (!atEnd) {
       if (staggerSched) staggerSched.separator('line');
       else sched!.separate('line');
       lineStart = i + 1;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
-import type { BundleShaper, ShapedGlyph } from './shaper.ts';
+import type { BundleShaper, ShapedGlyph, ShapeOptions } from './shaper.ts';
 import { computeTimeline } from './timeline.ts';
 
 const stroke = (d: number, a: number) => ({ p: [[0, 0, 1] as [number, number, number]], d, a });
@@ -14,12 +14,14 @@ interface ScriptedGlyph {
 
 /**
  * Build a scripted shaper that returns a fixed glyph list per input. Used to
- * pin shaping behaviour without spinning up harfbuzz.
+ * pin shaping behaviour without spinning up harfbuzz. Text shaped with
+ * `lineBreaks` is planned as `"<text>|<breaks>"`.
  */
 function scriptedShaper(plan: Record<string, ScriptedGlyph[]>): BundleShaper {
   return {
-    shape(text: string): ShapedGlyph[] {
-      const out = plan[text];
+    shape(text: string, options?: ShapeOptions): ShapedGlyph[] {
+      const breaks = options?.lineBreaks ?? [];
+      const out = plan[breaks.length ? `${text}|${breaks.join()}` : text];
       if (!out) throw new Error(`scriptedShaper: no plan for ${JSON.stringify(text)}`);
       return out.map((g) => ({ g: g.g, cl: g.cl, ax: g.ax ?? 0, ay: 0, dx: 0, dy: 0 }));
     },
@@ -111,15 +113,17 @@ describe('computeTimeline soft breaks', () => {
   });
   const shaper = scriptedShaper({
     wr: [{ g: 'w_r', cl: 0, ax: 966 }],
-    w: [{ g: 'w', cl: 0, ax: 617 }],
-    r: [{ g: 'r', cl: 0, ax: 348 }],
+    'wr|1': [
+      { g: 'w', cl: 0, ax: 617 },
+      { g: 'r', cl: 1, ax: 348 },
+    ],
   });
 
   test('a word shaped whole draws its ligature', () => {
     expect(computeTimeline('wr', bundle, undefined, shaper).entries.map((e) => e.glyphId)).toEqual(['w_r']);
   });
 
-  test('a wrap inside the word shapes each side on its own, as the browser draws it', () => {
+  test('a wrap inside the word is handed to the shaper, which draws each side as the browser does', () => {
     const tl = computeTimeline('wr', bundle, undefined, shaper, undefined, [1]);
     expect(tl.entries.map((e) => [e.char, e.glyphId, e.graphemeIndex])).toEqual([
       ['w', 'w', 0],

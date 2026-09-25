@@ -276,7 +276,9 @@ The same script also runs a **web-component CDN smoke** ([e2e/examples/check-wc-
 
 ### Writing unit tests
 
-Prefer the smallest layer that exercises the behaviour. If logic is buried inside a closure or hook, lift it out into a pure helper, export it, and test that — the way `splitForShaping` and `isShapingWhitespace` are exported from [packages/renderer/src/shaper-harfbuzz/index.ts](packages/renderer/src/shaper-harfbuzz/index.ts) so [the tests](packages/renderer/src/shaper-harfbuzz/index.test.ts) can drive them without spinning up wasm. Each `test` should pin one behaviour, with a name that reads as the rule it locks in (e.g. `'"s s" splits into word, space, word — preventing calt across the gap'`).
+Prefer the smallest layer that exercises the behaviour. If logic is buried inside a closure or hook, lift it out into a pure helper, export it, and test that — the way `lineReshapeSpans` and `isShapingWhitespace` are exported from [packages/renderer/src/shaper-harfbuzz/index.ts](packages/renderer/src/shaper-harfbuzz/index.ts) so [the tests](packages/renderer/src/shaper-harfbuzz/index.test.ts) can drive them without spinning up wasm. Each `test` should pin one behaviour, with a name that reads as the rule it locks in (e.g. `'a line ending at a space keeps its end as the paragraph shaped it'`).
+
+The shaper shapes each paragraph whole, as Chrome does — contextual lookups reach across spaces (Caveat's `calt`) — and takes the layout's wraps as `ShapeOptions.lineBreaks`: a wrapped line's start is reshaped on its own up to the first glyph harfbuzz marks safe to break before, and a line broken inside a word has its end reshaped too (`lineReshapeSpans`). The engine passes every wrap the DOM made (`softBreaks` in [textLayout.ts](packages/renderer/src/lib/textLayout.ts)) to both the timeline and the layout, so both pick the glyphs the overlay draws.
 
 ### Visual snapshot tests
 

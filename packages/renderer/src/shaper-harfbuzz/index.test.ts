@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ShapedGlyph, ShapeOptions } from '../lib/shaper.ts';
 import type { TegakiBundle } from '../types.ts';
-import harfbuzzShaper, { isShapingWhitespace, splitForShaping, toHbFeatureString } from './index.ts';
+import harfbuzzShaper, { isShapingWhitespace, lineReshapeSpans, toHbFeatureString } from './index.ts';
 
 describe('toHbFeatureString', () => {
   test('returns empty string for empty list', () => {
@@ -53,103 +53,91 @@ describe('isShapingWhitespace', () => {
   });
 
   test('false for the zero-width-space family', () => {
-    // ZWSP / ZWNJ / ZWJ are joiner control characters, not shaping breaks —
-    // splitting at them would corrupt e.g. Arabic ligature suppression.
+    // ZWSP / ZWNJ / ZWJ are joiner control characters, not word separators.
     for (const cp of [0x200b, 0x200c, 0x200d, 0xfeff]) {
       expect(isShapingWhitespace(cp)).toBe(false);
     }
   });
 });
 
-describe('splitForShaping', () => {
-  test('empty string yields no segments', () => {
-    expect(splitForShaping('')).toEqual([]);
+describe('lineReshapeSpans', () => {
+  /** Clusters one UTF-16 unit each over `[0, length)`, safe to break before unless listed. */
+  const clusters = (length: number, unsafe: number[] = []) => Array.from({ length }, (_, cl) => ({ cl, safe: !unsafe.includes(cl) }));
+
+  test('a line starting at a safe cluster keeps every glyph the paragraph shaped', () => {
+    expect(lineReshapeSpans(clusters(10), 6, 10, false)).toEqual({ headEnd: 6, tailStart: 10 });
   });
 
-  test('single word produces one non-whitespace segment', () => {
-    expect(splitForShaping('hello')).toEqual([{ text: 'hello', offset: 0, isWhitespace: false }]);
+  test('a line starting at an unsafe cluster reshapes its head up to the first safe one ("Wor" of a wrapped "World")', () => {
+    expect(lineReshapeSpans(clusters(11, [6, 7, 8]), 6, 11, false)).toEqual({ headEnd: 9, tailStart: 11 });
   });
 
-  test('leading and trailing spaces produce dedicated whitespace segments', () => {
-    expect(splitForShaping('  hi  ')).toEqual([
-      { text: '  ', offset: 0, isWhitespace: true },
-      { text: 'hi', offset: 2, isWhitespace: false },
-      { text: '  ', offset: 4, isWhitespace: true },
-    ]);
+  test('a line ending at a space keeps its end as the paragraph shaped it', () => {
+    expect(lineReshapeSpans(clusters(10, [6, 7]), 0, 6, false)).toEqual({ headEnd: 0, tailStart: 6 });
   });
 
-  test('"s s" splits into word, space, word — preventing calt across the gap', () => {
-    // The regression: before the split, harfbuzz shaped "s s" as one buffer
-    // and Caveat's calt fired across the space, picking a variant for the
-    // second s that the browser-rendered overlay never produced.
-    expect(splitForShaping('s s')).toEqual([
-      { text: 's', offset: 0, isWhitespace: false },
-      { text: ' ', offset: 1, isWhitespace: true },
-      { text: 's', offset: 2, isWhitespace: false },
-    ]);
+  test('a line broken inside a word reshapes its tail back from the last safe cluster', () => {
+    expect(lineReshapeSpans(clusters(10, [4, 5, 6]), 0, 5, true)).toEqual({ headEnd: 0, tailStart: 3 });
   });
 
-  test('"ss" stays in one non-whitespace segment so within-word calt still fires', () => {
-    expect(splitForShaping('ss')).toEqual([{ text: 'ss', offset: 0, isWhitespace: false }]);
+  test('a break inside a cluster (a ligature split by the wrap) is never safe', () => {
+    const lig = [
+      { cl: 0, safe: true },
+      { cl: 1, safe: true },
+      { cl: 3, safe: true },
+    ];
+    expect(lineReshapeSpans(lig, 0, 2, true)).toEqual({ headEnd: 0, tailStart: 1 });
+    expect(lineReshapeSpans(lig, 2, 4, false)).toEqual({ headEnd: 3, tailStart: 4 });
   });
 
-  test('multi-word sentence splits at every space', () => {
-    expect(splitForShaping('Handwriting is awesome')).toEqual([
-      { text: 'Handwriting', offset: 0, isWhitespace: false },
-      { text: ' ', offset: 11, isWhitespace: true },
-      { text: 'is', offset: 12, isWhitespace: false },
-      { text: ' ', offset: 14, isWhitespace: true },
-      { text: 'awesome', offset: 15, isWhitespace: false },
-    ]);
+  test('a line with no safe cluster is shaped whole', () => {
+    expect(lineReshapeSpans(clusters(8, [3, 4, 5, 6]), 3, 6, true)).toEqual({ headEnd: 6, tailStart: 6 });
   });
 
-  test('runs of multiple spaces stay together as one whitespace segment', () => {
-    expect(splitForShaping('a   b')).toEqual([
-      { text: 'a', offset: 0, isWhitespace: false },
-      { text: '   ', offset: 1, isWhitespace: true },
-      { text: 'b', offset: 4, isWhitespace: false },
-    ]);
+  test('a line whose only safe cluster ends its head is shaped whole', () => {
+    expect(lineReshapeSpans(clusters(8, [3, 5, 6]), 3, 6, true)).toEqual({ headEnd: 6, tailStart: 6 });
+  });
+});
+
+describe('shaping across spaces', () => {
+  const caveatUrl = new URL('../../fonts/caveat/caveat.ttf', import.meta.url).href;
+  const caveat = () => harfbuzzShaper({ fontUrl: caveatUrl, features: ['calt', 'liga'], glyphDataById: {} } as unknown as TegakiBundle)!;
+  const glyphsOf = (shaped: ShapedGlyph[], at: number, length: number) =>
+    shaped.filter((g) => g.cl >= at && g.cl < at + length).map((g) => g.g);
+
+  test("Caveat's calt reaches across the space, as Chrome draws it: World after Hello takes other alternates", async () => {
+    const shaper = await caveat();
+    expect(glyphsOf(shaper.shape('Hello World'), 6, 5)).not.toEqual(glyphsOf(shaper.shape('World'), 0, 5));
   });
 
-  test('mixed whitespace kinds (tab + space) collapse into one whitespace segment', () => {
-    expect(splitForShaping('a\t b')).toEqual([
-      { text: 'a', offset: 0, isWhitespace: false },
-      { text: '\t ', offset: 1, isWhitespace: true },
-      { text: 'b', offset: 3, isWhitespace: false },
-    ]);
+  test('"s s" draws its second s as the alternate the first calls for', async () => {
+    const shaper = await caveat();
+    const [s] = glyphsOf(shaper.shape('s'), 0, 1);
+    expect(glyphsOf(shaper.shape('s s'), 2, 1)).not.toEqual([s]);
   });
 
-  test('all-whitespace input yields a single whitespace segment', () => {
-    expect(splitForShaping('   ')).toEqual([{ text: '   ', offset: 0, isWhitespace: true }]);
+  test('no wraps shape the text as one paragraph', async () => {
+    const shaper = await caveat();
+    expect(shaper.shape('Hello World', { lineBreaks: [] })).toEqual(shaper.shape('Hello World'));
   });
 
-  test('NBSP is treated as a shaping break', () => {
-    expect(splitForShaping('a b')).toEqual([
-      { text: 'a', offset: 0, isWhitespace: false },
-      { text: ' ', offset: 1, isWhitespace: true },
-      { text: 'b', offset: 2, isWhitespace: false },
-    ]);
+  test('a wrap before World redraws its head as World alone and keeps the rest from the paragraph', async () => {
+    const shaper = await caveat();
+    const wrapped = shaper.shape('Hello World', { lineBreaks: [6] });
+    const alone = glyphsOf(shaper.shape('World'), 0, 5);
+    const whole = glyphsOf(shaper.shape('Hello World'), 6, 5);
+    const drawn = glyphsOf(wrapped, 6, 5);
+    expect(drawn[0]).toBe(alone[0]!);
+    expect(drawn.at(-1)).toBe(whole.at(-1)!);
+    // The line before the wrap ends at a space: nothing on it changes.
+    expect(glyphsOf(wrapped, 0, 6)).toEqual(glyphsOf(shaper.shape('Hello World'), 0, 6));
   });
 
-  test('ZWJ stays inside the non-whitespace segment so joiner-driven shaping is preserved', () => {
-    // ZWJ (U+200D) is a control character used to force joining; splitting
-    // around it would corrupt Arabic / emoji sequence shaping.
-    expect(splitForShaping('a‍b')).toEqual([{ text: 'a‍b', offset: 0, isWhitespace: false }]);
-  });
-
-  test('offsets sum to original text length (round-trip)', () => {
-    const cases = ['', 'a', '   ', 'a b c', '  a  b  ', '\ta\nb\rc'];
-    for (const text of cases) {
-      const segs = splitForShaping(text);
-      const reconstructed = segs.map((s) => s.text).join('');
-      expect(reconstructed).toBe(text);
-      // Each segment's offset is the sum of preceding lengths.
-      let cursor = 0;
-      for (const s of segs) {
-        expect(s.offset).toBe(cursor);
-        cursor += s.text.length;
-      }
-    }
+  test('every character of a wrapped paragraph is drawn once, clusters ascending within each line', async () => {
+    const shaper = await caveat();
+    const text = 'Hello World ss s';
+    const wrapped = shaper.shape(text, { lineBreaks: [6, 15] });
+    expect(wrapped.map((g) => g.cl)).toEqual([...text].map((_, i) => i));
   });
 });
 
