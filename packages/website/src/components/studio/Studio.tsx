@@ -132,7 +132,7 @@ export function Studio() {
   }, [font, settings.chars, settings.options, settings.pipeline, settings.geometryOptions]);
 
   const [agentOpen, setAgentOpen] = useState(false);
-  const [glyphReport, setGlyphReport] = useState<{ char: string; warnings: string[] } | null>(null);
+  const [glyphReport, setGlyphReport] = useState<{ char: string; form?: string; warnings: string[] } | null>(null);
 
   const mode = settings.previewMode;
   const showInspector = inspectorOpen;

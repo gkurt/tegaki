@@ -57,8 +57,8 @@ export interface AgentPromptInput {
     mapped: number | null;
     recommended: { name: string; covered: number; total: number } | null;
   };
-  /** Glyph mode: the inspected glyph and its geometry-pipeline warnings. */
-  glyph: { char: string; warnings: string[] } | null;
+  /** Glyph mode: the inspected glyph (and form, when not its default glyph) and its geometry-pipeline warnings. */
+  glyph: { char: string; form?: string; warnings: string[] } | null;
   /** Origin + base path of the site, e.g. `https://gkurt.com/tegaki`. */
   siteUrl: string;
 }
@@ -131,6 +131,11 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
 
   if (glyph) {
     out.push('', `## Glyph I'm looking at: “${glyph.char}” (${codepoint(glyph.char)})`, '');
+    if (glyph.form)
+      out.push(
+        `Specifically its form \`${glyph.form}\` (a ligature or alternate the font substitutes in context — \`gv=<glyph id>\` in the studio URL).`,
+        '',
+      );
     if (glyph.warnings.length) {
       out.push('The geometry pipeline reports:');
       for (const w of glyph.warnings) out.push(`- ${w}`);
@@ -156,7 +161,7 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
     '- In /preview, wait for `body[data-tegaki-ready="true"]` before taking a screenshot. `tm=controlled&ct=<seconds>` pauses on a frame, a `ct` past the end shows the finished text, and `w=…&h=…` fix the canvas size in pixels. Change the text with `t=`.',
   );
   out.push(
-    '- In /studio, `m=glyph&g=<char>` inspects one glyph. `gs=<stage>` (geometry) or `s=<stage>` (raster) picks the pipeline stage, from the outline through the extracted strokes to `final`, the glyph as the renderer draws it.',
+    '- In /studio, `m=glyph&g=<char>` inspects one glyph (`gv=<glyph id>` one of its forms — alternates, ligatures). `gs=<stage>` (geometry) or `s=<stage>` (raster) picks the pipeline stage, from the outline through the extracted strokes to `final`, the glyph as the renderer draws it.',
   );
   const chars = charset.allInFont
     ? ' -c true'

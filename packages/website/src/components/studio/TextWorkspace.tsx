@@ -45,6 +45,7 @@ export function TextWorkspace({
     (char: string) => {
       set('chars', (chars) => ([...segmenter.segment(chars)].some((g) => g.segment === char) ? chars : chars + char));
       set('selectedChar', char);
+      set('selectedForm', null);
       set('previewMode', 'glyph');
     },
     [set],

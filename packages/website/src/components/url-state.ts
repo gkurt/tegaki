@@ -50,6 +50,12 @@ export interface UrlState {
   fontFamily: string;
   chars: string;
   selectedChar: string;
+  /**
+   * Glyph mode: the selected character's form (ligature, alternate…) as its
+   * `glyphDataById` key — `"<gid>"`, or `"<subset>:<gid>"` in an extra font
+   * subset. Null for the character's default glyph.
+   */
+  selectedForm: string | null;
   activeStage: Stage;
   previewMode: PreviewMode;
   previewText: string;
@@ -112,6 +118,7 @@ export const URL_DEFAULTS: UrlState = {
   fontFamily: 'Caveat',
   chars: DEFAULT_CHARS,
   selectedChar: 'A',
+  selectedForm: null,
   activeStage: 'final',
   previewMode: 'text',
   previewText: 'Hello World',
@@ -286,6 +293,10 @@ export function parseUrlState(search: string | URLSearchParams = window.location
   if (presetChars !== null) state.chars = presetChars;
   else if (p.has('ch')) state.chars = p.get('ch')!;
   if (p.has('g')) state.selectedChar = p.get('g')!;
+  if (p.has('gv')) {
+    const form = p.get('gv')!;
+    state.selectedForm = /^(\d+:)?[1-9]\d*$/.test(form) ? form : null;
+  }
   if (p.has('s')) state.activeStage = parseEnum(p.get('s')!, STAGE_KEYS, URL_DEFAULTS.activeStage);
   if (p.has('m')) state.previewMode = parseEnum(p.get('m')!, PREVIEW_MODES, URL_DEFAULTS.previewMode);
   if (p.has('t')) state.previewText = p.get('t')!;
@@ -397,6 +408,7 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
     }
   }
   if (state.selectedChar !== URL_DEFAULTS.selectedChar) p.set('g', state.selectedChar);
+  if (state.selectedForm !== null) p.set('gv', state.selectedForm);
   if (state.activeStage !== URL_DEFAULTS.activeStage) p.set('s', state.activeStage);
   if (state.previewMode !== URL_DEFAULTS.previewMode) p.set('m', state.previewMode);
   if (state.previewText !== URL_DEFAULTS.previewText) p.set('t', state.previewText);

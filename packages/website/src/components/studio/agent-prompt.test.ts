@@ -97,6 +97,11 @@ describe('buildAgentPrompt', () => {
   });
 });
 
+test('names the inspected form of the glyph', () => {
+  const prompt = buildAgentPrompt(input({ glyph: { char: 'a', form: 'a.ss01', warnings: [] } }));
+  expect(prompt).toContain('its form `a.ss01`');
+});
+
 describe('all-in-font charset', () => {
   test('"All in font" asks the CLI for every glyph', () => {
     const prompt = buildAgentPrompt(input({ charset: { preset: null, allInFont: true, count: 2000, mapped: 2000, recommended: null } }));

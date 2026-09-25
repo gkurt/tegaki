@@ -5,9 +5,13 @@ import {
   enumerateFontChars,
   type GeometryPipelineResult,
   initStraightSkeleton,
+  isHeadlineScriptChar,
+  isRtlChar,
   type PipelineResult,
   processGlyph,
+  processGlyphById,
   processGlyphGeometry,
+  processGlyphGeometryById,
   type ReferenceGlyph,
 } from 'tegaki-generator';
 import { GEOMETRY_STAGES, type Pipeline, STAGES } from '../preview/constants.ts';
@@ -18,6 +22,16 @@ import { TegakiTextPreview } from '../preview/TegakiTextPreview.tsx';
 import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
 import type { UrlState } from '../url-state.ts';
 import type { CharsetInfo } from './charsets.ts';
+import {
+  exampleRange,
+  FormStrip,
+  formKey,
+  formStatus,
+  shapedAdvanceEm,
+  useCharForms,
+  useFormCounts,
+  useGsubGraphs,
+} from './GlyphForms.tsx';
 import { CheckIcon, ChevronDownIcon, CloseIcon, WarningIcon } from './icons.tsx';
 import type { LoadedFont, SetSetting } from './state.ts';
 import { Transport } from './Transport.tsx';
@@ -26,6 +40,7 @@ import { ZoomStage } from './ZoomStage.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 const NO_WARNINGS: string[] = [];
+const NO_REFS: ReferenceGlyph[] = [];
 
 /** Font size of the Final stage's live render — ZoomStage scales it to fit anyway. */
 const FINAL_FONT_SIZE = 320;
@@ -67,10 +82,10 @@ export function GlyphWorkspace({
   set: SetSetting;
   resultsCache: RefObject<Map<string, PipelineResult>>;
   /** The inspected glyph and its warnings, for the agent prompt (null once unmounted). */
-  onGlyphReport?: (report: { char: string; warnings: string[] } | null) => void;
+  onGlyphReport?: (report: { char: string; form?: string; warnings: string[] } | null) => void;
 }) {
   const fontInfo = font?.info ?? null;
-  const { pipeline, selectedChar, options, geometryOptions, activeStage, geometryStage } = settings;
+  const { pipeline, selectedChar, selectedForm, options, geometryOptions, activeStage, geometryStage } = settings;
   const glyphFamily = useFontFaceFamily(font);
 
   // Pipeline results tagged with the inputs they were computed from (`key`).
@@ -99,16 +114,45 @@ export function GlyphWorkspace({
     return available;
   }, [fontInfo, chars]);
 
+  const selectChar = useCallback(
+    (c: string) => {
+      set('selectedChar', c);
+      set('selectedForm', null);
+    },
+    [set],
+  );
+
   // A new charset or font can leave the selection behind — move it to the first drawable glyph.
   useEffect(() => {
     if (!fontInfo || availableChars.has(selectedChar)) return;
     const first = chars.find((c) => availableChars.has(c));
-    if (first) set('selectedChar', first);
-  }, [fontInfo, chars, availableChars, selectedChar, set]);
+    if (first) selectChar(first);
+  }, [fontInfo, chars, availableChars, selectedChar, selectChar]);
+
+  // The selected character's forms (alternates, ligatures…) and a text that draws each.
+  const gsubGraphs = useGsubGraphs(fontInfo);
+  const {
+    subset: formSubset,
+    forms,
+    examples,
+    shaper: formShaper,
+  } = useCharForms(font, gsubGraphs, selectedChar, chars, settings.previewText, options.disabledFeatures);
+  const formCounts = useFormCounts(fontInfo, gsubGraphs, chars);
+  // The inspected form — null for the character's default glyph, or a `gv` that isn't one of its forms.
+  const form = forms.find((f) => formKey(formSubset, f.gid) === selectedForm && f.kind !== 'default') ?? null;
+  const formGid = form?.gid ?? 0;
+  useEffect(() => {
+    if (fontInfo && gsubGraphs.length && selectedForm !== null && !form) set('selectedForm', null);
+  }, [fontInfo, gsubGraphs, selectedForm, form, set]);
+  const formExample = form ? examples?.get(form.gid) : undefined;
 
   // Raster pipeline
   const rasterKey =
-    pipeline === 'raster' && fontInfo && selectedChar ? `${selectedChar}:${fontCacheId(fontInfo)}:${JSON.stringify(options)}` : '';
+    pipeline === 'raster' && fontInfo && selectedChar
+      ? formGid
+        ? `#${formSubset}:${formGid}:${isRtlChar(selectedChar) ? 'r' : 'l'}:${fontCacheId(fontInfo)}:${JSON.stringify(options)}`
+        : `${selectedChar}:${fontCacheId(fontInfo)}:${JSON.stringify(options)}`
+      : '';
   useEffect(() => {
     if (!rasterKey || !fontInfo) return;
     const cached = resultsCache.current.get(rasterKey);
@@ -118,35 +162,40 @@ export function GlyphWorkspace({
     }
     // Let the UI paint the spinner before the heavy computation.
     const id = setTimeout(() => {
-      const res = processGlyph(fontInfo, selectedChar, options);
+      const res = formGid
+        ? processGlyphById(fontInfo, formGid, options, formSubset, isRtlChar(selectedChar))
+        : processGlyph(fontInfo, selectedChar, options);
       if (res) resultsCache.current.set(rasterKey, res);
       setRasterRun({ key: rasterKey, result: res });
     }, 10);
     return () => clearTimeout(id);
-  }, [rasterKey, fontInfo, selectedChar, options, resultsCache]);
+  }, [rasterKey, fontInfo, selectedChar, formGid, formSubset, options, resultsCache]);
 
   // Fetch the stroke-order reference variants for the selected char (memoized
   // per character by each provider). Failures (offline, rate limit) degrade to
-  // "no reference" and the pipeline falls back to heuristic ordering.
+  // "no reference" and the pipeline falls back to heuristic ordering. An
+  // alternate draws the same letter and takes its references; a ligature or a
+  // part draws no one letter and has none.
   const hanLocale = geometryOptions.hanLocale;
-  const refsKey = pipeline === 'geometry' && selectedChar ? `${selectedChar}:${hanLocale}` : '';
+  const refChar = form ? (form.kind === 'alternate' ? (form.text ?? '') : '') : selectedChar;
+  const refsKey = pipeline === 'geometry' && refChar ? `${refChar}:${hanLocale}` : '';
   useEffect(() => {
     if (!refsKey) return;
     let cancelled = false;
-    collectReferences(selectedChar, strokeOrderProviders(hanLocale))
+    collectReferences(refChar, strokeOrderProviders(hanLocale))
       .then((glyphs) => !cancelled && setRefs({ key: refsKey, glyphs }))
       .catch(() => !cancelled && setRefs({ key: refsKey, glyphs: [] }));
     return () => {
       cancelled = true;
     };
-  }, [refsKey, selectedChar, hanLocale]);
-  const refGlyphs = refs?.key === refsKey ? refs.glyphs : undefined;
+  }, [refsKey, refChar, hanLocale]);
+  const refGlyphs = !refChar ? NO_REFS : refs?.key === refsKey ? refs.glyphs : undefined;
 
   // Geometry pipeline — waits for the current char's references, so a single
   // pipeline run sees them (and never runs with the previous char's).
   const geoKey =
     pipeline === 'geometry' && fontInfo && selectedChar && refGlyphs
-      ? `${fontCacheId(fontInfo)}:${selectedChar}:${options.bezierTolerance}:${JSON.stringify(geometryOptions)}:${refGlyphs.map((r) => r.source).join('+') || 'noref'}`
+      ? `${fontCacheId(fontInfo)}:${selectedChar}:${formSubset}:${formGid}:${options.bezierTolerance}:${JSON.stringify(geometryOptions)}:${refGlyphs.map((r) => r.source).join('+') || 'noref'}`
       : '';
   useEffect(() => {
     if (!geoKey || !fontInfo || !refGlyphs) return;
@@ -162,7 +211,18 @@ export function GlyphWorkspace({
         // the (synchronous) pipeline can use it.
         if (geometryOptions.medialMethod === 'straight-skeleton') await initStraightSkeleton();
         if (cancelled) return;
-        const res = processGlyphGeometry(fontInfo, selectedChar, geometryOptions, options.bezierTolerance, refGlyphs);
+        const res = formGid
+          ? processGlyphGeometryById(
+              fontInfo,
+              formGid,
+              geometryOptions,
+              options.bezierTolerance,
+              formSubset,
+              isRtlChar(selectedChar),
+              isHeadlineScriptChar(selectedChar),
+              refChar ? { char: refChar, reference: refGlyphs } : undefined,
+            )
+          : processGlyphGeometry(fontInfo, selectedChar, geometryOptions, options.bezierTolerance, refGlyphs);
         if (res) geoResultsCache.current.set(geoKey, res);
         setGeoRun({ key: geoKey, result: res, error: '' });
       } catch (e) {
@@ -174,7 +234,7 @@ export function GlyphWorkspace({
       cancelled = true;
       clearTimeout(id);
     };
-  }, [geoKey, fontInfo, selectedChar, geometryOptions, options.bezierTolerance, refGlyphs]);
+  }, [geoKey, fontInfo, selectedChar, formGid, formSubset, refChar, geometryOptions, options.bezierTolerance, refGlyphs]);
 
   // The last result of the active pipeline (possibly for other inputs), and
   // whether the one for the current inputs is still being computed.
@@ -251,24 +311,36 @@ export function GlyphWorkspace({
         const next = pickable[i + (e.key === 'ArrowRight' ? 1 : -1)];
         if (next) {
           e.preventDefault();
-          set('selectedChar', next);
+          selectChar(next);
         }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [animStageActive, playPause, chars, availableChars, fontInfo, selectedChar, set]);
+  }, [animStageActive, playPause, chars, availableChars, fontInfo, selectedChar, selectChar]);
 
   const stages = pipeline === 'raster' ? STAGES : GEOMETRY_STAGES;
   // Geometry-pipeline warnings for the selected glyph; the panel stays open while browsing glyphs.
   const warnings = pipeline === 'geometry' && geoResult && !processing ? geoResult.warnings : NO_WARNINGS;
   const [showWarnings, setShowWarnings] = useState(false);
 
+  const formName = form?.name;
   useEffect(() => {
-    onGlyphReport?.(selectedChar ? { char: selectedChar, warnings } : null);
-  }, [onGlyphReport, selectedChar, warnings]);
+    onGlyphReport?.(selectedChar ? { char: selectedChar, ...(formName ? { form: formName } : {}), warnings } : null);
+  }, [onGlyphReport, selectedChar, formName, warnings]);
   useEffect(() => () => onGlyphReport?.(null), [onGlyphReport]);
   const activeResult = pipeline === 'raster' ? result : geoResult;
+
+  // The Final stage draws a form in its example text, outlined; the default glyph alone.
+  const finalText = form ? (formExample?.text ?? null) : selectedChar;
+  const finalHighlight = useMemo(() => (form && formExample ? exampleRange(form, formExample) : null), [form, formExample]);
+  const finalAdvance = useMemo(() => {
+    if (!fontInfo || finalText === null) return 1;
+    if (form && formShaper) return shapedAdvanceEm(formShaper, finalText, fontInfo.unitsPerEm);
+    const fonts = [fontInfo.font, ...(fontInfo.extraFonts ?? [])];
+    const glyph = fonts.map((f) => f.charToGlyph(finalText)).find((g) => (g?.index ?? 0) !== 0);
+    return (glyph?.advanceWidth ?? fontInfo.unitsPerEm) / fontInfo.unitsPerEm;
+  }, [fontInfo, finalText, form, formShaper]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
@@ -287,7 +359,8 @@ export function GlyphWorkspace({
         selected={selectedChar}
         available={fontInfo ? availableChars : null}
         family={glyphFamily}
-        onSelect={(c) => set('selectedChar', c)}
+        formCounts={formCounts}
+        onSelect={selectChar}
       />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -321,28 +394,47 @@ export function GlyphWorkspace({
           </div>
         </div>
 
+        {fontInfo && forms.length > 1 && (
+          <FormStrip
+            fontInfo={fontInfo}
+            subset={formSubset}
+            forms={forms}
+            examples={examples}
+            selected={form?.gid ?? null}
+            disabledFeatures={options.disabledFeatures}
+            onSelect={(gid) => set('selectedForm', gid === null ? null : formKey(formSubset, gid))}
+          />
+        )}
+
         <ZoomStage
           // Refit when what's drawn changes — the glyph on screen, not the selection.
-          contentKey={`${activeResult?.char ?? ''}:${pipeline}:${stageValue}:${activeResult ? 1 : 0}`}
+          contentKey={`${activeResult?.char ?? ''}:${pipeline}:${stageValue}:${activeResult ? 1 : 0}:${finalActive ? finalText : ''}`}
           overlay={
-            <StageStatus
-              processing={processing}
-              error={pipeline === 'geometry' ? stageError : ''}
-              fontLoaded={!!fontInfo}
-              hasResult={!!activeResult}
-              char={selectedChar}
-            />
+            finalActive && form && examples && !formExample && !processing ? (
+              <StageNote>{formStatus(form, formExample, options.disabledFeatures)}</StageNote>
+            ) : (
+              <StageStatus
+                processing={processing}
+                error={pipeline === 'geometry' ? stageError : ''}
+                fontLoaded={!!fontInfo}
+                hasResult={!!activeResult}
+                char={selectedChar}
+              />
+            )
           }
         >
           {finalActive ? (
             // Stays mounted across glyph switches: the renderer keeps the last
             // glyph it drew until the next one is built.
             font &&
-            activeResult && (
+            activeResult &&
+            finalText !== null && (
               <div className={cx('transition-opacity', processing && 'opacity-40')}>
                 <FinalStage
                   font={font}
-                  char={selectedChar}
+                  text={finalText}
+                  highlight={finalHighlight}
+                  advance={finalAdvance}
                   settings={settings}
                   time={animTime}
                   resultsCache={resultsCache}
@@ -384,6 +476,8 @@ export function GlyphWorkspace({
         )}
 
         <GlyphStats
+          char={selectedChar}
+          formName={form?.name ?? null}
           pipeline={pipeline}
           result={result}
           geoResult={geoResult}
@@ -395,17 +489,26 @@ export function GlyphWorkspace({
   );
 }
 
-/** The glyph as the shipped renderer draws it, with the Style and Motion settings applied. */
+/**
+ * The glyph as the shipped renderer draws it, with the Style and Motion
+ * settings applied — a form in the text that brings it up, outlined.
+ */
 function FinalStage({
   font,
-  char,
+  text,
+  highlight,
+  advance: pendingAdvance,
   settings,
   time,
   resultsCache,
   onDuration,
 }: {
   font: LoadedFont;
-  char: string;
+  text: string;
+  /** UTF-16 range of `text` to outline — the inspected form. */
+  highlight: { start: number; end: number } | null;
+  /** Width of `text` in em. */
+  advance: number;
   settings: UrlState;
   time: number;
   resultsCache: RefObject<Map<string, PipelineResult>>;
@@ -420,36 +523,71 @@ function FinalStage({
   // The glyph the renderer has finished drawing (it keeps the previous one up
   // while the next is built): the card stays hidden until there is one — no
   // empty card — and is sized by it rather than by the one still coming.
-  const [drawn, setDrawn] = useState<{ font: LoadedFont; char: string } | null>(null);
+  // Sized by the text it has drawn (its advance, so the fit-to-view zoom frames it).
+  const [drawn, setDrawn] = useState<{ text: string; advance: number } | null>(null);
   const onReady = useCallback(
     (info: { totalDuration: number }) => {
       onDuration(info.totalDuration);
-      setDrawn({ font, char });
+      setDrawn({ text, advance: pendingAdvance });
     },
-    [onDuration, font, char],
+    [onDuration, text, pendingAdvance],
   );
-  // Size the artboard to the glyph's advance so the fit-to-view zoom frames it.
-  const advance = useMemo(() => {
-    if (!drawn) return 1;
-    const { info } = drawn.font;
-    const fonts = [info.font, ...(info.extraFonts ?? [])];
-    const glyph = fonts.map((f) => f.charToGlyph(drawn.char)).find((g) => (g?.index ?? 0) !== 0);
-    return (glyph?.advanceWidth ?? info.unitsPerEm) / info.unitsPerEm;
-  }, [drawn]);
+  const advance = drawn?.advance ?? 1;
+
+  // Outline the form: measure its range in the renderer's text layer, in the
+  // card's own (unzoomed) pixels.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [outline, setOutline] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const drawnText = drawn?.text;
+  useEffect(() => {
+    setOutline(null);
+    const card = cardRef.current;
+    if (!highlight || !card || drawnText !== text) return;
+    const id = setTimeout(() => {
+      const node = card.querySelector('[data-tegaki="overlay"]')?.firstChild;
+      if (!node || node.nodeType !== Node.TEXT_NODE || node.textContent !== text) return;
+      const range = document.createRange();
+      range.setStart(node, highlight.start);
+      range.setEnd(node, highlight.end);
+      const rects = [...range.getClientRects()].filter((r) => r.width > 0);
+      if (!rects.length) return;
+      const box = card.getBoundingClientRect();
+      const scale = box.width / card.offsetWidth || 1;
+      const left = Math.min(...rects.map((r) => r.left));
+      const right = Math.max(...rects.map((r) => r.right));
+      const top = Math.min(...rects.map((r) => r.top));
+      const bottom = Math.max(...rects.map((r) => r.bottom));
+      setOutline({
+        left: (left - box.left) / scale,
+        top: (top - box.top) / scale,
+        width: (right - left) / scale,
+        height: (bottom - top) / scale,
+      });
+    }, 50);
+    return () => clearTimeout(id);
+  }, [highlight, text, drawnText]);
 
   return (
     <div
+      ref={cardRef}
       className={cx(
-        'overflow-hidden rounded-sm bg-white p-8 text-zinc-900 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-800',
+        'relative overflow-hidden rounded-sm bg-white p-8 text-zinc-900 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-800',
         !drawn && 'invisible',
       )}
     >
+      {outline && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute rounded-md bg-indigo-500/5 ring-2 ring-indigo-500/70 dark:ring-indigo-400/70"
+          style={outline}
+        />
+      )}
       <TegakiTextPreview
         style={{ width: Math.ceil(Math.max(advance, 0.5) * FINAL_FONT_SIZE * 1.1) }}
         fontInfo={font.info}
         fontBuffer={font.buffer}
         extraFontBuffers={font.extraBuffers}
-        text={char}
+        text={text}
         options={settings.options}
         pipeline={settings.pipeline}
         geometryOptions={settings.geometryOptions}
@@ -618,12 +756,22 @@ function StageStatus({
   );
 }
 
+/** A note over the stage, in the status pill's style. */
+function StageNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="max-w-[min(80vw,28rem)] rounded-2xl bg-white px-3 py-1.5 text-center text-xs text-zinc-500 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:ring-zinc-800">
+      {children}
+    </div>
+  );
+}
+
 function GlyphList({
   header,
   chars,
   selected,
   available,
   family,
+  formCounts,
   onSelect,
 }: {
   header: React.ReactNode;
@@ -631,6 +779,8 @@ function GlyphList({
   selected: string;
   available: Set<string> | null;
   family: string | undefined;
+  /** How many forms (alternates, ligatures…) each character has, when more than one. */
+  formCounts: Map<string, number>;
   onSelect: (c: string) => void;
 }) {
   const selectedRef = useRef<HTMLButtonElement>(null);
@@ -651,17 +801,18 @@ function GlyphList({
         {chars.map((c, i) => {
           const missing = available !== null && !available.has(c);
           const isSelected = c === selected;
+          const formCount = missing ? 0 : (formCounts.get(c) ?? 0);
           return (
             <button
               type="button"
               key={`${c}-${i}`}
               ref={isSelected ? selectedRef : undefined}
               disabled={missing}
-              title={`${c} · U+${(c.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}${missing ? ' · not in font' : ''}`}
+              title={`${c} · U+${(c.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0')}${missing ? ' · not in font' : ''}${formCount ? ` · ${formCount} forms` : ''}`}
               onClick={() => onSelect(c)}
               style={{ fontFamily: family }}
               className={cx(
-                'flex h-10 items-center justify-center rounded-md text-lg leading-none transition-colors',
+                'relative flex h-10 items-center justify-center rounded-md text-lg leading-none transition-colors',
                 missing
                   ? 'cursor-not-allowed text-zinc-300 dark:text-zinc-700'
                   : isSelected
@@ -670,6 +821,17 @@ function GlyphList({
               )}
             >
               {c}
+              {formCount > 0 && (
+                <span
+                  aria-hidden="true"
+                  className={cx(
+                    'absolute top-0.5 right-1 font-sans text-[9px] leading-none font-medium',
+                    isSelected ? 'text-white/60 dark:text-zinc-900/60' : 'text-indigo-500 dark:text-indigo-400',
+                  )}
+                >
+                  {formCount}
+                </span>
+              )}
             </button>
           );
         })}
@@ -712,12 +874,17 @@ function GlyphWarnings({ char, warnings, onClose }: { char: string; warnings: st
 }
 
 function GlyphStats({
+  char,
+  formName,
   pipeline,
   result,
   geoResult,
   warningsOpen,
   onToggleWarnings,
 }: {
+  char: string;
+  /** Glyph name of the inspected form, when it isn't the character's default glyph. */
+  formName: string | null;
   pipeline: Pipeline;
   result: PipelineResult | null;
   geoResult: GeometryPipelineResult | null;
@@ -726,7 +893,7 @@ function GlyphStats({
 }) {
   const r = pipeline === 'raster' ? result : geoResult;
   if (!r) return null;
-  const hex = r.unicode.toString(16).padStart(4, '0').toUpperCase();
+  const hex = (char.codePointAt(0) ?? 0).toString(16).padStart(4, '0').toUpperCase();
   const items: [string, React.ReactNode][] =
     pipeline === 'raster' && result
       ? [
@@ -750,7 +917,8 @@ function GlyphStats({
   return (
     <div className="studio-scroll-x flex h-8 shrink-0 items-center gap-4 overflow-x-auto border-t border-zinc-200 bg-white px-3 font-mono text-[11px] whitespace-nowrap text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
       <span className="text-zinc-900 dark:text-zinc-100">
-        {r.char} <span className="text-zinc-400">U+{hex}</span>
+        {char} <span className="text-zinc-400">U+{hex}</span>
+        {formName && <span className="text-indigo-600 dark:text-indigo-400"> · {formName}</span>}
       </span>
       {warnings.length > 0 && (
         <button

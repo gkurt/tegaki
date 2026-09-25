@@ -94,6 +94,24 @@ describe('text frame width', () => {
   });
 });
 
+describe('glyph form', () => {
+  test('gv round-trips as the selected glyph id', () => {
+    const state = parseUrlState('?g=a&gv=412');
+    expect(state.selectedForm).toBe('412');
+    expect(buildUrlParams(state).get('gv')).toBe('412');
+  });
+
+  test('a form in an extra font subset keeps its subset prefix', () => {
+    expect(parseUrlState('?gv=1:57').selectedForm).toBe('1:57');
+  });
+
+  test('the default form writes nothing, and an invalid gv falls back to it', () => {
+    expect(buildUrlParams(URL_DEFAULTS).has('gv')).toBe(false);
+    expect(parseUrlState('?gv=0').selectedForm).toBeNull();
+    expect(parseUrlState('?gv=a.ss01').selectedForm).toBeNull();
+  });
+});
+
 describe('character set in the URL', () => {
   const latin = DEFAULT_CHARS;
 
