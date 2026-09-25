@@ -5,11 +5,15 @@ import { TEXT_PRESETS } from '../preview/constants.ts';
 import { TegakiTextPreview } from '../preview/TegakiTextPreview.tsx';
 import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
 import type { UrlState } from '../url-state.ts';
+import { fontHasChar } from './charsets.ts';
+import { GlyphPicker } from './GlyphPicker.tsx';
 import { ChevronDownIcon, ExternalLinkIcon, RestartIcon } from './icons.tsx';
 import type { LoadedFont, SetSetting } from './state.ts';
 import { TextFrame } from './TextFrame.tsx';
 import { Transport } from './Transport.tsx';
 import { cx, IconButton, isTypingTarget, Popover, Spinner } from './ui.tsx';
+
+const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 export interface TextPlaybackHandle {
   pause: () => void;
@@ -32,6 +36,18 @@ export function TextWorkspace({
 }) {
   const { timeMode, animSpeed, previewText: text } = settings;
   const fontInfo = font?.info ?? null;
+
+  // Picking a character in the text opens it in the glyph inspector, adding it
+  // to the character set first when the set doesn't have it.
+  const hasChar = useMemo(() => (fontInfo ? fontHasChar(fontInfo) : () => false), [fontInfo]);
+  const inspectGlyph = useCallback(
+    (char: string) => {
+      set('chars', (chars) => ([...segmenter.segment(chars)].some((g) => g.segment === char) ? chars : chars + char));
+      set('selectedChar', char);
+      set('previewMode', 'glyph');
+    },
+    [set],
+  );
 
   // Initial time/paused state come from the URL (controlled mode only): a non-zero
   // `ct` param loads the timeline paused at that position so agents can inspect a
@@ -207,33 +223,35 @@ export function TextWorkspace({
             )}
             {font && (
               <TextFrame width={settings.frameWidth} onWidthChange={(w) => set('frameWidth', w)} autoClassName="w-full max-w-3xl">
-                <TegakiTextPreview
-                  ref={rendererRef}
-                  className="w-full text-zinc-900 dark:text-zinc-100"
-                  style={
-                    timeMode === 'css'
-                      ? ({ animation: 'tegaki-scroll-progress linear both', animationTimeline: '--tegaki-scroll' } as React.CSSProperties)
-                      : undefined
-                  }
-                  fontInfo={font.info}
-                  fontBuffer={font.buffer}
-                  extraFontBuffers={font.extraBuffers}
-                  text={text}
-                  options={settings.options}
-                  pipeline={settings.pipeline}
-                  geometryOptions={settings.geometryOptions}
-                  time={timeProp}
-                  effects={effects}
-                  timing={timingConfig}
-                  quality={settings.quality}
-                  showOverlay={settings.showOverlay}
-                  fontSizePx={settings.fontSizePx}
-                  lineHeightRatio={settings.lineHeightRatio}
-                  letterSpacingPx={settings.letterSpacingPx}
-                  resultsCache={resultsCache}
-                  onReady={handleReady}
-                  useShaper={settings.useShaper}
-                />
+                <GlyphPicker onInspect={inspectGlyph} canInspect={hasChar}>
+                  <TegakiTextPreview
+                    ref={rendererRef}
+                    className="w-full text-zinc-900 dark:text-zinc-100"
+                    style={
+                      timeMode === 'css'
+                        ? ({ animation: 'tegaki-scroll-progress linear both', animationTimeline: '--tegaki-scroll' } as React.CSSProperties)
+                        : undefined
+                    }
+                    fontInfo={font.info}
+                    fontBuffer={font.buffer}
+                    extraFontBuffers={font.extraBuffers}
+                    text={text}
+                    options={settings.options}
+                    pipeline={settings.pipeline}
+                    geometryOptions={settings.geometryOptions}
+                    time={timeProp}
+                    effects={effects}
+                    timing={timingConfig}
+                    quality={settings.quality}
+                    showOverlay={settings.showOverlay}
+                    fontSizePx={settings.fontSizePx}
+                    lineHeightRatio={settings.lineHeightRatio}
+                    letterSpacingPx={settings.letterSpacingPx}
+                    resultsCache={resultsCache}
+                    onReady={handleReady}
+                    useShaper={settings.useShaper}
+                  />
+                </GlyphPicker>
               </TextFrame>
             )}
           </div>
