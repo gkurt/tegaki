@@ -340,7 +340,8 @@ export function applyShaperPositions(
       const gIdx = utf16ToGrapheme[lineStartU + cl];
       if (gIdx === undefined || gIdx < 0) continue;
       charOffsets[gIdx] = lineLeftEm + leftEm;
-      charWidths[gIdx] = clusterAdvance.get(cl) ?? 0;
+      // `.notdef` clusters have no shaper advance: keep the DOM's width.
+      charWidths[gIdx] = clusterAdvance.get(cl) ?? charWidths[gIdx] ?? 0;
       assigned.add(gIdx);
     }
 
@@ -387,6 +388,13 @@ export interface PositionedGlyph {
  *
  * `letterSpacingEm` is inserted before every cluster but a word's first; the
  * gaps between words are in the DOM's measured positions.
+ *
+ * A `.notdef` glyph (a character no subset of the bundle's font has) is drawn
+ * by the browser in some other font, at an advance the shaper can't know — so
+ * each `.notdef` cluster, and the run of real glyphs after it, is anchored to
+ * the DOM like a word of its own. Walking the `.notdef` advance instead would
+ * pile up the glyphs of a spaceless line (CJK text in a Latin font). Its
+ * advance is left out of `clusterAdvance`: the DOM's width is the true one.
  */
 export function positionLineGlyphs(
   shaped: ShapedGlyph[],
@@ -407,6 +415,29 @@ export function positionLineGlyphs(
     i = j;
   }
 
+  // Anchored runs: consecutive glyphs (in shaped order) of one span, split
+  // around each `.notdef` cluster. Each run's UTF-16 extent is the union of
+  // its clusters, a cluster ending where the next one in its span starts.
+  const clusterStarts = [...new Set(shaped.map((g) => g.cl))].sort((a, b) => a - b);
+  const clusterEnd = (cl: number): number => {
+    const spanEnd = spans[spanOf[cl] ?? -1]?.[1] ?? lineText.length;
+    const next = clusterStarts.find((c) => c > cl);
+    return next === undefined ? spanEnd : Math.min(next, spanEnd);
+  };
+  const runOf: number[] = [];
+  const runExtent: [number, number][] = [];
+  for (let i = 0; i < shaped.length; i++) {
+    const g = shaped[i]!;
+    const prev = shaped[i - 1];
+    const notdef = isNotdef(g);
+    const newRun = !prev || spanOf[g.cl] !== spanOf[prev.cl] || notdef !== isNotdef(prev) || (notdef && g.cl !== prev.cl);
+    if (newRun) runExtent.push([g.cl, clusterEnd(g.cl)]);
+    const extent = runExtent[runExtent.length - 1]!;
+    extent[0] = Math.min(extent[0], g.cl);
+    extent[1] = Math.max(extent[1], clusterEnd(g.cl));
+    runOf.push(runExtent.length - 1);
+  }
+
   const emPerUnit = 1 / unitsPerEm;
   const glyphs: PositionedGlyph[] = [];
   const clusterLeft = new Map<number, number>();
@@ -414,16 +445,24 @@ export function positionLineGlyphs(
   let penEm = 0;
   let penYEm = 0;
   let span = -1;
+  let run = -1;
   let prevCl: number | undefined;
-  for (const g of shaped) {
+  for (let i = 0; i < shaped.length; i++) {
+    const g = shaped[i]!;
     const gSpan = spanOf[g.cl] ?? -1;
     if (gSpan !== span) {
       span = gSpan;
       prevCl = undefined;
-      const anchor = gSpan >= 0 ? spanLeftEm(spans[gSpan]![0], spans[gSpan]![1]) : undefined;
+    }
+    if (runOf[i] !== run) {
+      run = runOf[i]!;
+      const [start, end] = runExtent[run]!;
+      const anchor = gSpan >= 0 ? spanLeftEm(start, end) : undefined;
       if (anchor !== undefined) {
         penEm = anchor;
         penYEm = 0;
+        // The DOM position already includes any letter spacing before it.
+        prevCl = undefined;
       }
     }
     if (prevCl !== undefined && g.cl !== prevCl) penEm += letterSpacingEm;
@@ -433,11 +472,16 @@ export function positionLineGlyphs(
     const yEm = penYEm - g.dy * emPerUnit;
     glyphs.push({ glyph: g, xEm, yEm });
     if (!clusterLeft.has(g.cl)) clusterLeft.set(g.cl, xEm);
-    clusterAdvance.set(g.cl, (clusterAdvance.get(g.cl) ?? 0) + g.ax * emPerUnit);
+    if (!isNotdef(g)) clusterAdvance.set(g.cl, (clusterAdvance.get(g.cl) ?? 0) + g.ax * emPerUnit);
     penEm += g.ax * emPerUnit;
     penYEm -= g.ay * emPerUnit;
   }
   return { glyphs, clusterLeft, clusterAdvance };
+}
+
+/** Glyph id 0 of any subset (`"0"`, `"1:0"`) — the font has no glyph for the character. */
+function isNotdef(g: ShapedGlyph): boolean {
+  return g.g === '0' || g.g.endsWith(':0');
 }
 
 function measureWithTempElement(text: string, fontFamily: string, fontSize: number, lineHeight: number, maxWidth: number): TextLayout {

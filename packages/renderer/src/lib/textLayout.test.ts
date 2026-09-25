@@ -46,6 +46,25 @@ describe('positionLineGlyphs', () => {
     expect(placed.map((p) => p.xEm)).toEqual([0, 0.6, 2, 2.6]);
   });
 
+  test('a .notdef cluster and the glyphs after it are anchored where the DOM put them, not walked by the .notdef advance', () => {
+    // "手書a" in a Latin font: two .notdef (the browser draws them 1em wide in
+    // a fallback font), then a real glyph — one spaceless word.
+    const shaped: ShapedGlyph[] = [
+      { g: '0', cl: 0, ax: 300, ay: 0, dx: 0, dy: 0 },
+      { g: '0', cl: 1, ax: 300, ay: 0, dx: 0, dy: 0 },
+      { g: '5', cl: 2, ax: 500, ay: 0, dx: 0, dy: 0 },
+    ];
+    const { glyphs: placed, clusterAdvance } = positionLineGlyphs(shaped, '手書a', anchors({ '0-1': 0, '1-2': 1, '2-3': 2 }), 1000);
+    expect(placed.map((p) => p.xEm)).toEqual([0, 1, 2]);
+    expect([...clusterAdvance]).toEqual([[2, 0.5]]);
+  });
+
+  test('a run of real glyphs after a .notdef is anchored as a whole', () => {
+    const shaped: ShapedGlyph[] = [{ g: '1:0', cl: 0, ax: 300, ay: 0, dx: 0, dy: 0 }, ...glyphs([1, 2])];
+    const { glyphs: placed } = positionLineGlyphs(shaped, '手ab', anchors({ '0-1': 0, '1-3': 1 }), 1000);
+    expect(placed.map((p) => p.xEm)).toEqual([0, 1, 1.5]);
+  });
+
   test('offsets are y-down: a positive harfbuzz dy moves the glyph up', () => {
     const shaped: ShapedGlyph[] = [{ g: '1', cl: 0, ax: 0, ay: 0, dx: 100, dy: 250 }];
     const { glyphs: placed } = positionLineGlyphs(shaped, 'a', anchors({ '0-1': 1 }), 1000);
