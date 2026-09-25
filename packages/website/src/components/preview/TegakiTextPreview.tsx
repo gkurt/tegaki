@@ -28,6 +28,7 @@ import {
   processGlyphById,
   processGlyphGeometry,
   processGlyphGeometryById,
+  subsetUnicodeRanges,
   toCompactStroke,
 } from 'tegaki-generator';
 import type { Pipeline } from './constants.ts';
@@ -143,6 +144,9 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     () => (extraFontBuffers ?? []).map((buf) => URL.createObjectURL(new Blob([buf], { type: 'font/ttf' }))),
     [extraFontBuffers],
   );
+  // Which characters the browser may draw from each extra face — the ones the
+  // shaper routes to it — so DOM text and the clip mask match the strokes.
+  const extraFontRanges = useMemo(() => subsetUnicodeRanges(fontInfo.font, fontInfo.extraFonts ?? []), [fontInfo]);
 
   // Features are detected once at parse time (see `parseFont`) and carried on
   // `fontInfo` — subtract any the user has disabled for this render.
@@ -389,11 +393,24 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       ascender: fontInfo.ascender,
       descender: fontInfo.descender,
       glyphData,
-      ...(extraFontUrls.length > 0 ? { extraFontUrls } : {}),
+      ...(extraFontUrls.length > 0 ? { extraFontUrls, extraFontRanges } : {}),
       ...(hasVariants ? { glyphDataById: variants } : {}),
       ...(enabledFeatures.length > 0 ? { features: enabledFeatures } : {}),
     } satisfies TegakiBundle;
-  }, [fontInfo, fontUrl, extraFontUrls, normalizedText, options, activeCache, enabledFeatures, variants, geometry, geoGlyphs, geoCurrent]);
+  }, [
+    fontInfo,
+    fontUrl,
+    extraFontUrls,
+    extraFontRanges,
+    normalizedText,
+    options,
+    activeCache,
+    enabledFeatures,
+    variants,
+    geometry,
+    geoGlyphs,
+    geoCurrent,
+  ]);
 
   // What the renderer draws: the last complete text + bundle pair. A new pair
   // replaces it once its font faces and shaper are loaded, so switching font,

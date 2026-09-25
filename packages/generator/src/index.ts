@@ -56,6 +56,7 @@ export {
 } from './font/glyph-forms.ts';
 export { createHbShaper, type HbShaper, type ShapedGlyph } from './font/hb-shaper.ts';
 export { enumerateFontChars } from './font/parse.ts';
+export { subsetUnicodeRanges } from './font/unicode-range.ts';
 export { initStraightSkeleton, isStraightSkeletonReady } from './geometry/face-straight-skeleton.ts';
 export { findHeadlines, isHeadlineScriptChar } from './geometry/ordering.ts';
 export type { GeometryPipelineInput } from './geometry/pipeline.ts';

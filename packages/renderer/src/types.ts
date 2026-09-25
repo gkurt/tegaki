@@ -187,6 +187,15 @@ export interface TegakiBundle {
    * Arabic, conjuncts in Indic, etc.
    */
   extraFontUrls?: string[];
+  /**
+   * CSS `unicode-range` for each `extraFontUrls` face: the characters it has
+   * that neither the primary nor an earlier subset does, which is where the
+   * shaper draws them from. Without it the browser, which tries same-family
+   * faces last-first, can draw a character with a different subset than the
+   * strokes (an unmirrorable bracket in Arabic text). An empty range means
+   * the subset adds nothing, so it isn't registered for DOM text.
+   */
+  extraFontRanges?: string[];
   /** URL to the full (non-subsetted) font file bundled for fallback rendering. */
   fullFontUrl?: string;
   fontFaceCSS: string;

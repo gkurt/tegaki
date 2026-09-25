@@ -896,7 +896,7 @@ export class TegakiEngine {
       return;
     }
 
-    const pending = ensureFont(font.family, font.fontUrl, font.features, font.extraFontUrls);
+    const pending = ensureFont(font.family, font.fontUrl, font.features, font.extraFontUrls, font.extraFontRanges);
     if (pending === null) {
       this._fontReady = true;
     } else {
