@@ -598,8 +598,12 @@ p code {
   }
 }
 
+/* Longhands only: the minifier folds `animation-timeline` into an `animation`
+   shorthand, which can't set it, and browsers drop the whole declaration. */
 .scroll-linked {
-  animation: tegaki-view-progress linear both;
+  animation-name: tegaki-view-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
   animation-timeline: view();
   animation-range: cover 10% cover 70%;
 }
@@ -1026,8 +1030,11 @@ p code {
 }
 
 @supports (animation-timeline: view()) {
+  /* Longhands only — see .scroll-linked. */
   .marginalia-arrow path {
-    animation: draw linear both;
+    animation-name: draw;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
     animation-timeline: view();
     animation-range: entry 40% cover 50%;
   }
