@@ -23,13 +23,17 @@ import { createHersheyProvider, createHersheySimplexProvider } from '../stroke-o
 import { createKanjiVGProvider } from '../stroke-order/kanjivg.ts';
 import { createKanjiVGFileLoader } from '../stroke-order/kanjivg-fetch.ts';
 
+// Each command ends its own progress line (`progress.succeed(...)`); `success:
+// null` stops Padrone from ending it again with the default "Working...".
+const PROGRESS = { spinner: true, bar: true, time: true, eta: true, message: { success: null } } as const;
+
 export const tegakiProgram = createPadrone('tegaki')
   .configure({
     description: 'Generate glyph data for handwriting animation',
   })
   .command('generate', (c) =>
     c
-      .extend(padroneProgress({ spinner: true, bar: true, time: true, eta: true }))
+      .extend(padroneProgress(PROGRESS))
       .configure({
         title: 'Generate glyph data from a Google Font',
         description: 'Downloads a font, extracts glyph outlines, computes skeletons and stroke order, then writes a JSON file.',
@@ -128,7 +132,7 @@ export const tegakiProgram = createPadrone('tegaki')
   )
   .command('stroke-order-report', (c) =>
     c
-      .extend(padroneProgress({ spinner: true, bar: true, time: true, eta: true }))
+      .extend(padroneProgress(PROGRESS))
       .configure({
         title: 'Score dataset stroke-order matching over a character set',
         description:
@@ -175,7 +179,7 @@ export const tegakiProgram = createPadrone('tegaki')
   )
   .command('coverage-report', (c) =>
     c
-      .extend(padroneProgress({ spinner: true, bar: true, time: true, eta: true }))
+      .extend(padroneProgress(PROGRESS))
       .configure({
         title: "Measure how much of each glyph's ink the strokes paint",
         description:
