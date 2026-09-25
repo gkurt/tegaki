@@ -240,7 +240,7 @@ function easedTimeAt(p: number): number {
  * Serialize positioned glyphs to a standalone SVG string. Variable width is
  * achieved exactly as the canvas renderer does it (drawGlyph's per-segment
  * path): one `<line>` per sub-segment, each with its own `stroke-width`, round
- * caps overlapping to read continuous.
+ * caps overlapping to read continuous — the stroke's own cap on its two ends.
  *
  * Animated mode reveals each stroke through a `<mask>` whose centerline is
  * stroked thick and dash-animated, so the variable-width fill is uncovered in
@@ -290,24 +290,31 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
       const stamps = nibStamps(stroke, pointCumLen, totalLen, px, py, scale, cfg);
       const baseWidth = Math.max(avgWidth, 0.5) * scale * cfg.strokeScale;
 
-      // Per-segment variable-width lines (the visible shape).
+      // Per-segment variable-width lines (the visible shape). Round caps join
+      // the segments; the stroke's own cap goes on its two ends only, with a
+      // disc where each end segment meets the rest (see drawGlyph).
       const segs: string[] = [];
       let maxW = 0;
+      const last = vertices.length - 1;
       for (let i = 1; i < vertices.length; i++) {
         const a = vertices[i - 1]!;
         const b = vertices[i]!;
         const perPoint = (a.width + b.width) * 0.5 * scale * cfg.strokeScale;
         const w = Math.max(baseWidth + (perPoint - baseWidth) * pressure, 0.5 * scale * cfg.strokeScale);
         if (w > maxW) maxW = w;
+        const end = cfg.lineCap !== 'round' && (i === 1 || i === last);
         segs.push(
-          `<line x1="${fmt(px(a.x))}" y1="${fmt(py(a.y))}" x2="${fmt(px(b.x))}" y2="${fmt(py(b.y))}" ` + `stroke-width="${fmt(w)}" />`,
+          `<line x1="${fmt(px(a.x))}" y1="${fmt(py(a.y))}" x2="${fmt(px(b.x))}" y2="${fmt(py(b.y))}" ` +
+            `stroke-width="${fmt(w)}"${end ? ` stroke-linecap="${cfg.lineCap}"` : ''} />`,
         );
+        if (end && last > 1) {
+          const join = i === 1 ? b : a;
+          segs.push(`<circle cx="${fmt(px(join.x))}" cy="${fmt(py(join.y))}" r="${fmt(w / 2)}" fill="${cfg.color}" stroke="none" />`);
+        }
       }
 
       if (!cfg.animated) {
-        body.push(
-          `<g fill="none" stroke="${cfg.color}" stroke-linecap="${cfg.lineCap}" stroke-linejoin="round">\n${segs.join('\n')}\n</g>`,
-        );
+        body.push(`<g fill="none" stroke="${cfg.color}" stroke-linecap="round" stroke-linejoin="round">\n${segs.join('\n')}\n</g>`);
         for (const stamp of stamps) body.push(stamp.el(' />'));
         continue;
       }
@@ -333,7 +340,7 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
           `stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1">${animate}</path></mask>`,
       );
       body.push(
-        `<g mask="url(#${id})" fill="none" stroke="${cfg.color}" stroke-linecap="${cfg.lineCap}" stroke-linejoin="round">\n${segs.join('\n')}\n</g>`,
+        `<g mask="url(#${id})" fill="none" stroke="${cfg.color}" stroke-linecap="round" stroke-linejoin="round">\n${segs.join('\n')}\n</g>`,
       );
       for (const stamp of stamps) {
         const at = fmt(beginAt + dur * easedTimeAt(stamp.at));

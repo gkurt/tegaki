@@ -70,6 +70,13 @@ const CASES: PreviewCase[] = [
     params: { t: 'côte', tm: 'controlled', ct: 1.2, fs: 128, w: 400, h: 220 },
   },
   {
+    // Regression: with a flat cap, pressure width drew every sub-segment with
+    // its own flat ends, fringing each curve with notches. The cap belongs to
+    // the stroke's two ends; the joints between segments are round.
+    name: 'flat-cap-continuous',
+    params: { t: 'Sog', lc: 'butt', tm: 'controlled', ct: 1000, fs: 160, w: 400, h: 240 },
+  },
+  {
     // Within-word `calt` must still fire — Caveat substitutes the second `s`
     // of "ss" with a contextual variant. Canary against an over-aggressive
     // word-split that would suppress all contextual lookups.

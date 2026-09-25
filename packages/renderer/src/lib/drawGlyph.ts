@@ -393,8 +393,17 @@ export function drawGlyph(
     } else {
       // Per-segment path: each sub-segment is its own mini-stroke so
       // lineWidth / strokeStyle can vary. Adjacent round-capped endpoints
-      // overlap to read as a continuous line.
+      // overlap to read as a continuous line. The stroke's cap belongs to its
+      // two ends only: a flat or square cap on every sub-segment would show
+      // each seam (a fringe of notches along every curve), so the end
+      // segments take the cap and a round disc where they meet the rest.
       const invTotalLen = 1 / totalLen;
+      const joinDisc = (x: number, y: number, lw: number) => {
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.beginPath();
+        ctx.arc(x, y, lw / 2, 0, Math.PI * 2);
+        ctx.fill();
+      };
       for (let i = 1; i < tcount; i++) {
         const aCum = i - 1 <= lastIdx ? vertices[i - 1]!.cumLen : tailCumLen;
         const bCum = i <= lastIdx ? vertices[i]!.cumLen : tailCumLen;
@@ -410,10 +419,17 @@ export function drawGlyph(
         }
         ctx.lineWidth = lw;
         ctx.strokeStyle = hasStrokeGradient ? colorAt(midProgress) : defaultStrokePaint;
+        const first = i === 1;
+        const last = i === tcount - 1;
+        ctx.lineCap = lineCap === 'round' || !(first || last) ? 'round' : lineCap;
         ctx.beginPath();
         ctx.moveTo(txs[i - 1]!, tys[i - 1]!);
         ctx.lineTo(txs[i]!, tys[i]!);
         ctx.stroke();
+        if (lineCap !== 'round' && first !== last) {
+          if (first) joinDisc(txs[i]!, tys[i]!, lw);
+          else joinDisc(txs[i - 1]!, tys[i - 1]!, lw);
+        }
       }
     }
 
