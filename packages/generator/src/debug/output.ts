@@ -1,8 +1,11 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { LineCap } from 'tegaki';
 import type { PipelineResult } from '../commands/generate.ts';
-import { charToFilename } from '../processing/animated-svg.ts';
+import type { GeometryPipelineResult } from '../geometry/types.ts';
+import { type GeometryStage, renderGeometryStage } from '../geometry/visualize.ts';
+import { charToFilename, glyphToAnimatedSVG } from '../processing/animated-svg.ts';
 import {
   renderBitmap,
   renderCurvature,
@@ -33,4 +36,26 @@ export async function writeDebugOutput(debugDir: string, char: string, result: P
   await Bun.write(join(glyphDir, '8-curvature.svg'), renderCurvature(result));
   await Bun.write(join(glyphDir, '9-strokes.svg'), renderStrokes(result));
   await Bun.write(join(glyphDir, '10-animation.svg'), renderDebugAnimation(result));
+}
+
+const GEOMETRY_STAGES: GeometryStage[] = ['contours', 'corners', 'cuts', 'faces', 'segments', 'strokes', 'order', 'reference'];
+
+/** The geometry pipeline's debug files: each Studio stage as an SVG, the animation, and the glyph's warnings. */
+export async function writeGeometryDebugOutput(
+  debugDir: string,
+  char: string,
+  result: GeometryPipelineResult,
+  lineCap: LineCap,
+): Promise<void> {
+  const glyphDir = join(debugDir, charToFilename(char));
+  mkdirSync(glyphDir, { recursive: true });
+
+  for (const [i, stage] of GEOMETRY_STAGES.entries()) {
+    await Bun.write(join(glyphDir, `${i + 1}-${stage}.svg`), renderGeometryStage(result, stage));
+  }
+  await Bun.write(
+    join(glyphDir, `${GEOMETRY_STAGES.length + 1}-animation.svg`),
+    glyphToAnimatedSVG(result.strokesFontUnits, result.advanceWidth, result.ascender, result.descender, lineCap),
+  );
+  if (result.warnings.length > 0) await Bun.write(join(glyphDir, 'warnings.txt'), `${result.warnings.join('\n')}\n`);
 }

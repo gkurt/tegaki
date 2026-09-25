@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { DEFAULT_OPTIONS, extractTegakiBundle, parseFont } from './generate.ts';
+import { DEFAULT_GEOMETRY_OPTIONS } from '../geometry/types.ts';
+import { DEFAULT_OPTIONS, extractTegakiBundle, generateArgsSchema, parseFont, pickGeometryOptions } from './generate.ts';
 
 const fontPath = new URL('../../../renderer/fonts/caveat/caveat.ttf', import.meta.url);
 
@@ -46,5 +47,16 @@ describe('extractTegakiBundle', () => {
     const bundle = await extract('raster');
     expect(Object.keys(bundle.glyphResults).sort()).toEqual(['a', 'b']);
     expect(bundle.geometryResults).toBeUndefined();
+  });
+});
+
+describe('generate args', () => {
+  test('the geometry flags default to DEFAULT_GEOMETRY_OPTIONS', () => {
+    expect(pickGeometryOptions(generateArgsSchema.parse({}))).toEqual(DEFAULT_GEOMETRY_OPTIONS);
+  });
+
+  test('a geometry flag reaches the geometry options, and only those', () => {
+    const args = generateArgsSchema.parse({ inkSpurTolerance: 2, resolution: 123 });
+    expect(pickGeometryOptions(args)).toEqual({ ...DEFAULT_GEOMETRY_OPTIONS, inkSpurTolerance: 2 });
   });
 });

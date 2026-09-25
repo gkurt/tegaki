@@ -4,10 +4,10 @@ import * as opentype from 'opentype.js';
 import { createPadrone, padroneProgress } from 'padrone';
 import * as z from 'zod/v4';
 import { JAPANESE_CHARS } from '../charsets.ts';
-import { extractTegakiBundle, generateArgsSchema, type PipelineOptions, parseFont } from '../commands/generate.ts';
+import { extractTegakiBundle, generateArgsSchema, type PipelineOptions, parseFont, pickGeometryOptions } from '../commands/generate.ts';
 import { formatStrokeOrderSummary, runStrokeOrderReport } from '../commands/stroke-order-report.ts';
 import { DEFAULT_CHARS } from '../constants.ts';
-import { writeDebugOutput } from '../debug/output.ts';
+import { writeDebugOutput, writeGeometryDebugOutput } from '../debug/output.ts';
 import { downloadFont } from '../font/download.ts';
 import { enumerateFontChars } from '../font/parse.ts';
 import { initStraightSkeleton } from '../geometry/face-straight-skeleton.ts';
@@ -80,6 +80,7 @@ export const tegakiProgram = createPadrone('tegaki')
           fullFontBuffer,
           fullFontFileName,
           pipeline,
+          geometryOptions: pickGeometryOptions(args),
           strokeOrderProviders:
             pipeline === 'geometry'
               ? [createKanjiVGProvider(createKanjiVGFileLoader()), createHersheyProvider(), createHersheySimplexProvider()]
@@ -107,6 +108,9 @@ export const tegakiProgram = createPadrone('tegaki')
           await Bun.write(join(debugDir, 'font.json'), JSON.stringify(bundle.fontOutput, null, 2));
           for (const [char, result] of Object.entries(bundle.glyphResults)) {
             await writeDebugOutput(debugDir, char, result);
+          }
+          for (const [char, result] of Object.entries(bundle.geometryResults ?? {})) {
+            await writeGeometryDebugOutput(debugDir, char, result, bundle.fontOutput.font.lineCap);
           }
         }
 

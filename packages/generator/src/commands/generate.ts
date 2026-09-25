@@ -71,9 +71,85 @@ const pipelineOptionsSchema = z.object({
 export type PipelineOptions = z.infer<typeof pipelineOptionsSchema>;
 export const DEFAULT_OPTIONS: PipelineOptions = pipelineOptionsSchema.parse({});
 
+// Geometry-pipeline tunables as CLI flags. Defaults come from
+// DEFAULT_GEOMETRY_OPTIONS (the source of truth, shared with the Studio); the
+// type check below keeps the two field sets identical.
+const G = DEFAULT_GEOMETRY_OPTIONS;
+export const geometryOptionsSchema = z.object({
+  extraction: z
+    .enum(['ink-graph', 'partition'])
+    .default(G.extraction)
+    .describe('Geometry: stroke extraction — `ink-graph` (triangulated ink) or `partition` (corner cuts + per-face medial axes)'),
+  strokeOrder: z
+    .enum(['auto', 'dataset', 'heuristic'])
+    .default(G.strokeOrder)
+    .describe(
+      'Geometry: draw order — `auto` uses a KanjiVG/Hershey reference when it matches cleanly, `dataset` forces it, `heuristic` ignores it',
+    ),
+  inkSampleRatio: z
+    .number()
+    .default(G.inkSampleRatio)
+    .describe('Geometry (ink-graph): outline resampling step, as a fraction of units per em'),
+  inkSpurTolerance: z
+    .number()
+    .default(G.inkSpurTolerance)
+    .describe("Geometry (ink-graph): spur prune tolerance, as a fraction of the junction's inscribed radius"),
+  inkJunctionReach: z
+    .number()
+    .default(G.inkJunctionReach)
+    .describe("Geometry (ink-graph): junction zone radius, as a multiple of the junction's inscribed radius"),
+  inkSerifs: z
+    .boolean()
+    .default(G.inkSerifs)
+    .describe('Geometry (ink-graph): fold serifs into the stroke ends they cap instead of drawing them'),
+  continuationMaxBendDeg: z
+    .number()
+    .default(G.continuationMaxBendDeg)
+    .describe('Geometry: max bend (degrees) for a stroke to run on through a junction'),
+  medialMethod: z
+    .enum(['straight-skeleton', 'voronoi', 'chain'])
+    .default(G.medialMethod)
+    .describe('Geometry (partition): segment axis computation'),
+  cornerAngleThresholdDeg: z
+    .number()
+    .default(G.cornerAngleThresholdDeg)
+    .describe('Geometry (partition): min turn (degrees) for a concave corner'),
+  cornerWindowRatio: z
+    .number()
+    .default(G.cornerWindowRatio)
+    .describe('Geometry (partition): corner tangent window, as a fraction of units per em'),
+  cutAlignToleranceDeg: z
+    .number()
+    .default(G.cutAlignToleranceDeg)
+    .describe("Geometry (partition): max deviation (degrees) between a cut and its corner's wall continuation"),
+  maxCutLengthFactor: z
+    .number()
+    .default(G.maxCutLengthFactor)
+    .describe("Geometry (partition): max cut length, as a multiple of the corner's local width"),
+  junctionCompactness: z
+    .number()
+    .default(G.junctionCompactness)
+    .describe('Geometry (partition): fold faces past this × their cut span become retraced lobes, closer ones turns'),
+  resampleSpacingRatio: z
+    .number()
+    .default(G.resampleSpacingRatio)
+    .describe('Geometry (partition): medial-axis sample spacing, as a fraction of units per em'),
+});
+type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : never;
+const _geometryFlagsCoverOptions: SameKeys<z.infer<typeof geometryOptionsSchema>, GeometryOptions> &
+  (z.infer<typeof geometryOptionsSchema> extends GeometryOptions ? true : never) = true;
+void _geometryFlagsCoverOptions;
+
+/** The geometry options among parsed `generate` args (the rest are raster / bundle options). */
+export function pickGeometryOptions(args: GeometryOptions): GeometryOptions {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(DEFAULT_GEOMETRY_OPTIONS) as (keyof GeometryOptions)[]) out[key] = args[key];
+  return out as unknown as GeometryOptions;
+}
+
 // ── CLI argument schema ───────────────────────────────────────────────────
 
-export const generateArgsSchema = pipelineOptionsSchema.extend({
+export const generateArgsSchema = pipelineOptionsSchema.extend(geometryOptionsSchema.shape).extend({
   family: z.string().default(DEFAULT_FONT_FAMILY).describe('Google Fonts family name'),
   pipeline: z
     .enum(['geometry', 'raster'])
@@ -92,7 +168,7 @@ export const generateArgsSchema = pipelineOptionsSchema.extend({
   debug: z
     .boolean()
     .default(false)
-    .describe('Output intermediate steps (bitmap, skeleton, trace, animation SVGs; raster pipeline only)')
+    .describe("Output each glyph's intermediate steps under <output>/debug (the pipeline's stages as SVG/PNG, an animated SVG)")
     .meta({ flags: 'd' }),
 });
 

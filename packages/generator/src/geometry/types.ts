@@ -195,12 +195,12 @@ export interface GeometryOptions {
   strokeOrder: 'auto' | 'dataset' | 'heuristic';
   /**
    * How strokes are extracted from the outline:
-   * - 'partition' (default): concave corners → cuts → face partition →
-   *   per-face medial axes → junction continuation matching.
-   * - 'ink-graph' (experimental): triangulate the ink once, read the stroke
+   * - 'ink-graph' (default): triangulate the ink once, read the stroke
    *   topology off the triangles (tips / sleeves / junctions), prune spurs by
    *   ink coverage, and pair branch ends per junction exactly (see ink/).
    *   Ignores the corner/cut/medial options.
+   * - 'partition': concave corners → cuts → face partition → per-face
+   *   medial axes → junction continuation matching.
    */
   extraction: 'partition' | 'ink-graph';
   /** Ink graph: outline resampling step as a fraction of unitsPerEm. */
