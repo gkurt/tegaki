@@ -50,7 +50,8 @@ export function StandaloneTextPreview() {
       try {
         const { primary, extra } = await fetchFontFromCDN(state.fontFamily);
         if (cancelled) return;
-        const info = await parseFont(primary, extra.length > 0 ? extra : undefined);
+        // Fontsource's subsets carry no name table, so the family is passed in.
+        const info = await parseFont(primary, extra.length > 0 ? extra : undefined, state.fontFamily);
         setFontInfo(info);
         setFontBuffer(primary);
         setExtraFontBuffers(extra.length > 0 ? extra : undefined);
