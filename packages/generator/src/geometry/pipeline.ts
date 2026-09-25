@@ -757,13 +757,18 @@ export function runGeometryPipeline(
         const cutsFontStrokes = regrouped && variantStrokes.length > strokes.length && !hasCanonicalStrokeOrder(char);
         return { registered, match, clean, strokes: variantStrokes, regrouped, cutsFontStrokes, rankCost, warnings: variantWarnings };
       });
-      // A variant that fits the font's own strokes beats one that has to cut
-      // them, however low the cut's cost: Dancing Script's w_r takes Hershey's
-      // two-stroke cursive w as drawn, not KanjiVG's print w cut into four.
+      // A variant that matches the font's strokes as drawn beats one that has
+      // to cut them, however low the cut's cost: Dancing Script's w_r takes
+      // Hershey's two-stroke cursive w as drawn, not KanjiVG's print w cut
+      // into four. Without such a match the cut stands — Amiri's serif A
+      // keeps KanjiVG's three strokes over Hershey's cursive A, which retraces
+      // its ink to merge them into one.
+      const matchedAsDrawn = evals.some((e) => e.clean && !e.regrouped);
+      const demoted = (e: (typeof evals)[number]) => Number(matchedAsDrawn && e.cutsFontStrokes);
       evals.sort(
         (a, b) =>
           Number(b.clean) - Number(a.clean) ||
-          Number(a.cutsFontStrokes) - Number(b.cutsFontStrokes) ||
+          demoted(a) - demoted(b) ||
           Number(b.match.extractedCount === b.match.referenceCount) - Number(a.match.extractedCount === a.match.referenceCount) ||
           a.rankCost - b.rankCost,
       );
