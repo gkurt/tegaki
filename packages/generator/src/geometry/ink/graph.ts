@@ -267,7 +267,10 @@ function coveredSubtree(
  * overshoot always allowed: outline detail smaller than a couple of sample
  * steps (the fillet of a rounded acute corner, where the axis runs into the
  * corner and every disk is tiny) is below what the mesh resolves. A node may
- * prune down to degree 1 (it becomes the stroke's end: its disk is the cap).
+ * prune down to degree 1 (it becomes the stroke's end: its disk is the cap),
+ * and on to degree 0 when its disk covers ALL the ink it still reaches: a
+ * dot, drawn as its disk. Stopping at one neighbour left a round dot's last
+ * branch to the junction fans of its rim, which fragment into strokes.
  * Returns the number of subtrees removed.
  */
 export function pruneSpurs(g: InkGraph, tolerance: number, floor: number): number {
@@ -279,7 +282,7 @@ export function pruneSpurs(g: InkGraph, tolerance: number, floor: number): numbe
   for (let changed = true; changed; ) {
     changed = false;
     for (const t of order) {
-      if (!g.alive[t] || g.deg[t]! < 2) continue;
+      if (!g.alive[t] || g.deg[t]! < 1) continue;
       const c = g.center[t]!;
       const r = g.radius[t]!;
       let best: { tris: number[]; poke: number; flick: AxisPoint[] } | null = null;

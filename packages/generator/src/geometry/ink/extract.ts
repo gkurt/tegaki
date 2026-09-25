@@ -46,7 +46,7 @@ export interface InkRegionResult {
   segments: SegmentInfo[];
   clusters: JunctionCluster[];
   strokes: GeoStroke[];
-  /** Ink area (triangle area) no final stroke paints. */
+  /** Ink area (triangle area) no final stroke paints — the pipeline reports it summed over the glyph's pieces. */
   uncoveredArea: number;
   totalArea: number;
   warnings: string[];
@@ -153,6 +153,37 @@ export function simplifyKeepingNibs(points: AxisPoint[], epsilon: number, cleara
   return out.length > 0 ? out : points;
 }
 
+/**
+ * A region is meshed at least this many sample steps across its bounding-box
+ * diagonal. At the em-relative default step a dot or comma (a few steps
+ * wide) meshes into a few dozen triangles whose axis can't follow its lens
+ * or teardrop outline, leaving crescents unpainted.
+ */
+const MIN_REGION_SAMPLES = 50;
+
+/**
+ * The resolution to extract a region at, as a factor on the em-relative
+ * sample step and simplify tolerance: 1 for letter-sized ink, below 1 for a
+ * region too small to hold `MIN_REGION_SAMPLES` steps across, so a dot is
+ * extracted like a letter scaled up.
+ */
+export function regionScale(contours: Contour[], step: number): number {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const c of contours) {
+    for (const p of c.points) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+  }
+  if (!(maxX >= minX) || step <= 0) return 1;
+  return Math.min(1, Math.hypot(maxX - minX, maxY - minY) / (MIN_REGION_SAMPLES * step));
+}
+
 export function extractInkRegion(contours: Contour[], options: InkExtractionOptions, faceIdOffset: number): InkRegionResult {
   const warnings: string[] = [];
   const step = options.sampleSpacing;
@@ -223,10 +254,6 @@ export function extractInkRegion(contours: Contour[], options: InkExtractionOpti
       kind: zone.has(t) ? 'junction' : 'segment',
     });
   }
-  if (totalArea > 0 && uncoveredArea / totalArea > 0.005) {
-    warnings.push(`ink graph: ${((100 * uncoveredArea) / totalArea).toFixed(1)}% of the ink is not painted by any stroke`);
-  }
-
   const segments: SegmentInfo[] = cover.branches.map((b) => ({
     faceId: faceIdOffset + (b.tris[0] ?? 0),
     axis: b.axis,

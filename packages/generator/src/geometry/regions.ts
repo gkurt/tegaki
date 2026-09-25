@@ -102,3 +102,29 @@ export function partitionRegions(contours: Contour[], overlaps: [number, number]
   }
   return [...regionOf.values()];
 }
+
+/**
+ * Split a region into its connected pieces of ink: each outer contour with
+ * the holes it owns (the smallest outer containing them). A region's outers
+ * don't cross (crossing outers are separate regions), so the pieces are
+ * disjoint — the two dots of a colon, a letter and its i-dot.
+ */
+export function splitComponents(region: Contour[]): Contour[][] {
+  const outers = region.filter((c) => !c.isHole);
+  if (outers.length <= 1) return [region];
+  const parts = outers.map((c) => [c]);
+  for (const hole of region) {
+    if (!hole.isHole) continue;
+    let owner = -1;
+    let ownerArea = Infinity;
+    outers.forEach((outer, i) => {
+      const a = Math.abs(outer.area);
+      if (a < ownerArea && pointInPolygon(hole.points[0]!, outer.points)) {
+        ownerArea = a;
+        owner = i;
+      }
+    });
+    if (owner >= 0) parts[owner]!.push(hole);
+  }
+  return parts;
+}

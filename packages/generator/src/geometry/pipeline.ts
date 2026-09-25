@@ -20,7 +20,7 @@ import { generateCuts } from './cuts.ts';
 import { type InkDisk, polylineInkDisks } from './face-medial.ts';
 import { mergeSegmentFaces } from './face-merge.ts';
 import { straightSkeletonFaceAxes, straightSkeletonStrokeAxis } from './face-straight-skeleton.ts';
-import { extractInkRegion, simplifyKeepingNibs } from './ink/extract.ts';
+import { extractInkRegion, regionScale, simplifyKeepingNibs } from './ink/extract.ts';
 import { carryNibs } from './ink/nib.ts';
 import { SegmentIndex } from './ink/spatial.ts';
 import { extendUnpairedEnds, routeJunctionPaths } from './junction-routing.ts';
@@ -28,11 +28,12 @@ import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { type OrderPlan, orderAndTimeStrokes } from './ordering.ts';
 import { classifyFaces, dissolvePartitionDebris, partitionFaces } from './partition.ts';
 import { dist, pointInPolygon, sub } from './primitives.ts';
-import { partitionRegions } from './regions.ts';
+import { partitionRegions, splitComponents } from './regions.ts';
 import { LIFT_RANK_PENALTY, PRUNE_COST_WEIGHT, regroupStrokesByReference } from './regroup.ts';
 import { assembleStrokes, buildJunctions, type JunctionNode, matchContinuations, simplifyStroke, type TrialJoinScorer } from './strokes.ts';
 import { trialJoinAlignment } from './trial-join.ts';
 import {
+  type Contour,
   DEFAULT_GEOMETRY_OPTIONS,
   type Face,
   type GeometryOptions,
@@ -435,6 +436,24 @@ export function hasCanonicalStrokeOrder(char: string): boolean {
   return CANONICAL_STROKE_ORDER.test(char);
 }
 
+/**
+ * A region's ink as the pieces to extract, each at its resolution (see
+ * `regionScale`): the letter-sized components together at the default step,
+ * and each component too small for it (a dot, a comma, an accent) on its own
+ * at a finer one.
+ */
+function inkPieces(region: Contour[], step: number): { contours: Contour[]; scale: number }[] {
+  const pieces: { contours: Contour[]; scale: number }[] = [];
+  const letterSized: Contour[] = [];
+  for (const component of splitComponents(region)) {
+    const scale = regionScale(component, step);
+    if (scale < 1) pieces.push({ contours: component, scale });
+    else letterSized.push(...component);
+  }
+  if (letterSized.length > 0) pieces.unshift({ contours: letterSized, scale: 1 });
+  return pieces;
+}
+
 export function runGeometryPipeline(
   input: GeometryPipelineInput,
   rawGlyph: Pick<RawGlyphData, 'commands'>,
@@ -471,25 +490,36 @@ export function runGeometryPipeline(
   const geoStrokes: GeometryPipelineResult['geoStrokes'] = [];
 
   if (resolved.extraction === 'ink-graph') {
+    // The coverage audit, summed over the pieces: a dot's sliver is a share
+    // of the glyph's ink, not of the dot's.
+    let uncoveredArea = 0;
+    let totalArea = 0;
     for (const region of regions) {
       allContours.push(...region);
-      const r = extractInkRegion(
-        region,
-        {
-          sampleSpacing: resolved.inkSampleSpacing,
-          spurTolerance: resolved.inkSpurTolerance,
-          junctionReach: resolved.inkJunctionReach,
-          continuationMinCos: resolved.continuationMinCos,
-          simplifyEpsilon: simplifyEps,
-          absorbSerifs: resolved.inkSerifs,
-        },
-        faces.length,
-      );
-      warnings.push(...r.warnings);
-      faces.push(...r.faces);
-      const segOffset = segments.length;
-      segments.push(...r.segments);
-      for (const gs of r.strokes) geoStrokes.push({ ...gs, segmentIndices: gs.segmentIndices.map((s) => s + segOffset) });
+      for (const { contours: piece, scale } of inkPieces(region, resolved.inkSampleSpacing)) {
+        const r = extractInkRegion(
+          piece,
+          {
+            sampleSpacing: resolved.inkSampleSpacing * scale,
+            spurTolerance: resolved.inkSpurTolerance,
+            junctionReach: resolved.inkJunctionReach,
+            continuationMinCos: resolved.continuationMinCos,
+            simplifyEpsilon: simplifyEps * scale,
+            absorbSerifs: resolved.inkSerifs,
+          },
+          faces.length,
+        );
+        warnings.push(...r.warnings);
+        uncoveredArea += r.uncoveredArea;
+        totalArea += r.totalArea;
+        faces.push(...r.faces);
+        const segOffset = segments.length;
+        segments.push(...r.segments);
+        for (const gs of r.strokes) geoStrokes.push({ ...gs, segmentIndices: gs.segmentIndices.map((s) => s + segOffset) });
+      }
+    }
+    if (totalArea > 0 && uncoveredArea / totalArea > 0.005) {
+      warnings.push(`ink graph: ${((100 * uncoveredArea) / totalArea).toFixed(1)}% of the ink is not painted by any stroke`);
     }
   }
 

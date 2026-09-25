@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Point } from 'tegaki';
 import { buildContours, findContourOverlaps } from './contours.ts';
-import { partitionRegions } from './regions.ts';
+import { partitionRegions, splitComponents } from './regions.ts';
 
 const rect = (x1: number, y1: number, x2: number, y2: number): Point[] => [
   { x: x1, y: y1 },
@@ -69,5 +69,19 @@ describe('partitionRegions — holes ride with crossing outers', () => {
     const solos = regions.filter((r) => r.length === 1);
     expect(solos.length).toBe(2);
     for (const solo of solos) expect(solo[0]!.isHole).toBe(false);
+  });
+});
+
+describe('splitComponents', () => {
+  test("a colon's two dots are two pieces", () => {
+    const [region] = regionsOf(circle(100, 100, 40), circle(100, 400, 40));
+    expect(splitComponents(region!).map((part) => part.length)).toEqual([1, 1]);
+  });
+
+  test('a hole stays with the outer that owns it', () => {
+    // An "o" beside a dot: the counter rides with the o, the dot is alone.
+    const [region] = regionsOf(circle(500, 500, 300), circle(500, 500, 150), circle(1000, 500, 40));
+    const parts = splitComponents(region!);
+    expect(parts.map((part) => part.map((c) => c.isHole))).toEqual([[false, true], [false]]);
   });
 });

@@ -4,7 +4,7 @@ import { buildContours } from '../contours.ts';
 import { pointInRegion } from '../primitives.ts';
 import type { AxisPoint } from '../types.ts';
 import { appendAxisPoints, type ClusterSlot, findSerifArms, type SerifSlotShape, solvePairing } from './cover.ts';
-import { extractInkRegion, type InkExtractionOptions } from './extract.ts';
+import { extractInkRegion, type InkExtractionOptions, regionScale } from './extract.ts';
 import { buildInkGraph, pruneSpurs, withFlicks } from './graph.ts';
 import { buildInkMesh, trianglePoints } from './mesh.ts';
 import { carryNibs, inNib, paintedBy, stampHoles, triangleSample, unpaintedSamples } from './nib.ts';
@@ -529,5 +529,34 @@ describe('unpaintedSamples', () => {
     for (let t = 0; t < mesh.triCount; t++) for (const q of unpaintedSamples(g, t, 3, pen, 0)) left += q.area;
     expect(left / 3600).toBeGreaterThan(0.04);
     expect(left / 3600).toBeLessThan(0.1);
+  });
+});
+
+describe('regionScale', () => {
+  test('letter-sized ink keeps the default step', () => {
+    expect(regionScale(buildContours([rect(0, 0, 40, 500)]), STEP)).toBe(1);
+  });
+
+  test('a dot is refined to 50 steps across its diagonal', () => {
+    // 60 × 80: a 100-unit diagonal, 50 steps of 2 instead of ~17 of 6.
+    expect(regionScale(buildContours([rect(0, 0, 60, 80)]), STEP) * STEP).toBeCloseTo(2, 6);
+  });
+});
+
+describe('round dots', () => {
+  // A round blob many sample steps across: its chordal axis is a tree of rim
+  // fans, all inside the center disk. Pruning used to stop the center at one
+  // neighbour, leaving that last branch's fans to split into stray strokes.
+  const disk = (r: number, n = 32): Point[] =>
+    Array.from({ length: n }, (_, i) => {
+      const a = (i / n) * Math.PI * 2;
+      return { x: r * Math.cos(a), y: r * Math.sin(a) };
+    });
+
+  test('a dot twenty steps across is one stroke: its disk', () => {
+    const r = extractWith({ sampleSpacing: 2 }, disk(40));
+    expect(r.strokes.length).toBe(1);
+    expect(r.strokes[0]!.points.length).toBe(1);
+    expect(r.uncoveredArea / r.totalArea).toBeLessThan(0.01);
   });
 });
