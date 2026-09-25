@@ -79,3 +79,19 @@ export function ensureFont(
   });
   return Promise.all(pending).then(() => {});
 }
+
+const FONT_MIME: Record<string, string> = { ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2' };
+
+/** A font file as a `data:` URI, for embedding in a standalone SVG. */
+export async function fontDataUri(url: string): Promise<string> {
+  if (url.startsWith('data:')) return url;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch font ${url}: ${res.status}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const ext = /\.(\w+)(?:[?#]|$)/.exec(url)?.[1]?.toLowerCase() ?? '';
+  const header = res.headers.get('content-type');
+  const mime = FONT_MIME[ext] ?? (header?.startsWith('font/') ? header : 'font/ttf');
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:${mime};base64,${btoa(binary)}`;
+}

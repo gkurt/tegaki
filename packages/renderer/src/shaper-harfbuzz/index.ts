@@ -111,6 +111,7 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
   // compatibility with single-subset bundles. Every call is its own `run`
   // (see `ShapedGlyph.run`); `direction`, when known, overrides harfbuzz's
   // guess from the script (Arabic-Indic digits would otherwise shape RTL).
+  const outlines = new Map<string, string | null>();
   let nextRun = 0;
   const shapeRun = (
     subsetIdx: number,
@@ -267,6 +268,18 @@ async function buildShaper(bundle: TegakiBundle): Promise<BundleShaper> {
         }
       }
       return out;
+    },
+
+    glyphPath(g: string): string | null {
+      let path = outlines.get(g);
+      if (path === undefined) {
+        const sep = g.indexOf(':');
+        const subset = subsets[sep < 0 ? 0 : Number(g.slice(0, sep))];
+        const gid = Number(sep < 0 ? g : g.slice(sep + 1));
+        path = subset && Number.isInteger(gid) ? subset.font.glyphToPath(gid) : null;
+        outlines.set(g, path);
+      }
+      return path;
     },
   };
 }

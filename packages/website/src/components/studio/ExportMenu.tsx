@@ -31,6 +31,7 @@ export function ExportMenu({
   bundleBusy,
   chars,
   pipeline,
+  speed,
 }: {
   /** Null outside text mode — the animation formats are disabled then. */
   getEngine: (() => TegakiEngine | null) | null;
@@ -41,11 +42,14 @@ export function ExportMenu({
   bundleBusy: boolean;
   chars: string;
   pipeline: string;
+  /** Motion › Speed — the animated formats play at it. */
+  speed: number;
 }) {
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<Format>('svg');
   const [animated, setAnimated] = useState(true);
   const [loop, setLoop] = useState(true);
+  const [loopHold, setLoopHold] = useState(1.5);
   const [transparent, setTransparent] = useState(true);
   const [fps, setFps] = useState(20);
   const [maxWidth, setMaxWidth] = useState(800);
@@ -75,17 +79,25 @@ export function ExportMenu({
       // Let the host pause its playback loop before we drive the engine.
       await new Promise((r) => requestAnimationFrame(r));
       if (format === 'svg') {
-        const blob = exportSvg(engine, { animated, loop: animated && loop });
+        const blob = await exportSvg(engine, { animated, loop: animated && loop, speed, loopHold });
         downloadBlob(blob, `${name}${animated ? '-animated' : ''}.svg`);
       } else if (format === 'png') {
         const blob = await exportPng(engine, { background: bg });
         downloadBlob(blob, `${name}.png`);
       } else if (format === 'gif') {
-        const blob = await exportGif(engine, { fps, maxWidth, background: bg ?? '#ffffff', onProgress: setProgress, signal: abort.signal });
+        const blob = await exportGif(engine, {
+          fps,
+          maxWidth,
+          speed,
+          background: bg ?? '#ffffff',
+          onProgress: setProgress,
+          signal: abort.signal,
+        });
         downloadBlob(blob, `${name}.gif`);
       } else if (format === 'webm') {
         const blob = await exportWebm(engine, {
           fps: Math.max(fps, 24),
+          speed,
           background: bg ?? '#ffffff',
           onProgress: setProgress,
           signal: abort.signal,
@@ -99,7 +111,7 @@ export function ExportMenu({
       setProgress(0);
       abortRef.current = null;
     }
-  }, [getEngine, onExportStart, text, format, animated, loop, bg, fps, maxWidth]);
+  }, [getEngine, onExportStart, text, format, animated, loop, loopHold, speed, bg, fps, maxWidth]);
 
   const showFps = format === 'gif' || format === 'webm';
   const noAlpha = format === 'gif' || format === 'webm';
@@ -168,6 +180,9 @@ export function ExportMenu({
               <>
                 <Toggle label="Self-drawing" checked={animated} onChange={setAnimated} />
                 {animated && <Toggle label="Loop forever" checked={loop} onChange={setLoop} />}
+                {animated && loop && (
+                  <Slider label="Pause before repeat" value={loopHold} min={0} max={5} step={0.1} unit="s" onChange={setLoopHold} />
+                )}
               </>
             )}
             {showFps && (
@@ -183,13 +198,14 @@ export function ExportMenu({
               ? !animated
                 ? 'Static final artwork (every stroke fully drawn).'
                 : loop
-                  ? 'Loops via CSS keyframes (constant width) — ideal for a README hero or embed.'
-                  : 'Draws itself once on load, then stays complete (variable width via per-stroke mask reveal).'
+                  ? 'Loops via CSS keyframes — ideal for a README hero or embed.'
+                  : 'Draws itself once on load, then stays complete.'
               : format === 'png'
                 ? 'Exports the current frame. Seek or pause first to pick the moment.'
                 : noAlpha
                   ? 'White background — the format has no alpha.'
                   : null}
+            {format !== 'png' && (format !== 'svg' || animated) && speed !== 1 && ` Plays at ${speed}× (Motion › Speed).`}
           </Hint>
           {busy ? (
             <div className="flex items-center gap-2">

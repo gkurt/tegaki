@@ -180,3 +180,19 @@ export interface TegakiEngineOptions {
 // ---------------------------------------------------------------------------
 
 export type CreateElementFn<T> = (tag: string, props: Record<string, any>, ...children: (T | string)[]) => T;
+
+/** Options for `TegakiEngine.toSVG` / `exportSVG`. */
+export interface TegakiSvgOptions {
+  /** Self-drawing (default) or the finished artwork. */
+  animated?: boolean;
+  /** Loop forever with CSS keyframes: draw, hold, fade, repeat. Implies `animated`. */
+  loop?: boolean;
+  /** Playback speed multiplier. Default: the engine's uncontrolled `speed`, else `1`. */
+  speed?: number;
+  /** Loop mode: seconds the finished text holds before it fades out. Default `1.5`. */
+  loopHold?: number;
+  /** Crop the viewBox to the ink (plus a small margin) instead of the full canvas box. Default `true`. */
+  crop?: boolean;
+  /** `@font-face` rules to embed for the SVG's text (clip-to-text, fallback characters). `exportSVG` fills these in. */
+  fontFaces?: { family: string; src: string }[];
+}

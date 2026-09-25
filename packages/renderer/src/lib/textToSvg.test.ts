@@ -8,10 +8,10 @@ const font = caveat as unknown as TegakiBundle;
 describe('textToSvg', () => {
   test('loop mode emits CSS keyframes + group fade and crops the viewBox to ink', () => {
     const svg = textToSvg('Hi', font, { mode: 'loop' });
-    expect(svg).toContain('@keyframes tk-d0');
+    expect(svg).toContain('@keyframes tk-a0');
     expect(svg).toContain('stroke-dashoffset');
-    expect(svg).toContain('class="tk-grp"');
-    expect(svg).toContain('@keyframes tk-fade');
+    // The whole word sits in one group that fades out at the end of each cycle.
+    expect(svg).toMatch(/<g class="tk-a\d+">/);
     // No SMIL / mask reveal in the looping path.
     expect(svg).not.toContain('<animate');
     expect(svg).not.toContain('<mask');
@@ -41,9 +41,9 @@ describe('textToSvg', () => {
   });
 
   test('color and font size are honoured', () => {
-    const svg = textToSvg('A', font, { mode: 'static', color: '#ff0000', fontSize: 200 });
+    const svg = textToSvg('A', font, { mode: 'static', color: '#ff0000', fontSize: 200, crop: false });
     expect(svg).toContain('#ff0000');
-    // viewBox height scales with font size (static viewBox is the full layout box).
+    // viewBox height scales with font size (uncropped, the viewBox is the full layout box).
     const h = /height="([\d.]+)"/.exec(svg);
     expect(Number(h![1])).toBeGreaterThan(200);
   });
@@ -62,8 +62,8 @@ describe('textToSvg', () => {
   });
 
   test('letterSpacing widens the layout and pushes later glyphs right', () => {
-    const tight = textToSvg('AV', font, { mode: 'static', fontSize: 100 });
-    const loose = textToSvg('AV', font, { mode: 'static', fontSize: 100, letterSpacing: 40 });
+    const tight = textToSvg('AV', font, { mode: 'static', fontSize: 100, crop: false });
+    const loose = textToSvg('AV', font, { mode: 'static', fontSize: 100, letterSpacing: 40, crop: false });
     // The overall box is one letter-spacing gap wider (one boundary between two glyphs).
     const w1 = Number(/width="([\d.]+)"/.exec(tight)![1]);
     const w2 = Number(/width="([\d.]+)"/.exec(loose)![1]);
@@ -85,8 +85,8 @@ describe('textToSvg', () => {
   });
 
   test('a newline produces a two-line layout (taller box)', () => {
-    const one = textToSvg('Ab', font, { mode: 'static' });
-    const two = textToSvg('A\nb', font, { mode: 'static' });
+    const one = textToSvg('Ab', font, { mode: 'static', crop: false });
+    const two = textToSvg('A\nb', font, { mode: 'static', crop: false });
     const h1 = Number(/height="([\d.]+)"/.exec(one)![1]);
     const h2 = Number(/height="([\d.]+)"/.exec(two)![1]);
     expect(h2).toBeGreaterThan(h1 * 1.5);

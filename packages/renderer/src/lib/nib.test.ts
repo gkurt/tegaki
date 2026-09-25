@@ -93,12 +93,14 @@ describe('placementsToSvg nib stamps', () => {
   test('single-play reveals the stamp when the pen reaches it', () => {
     const svg = placementsToSvg(items, { ...cfg, animated: true });
     // Halfway along the stroke under ease-out-quad: t = 1 − √0.5.
-    expect(svg).toContain(`<set attributeName="opacity" to="1" begin="${Math.round((1 - Math.sqrt(0.5)) * 100) / 100}s"`);
+    const begin = Number(/<set attributeName="opacity" to="1" begin="([\d.]+)s"/.exec(svg)?.[1]);
+    expect(begin).toBeCloseTo(1 - Math.sqrt(0.5), 3);
   });
 
   test('loop mode keyframes the stamp in and out with the word', () => {
     const svg = placementsToSvg(items, { ...cfg, loop: true });
-    expect(svg).toMatch(/<ellipse [^>]*class="tk-s1" opacity="0" \/>/);
-    expect(svg).toContain('@keyframes tk-d1');
+    const cls = /<ellipse [^>]*class="(tk-a\d+)" opacity="0" \/>/.exec(svg)?.[1];
+    expect(cls).toBeDefined();
+    expect(svg).toContain(`@keyframes ${cls} { 0% { opacity:0 }`);
   });
 });

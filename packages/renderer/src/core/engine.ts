@@ -8,24 +8,32 @@ import {
   PADDING_H_EM,
   registerCssProperties,
 } from '../lib/css-properties.ts';
-import { drawFallbackGlyph } from '../lib/drawFallbackGlyph.ts';
+import { drawFallbackGlyph, fallbackTextStyle } from '../lib/drawFallbackGlyph.ts';
 import { drawGlyph } from '../lib/drawGlyph.ts';
 import {
   effectInkMargin,
   findEffect,
   getEffectDefinition,
+  globalGradientGeometry,
   hasRenderHooks,
   type RenderStageContext,
   type ResolvedEffect,
   resolveEffects,
 } from '../lib/effects.ts';
 import { fallbackRuns } from '../lib/fallbackRuns.ts';
-import { LETTER_SPACED_OFF_FEATURES } from '../lib/features.ts';
-import { ensureFont, ensureFontFace } from '../lib/font.ts';
+import { LETTER_SPACED_OFF_FEATURES, toCssFeatureSettings } from '../lib/features.ts';
+import { ensureFont, ensureFontFace, fontDataUri } from '../lib/font.ts';
 import { type CanvasOverflow, glyphInkBounds, inkOverflow, NO_OVERFLOW } from '../lib/inkBounds.ts';
 import type { BundleShaper, ShapeOptions } from '../lib/shaper.ts';
 import { type SubdividedStroke, subdivideStroke } from '../lib/strokeCache.ts';
-import { placementsToSvg, type SvgGlyphPlacement } from '../lib/svgExport.ts';
+import {
+  placementsToSvg,
+  type SvgExportConfig,
+  type SvgFallbackText,
+  type SvgGlyphOutline,
+  type SvgGlyphPlacement,
+  type SvgTextRun,
+} from '../lib/svgExport.ts';
 import type { TextLayout } from '../lib/textLayout.ts';
 import { applyShaperPositions, computeLayoutBbox, computeTextLayout, lineWords } from '../lib/textLayout.ts';
 import type { Timeline, TimelineConfig, TimelineEntry } from '../lib/timeline.ts';
@@ -35,7 +43,7 @@ import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
 import { buildChildren, buildRootProps, canvasBoxStyle, domCreateElement } from './render-elements.ts';
 import { getShaperForBundle, registerShaper, settledShaperForBundle } from './shaper-registry.ts';
-import type { CreateElementFn, TegakiEngineOptions, TegakiQuality, TimeControlMode, TimeControlProp } from './types.ts';
+import type { CreateElementFn, TegakiEngineOptions, TegakiQuality, TegakiSvgOptions, TimeControlMode, TimeControlProp } from './types.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -399,23 +407,22 @@ export class TegakiEngine {
   }
 
   /**
-   * Serialize the current text to an SVG string, reusing the engine's measured
-   * layout and timeline so glyph positions match the canvas render exactly.
+   * Serialize the current text to an SVG string that draws what the canvas
+   * draws, reusing the engine's measured layout and timeline so glyph
+   * positions and timing match exactly: speed, glyph and stroke easing,
+   * deferred dots and stagger, every effect (pressure width, taper, nib
+   * stamps, stroke and global gradients, wobble, glow), clip-to-text and
+   * characters drawn from the fallback font.
    *
-   * `animated: true` (default) emits a self-drawing SVG — each stroke is
-   * revealed through a dashed-centerline mask over its own timeline window, so
-   * the file draws itself when opened. `animated: false` emits the finished
-   * artwork (every stroke fully drawn).
+   * `animated: true` (default) emits a self-drawing SVG that plays once
+   * (SMIL). `animated: false` emits the finished artwork. `loop: true` emits
+   * a CSS-keyframe animation that draws, holds, fades, and repeats forever —
+   * keyframes also animate in `<img>`-embedded SVGs (e.g. a README hero).
    *
-   * `loop: true` emits a looping CSS-keyframe animation (constant width) that
-   * draws, holds, fades, and repeats forever — reliable in `<img>`-embedded
-   * SVGs (e.g. a README hero). Implies `animated`.
-   *
-   * Variable stroke width (pressureWidth) is honoured in single-play mode (not
-   * `loop`). Glow, wobble, gradient, taper, and clip-to-text are not modelled
-   * in the SVG output.
+   * Clip-to-text and fallback characters are SVG `<text>` in the bundle's
+   * font; pass `fontFaces` to embed it (see {@link exportSVG}, which does).
    */
-  toSVG(opts: { animated?: boolean; loop?: boolean } = {}): string {
+  toSVG(opts: TegakiSvgOptions = {}): string {
     const font = this._font;
     const layout = this._layout;
     const fontSize = this._fontSize;
@@ -433,14 +440,12 @@ export class TegakiEngine {
     const halfLeading = (lineHeight - emHeightPx) / 2;
     const scale = fontSize / font.unitsPerEm;
     const characters = graphemes(this._text);
+    const color = this._currentColor || 'black';
+    const effects = this._resolvedEffects;
 
-    // Mirror _render's subdivision threshold + variable-width inputs.
-    const pressureEffect = findEffect(this._resolvedEffects, 'pressureWidth');
+    const pressureEffect = findEffect(effects, 'pressureWidth');
     const pressure = pressureEffect ? Math.max(0, Math.min(pressureEffect.config.strength ?? 1, 1)) : 0;
-    const smoothing = this._quality?.smoothing === true;
-    const userSegmentSize = this._quality?.segmentSize;
-    const resolvedSegmentSize = userSegmentSize ?? (pressure > 0 || smoothing ? 2 : undefined);
-    const segmentLengthFU = resolvedSegmentSize != null ? resolvedSegmentSize / scale : Infinity;
+    const { maxSegLenFU, smoothing } = this._subdivision(scale);
     const clipText = this._quality?.clipText;
     const strokeScale = typeof clipText === 'number' ? clipText : 1;
 
@@ -449,31 +454,136 @@ export class TegakiEngine {
       for (const charIdx of layout.lines[li]!) graphemeToLine[charIdx] = li;
     }
 
+    const textFont = {
+      family: cssFontFamily(font, this._fallbackFont),
+      fontSize,
+      letterSpacing: this._letterSpacing,
+      featureSettings: toCssFeatureSettings(font.features ?? []),
+    };
     const placements: SvgGlyphPlacement[] = [];
-    for (const entry of this._timeline.entries) {
-      if (entry.char === '\n' || !entry.hasGlyph) continue;
+    const fallbackTexts: SvgFallbackText[] = [];
+    const fallbackClips = this._fallbackRunClips(layout, characters, graphemeToLine, fontSize);
+    const entries = this._timeline.entries;
+    for (let ei = 0; ei < entries.length; ei++) {
+      const entry = entries[ei]!;
+      if (entry.char === '\n') continue;
       const charIdx = entry.graphemeIndex;
       const lineIdx = graphemeToLine[charIdx] ?? -1;
       if (lineIdx < 0) continue;
+      const { x, y, glyphY } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
       const glyph = (entry.glyphId !== undefined ? font.glyphDataById?.[entry.glyphId] : undefined) ?? lookupGlyphData(font, entry.char);
-      if (!glyph) continue;
-      const { x, glyphY } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
-      placements.push({ glyph, ox: padH + x, oy: padV + glyphY, scale, ascender: font.ascender, offset: entry.offset });
+      if (glyph && entry.hasGlyph) {
+        placements.push({
+          glyph,
+          ox: padH + x,
+          oy: padV + glyphY,
+          scale,
+          ascender: font.ascender,
+          offset: entry.offset,
+          duration: entry.duration,
+          strokeDelays: entry.strokeDelays,
+          strokeTimeScale: entry.strokeTimeScale,
+          seed: this._seed + charIdx,
+        });
+      } else if (!entry.hasGlyph && /\S/u.test(entry.char)) {
+        // Drawn from the fallback font once its slot ends, as `_render` does.
+        const clip = fallbackClips.get(ei);
+        if (clip === null) continue;
+        const left = clip?.x ?? x;
+        const baseline = y + halfLeading + (font.ascender / font.unitsPerEm) * fontSize;
+        const style = fallbackTextStyle(left, baseline, fontSize, color, effects, clip?.seed ?? this._seed + charIdx);
+        const boxLeft = clip && clip.left > -CLIP_REACH ? clip.left : (layout.charOffsets[charIdx] ?? 0) * fontSize;
+        const boxRight = clip && clip.right < CLIP_REACH ? clip.right : boxLeft + (layout.charWidths[charIdx] ?? 0.5) * fontSize;
+        fallbackTexts.push({
+          text: clip?.text ?? entry.char,
+          x: padH + left + style.dx,
+          y: padV + baseline + style.dy,
+          direction: clip?.direction ?? layout.direction ?? 'ltr',
+          fill: style.fill,
+          glows: style.glows,
+          at: entry.offset + entry.duration,
+          clip: clip ? [clip.left > -CLIP_REACH ? padH + clip.left : null, clip.right < CLIP_REACH ? padH + clip.right : null] : undefined,
+          box: [padH + boxLeft, padV + y, padH + boxRight, padV + y + lineHeight],
+        });
+      }
     }
+
+    // Layout-wide paint from `globalGradient`, over the same box `_render` gives it.
+    const gg = findEffect(effects, 'globalGradient');
+    const ggColors = gg?.config.colors;
+    let globalGradient: SvgExportConfig['globalGradient'];
+    if (Array.isArray(ggColors) && ggColors.length > 0) {
+      const bbox = computeLayoutBbox(layout, fontSize, lineHeight);
+      const g = globalGradientGeometry({ ...bbox, x: bbox.x + padH, y: bbox.y + padV }, ggColors, gg?.config.angle ?? 0);
+      globalGradient = { x1: g.x1, y1: g.y1, x2: g.x2, y2: g.y2, stops: g.stops };
+    }
+
+    // `_render` clips to the text filled in its font: the shaped glyphs'
+    // outlines, or — without them — the words set in the font, where the DOM put them.
+    let clip: SvgExportConfig['clipText'];
+    const outlines = clipText ? this._glyphOutlines(graphemeToLine, padH, padV) : null;
+    if (outlines) {
+      clip = { glyphs: outlines };
+    } else if (clipText) {
+      const words: SvgTextRun[] = [];
+      let clipY = 0;
+      for (let li = 0; li < layout.lines.length; li++) {
+        const baseline = clipY + halfLeading + (font.ascender / font.unitsPerEm) * fontSize;
+        for (const word of lineWords(layout, characters, li)) {
+          words.push({ text: word.text, x: padH + word.leftEm * fontSize, y: padV + baseline, direction: word.direction });
+        }
+        clipY += lineHeight;
+      }
+      clip = { font: textFont, words };
+    }
+
+    const tc = this._timeControl;
+    const speed = opts.speed ?? (tc.mode === 'uncontrolled' && 'speed' in tc && tc.speed ? tc.speed : 1);
 
     return placementsToSvg(placements, {
       width,
       height,
       lineCap: font.lineCap,
-      color: this._currentColor || 'black',
+      color,
       pressure,
-      segmentLengthFU,
+      segmentLengthFU: maxSegLenFU,
       smoothing,
       strokeScale,
       animated: opts.animated ?? true,
       loop: opts.loop ?? false,
       totalDuration: this._timeline.totalDuration,
+      effects,
+      fontSize,
+      speed,
+      strokeEasing: this._timing?.strokeEasing,
+      glyphEasing: this._timing?.glyphEasing,
+      loopHold: opts.loopHold,
+      crop: opts.crop,
+      globalGradient,
+      clipText: clip,
+      fallback: fallbackTexts.length > 0 ? { font: textFont, texts: fallbackTexts } : undefined,
+      fontFaces: opts.fontFaces,
     });
+  }
+
+  /**
+   * {@link toSVG}, with the fonts its text needs embedded as data URIs — the
+   * bundle's faces when strokes are clipped to the text or characters fall
+   * back to the font, and the bundled full font for those characters — so the
+   * file renders the same anywhere. Fonts are fetched from the bundle's URLs.
+   */
+  async exportSVG(opts: Omit<TegakiSvgOptions, 'fontFaces'> = {}): Promise<string> {
+    const font = this._font;
+    const faces: { family: string; url: string }[] = [];
+    if (font) {
+      const fallback = drawsFallbackGlyphs(this._timeline.entries);
+      if ((this._quality?.clipText && !this._glyphOutlines()) || fallback) {
+        for (const url of [font.fontUrl, ...(font.extraFontUrls ?? [])]) faces.push({ family: font.family, url });
+      }
+      if (fallback && font.fullFontUrl && font.fullFamily) faces.push({ family: font.fullFamily, url: font.fullFontUrl });
+    }
+    const fontFaces = await Promise.all(faces.map(async ({ family, url }) => ({ family, src: await fontDataUri(url) })));
+    return this.toSVG({ ...opts, fontFaces });
   }
 
   play(): void {
@@ -1300,6 +1410,59 @@ export class TegakiEngine {
     Object.assign(this._canvasEl.style, canvasBoxStyle(next));
   }
 
+  /**
+   * The outline of every glyph the text draws, placed as the strokes are
+   * (absolute px with the canvas padding), so SVG export can clip to the text
+   * without embedding the font. Null unless the shaper provides outlines and
+   * every visible character is a shaped glyph of the bundle's font.
+   */
+  private _glyphOutlines(graphemeToLine?: Int32Array, padH = 0, padV = 0): SvgGlyphOutline[] | null {
+    const font = this._font;
+    const layout = this._layout;
+    const fontSize = this._fontSize;
+    const shaper = this._shaper;
+    const entries = this._timeline.entries;
+    if (!font || !layout || !fontSize || !shaper?.glyphPath || drawsFallbackGlyphs(entries)) return null;
+    let lines = graphemeToLine;
+    if (!lines) {
+      lines = new Int32Array(graphemes(this._text).length).fill(-1);
+      for (let li = 0; li < layout.lines.length; li++) for (const charIdx of layout.lines[li]!) lines[charIdx] = li;
+    }
+    const lineHeight = this._lineHeight;
+    const scale = fontSize / font.unitsPerEm;
+    const halfLeading = (lineHeight - ((font.ascender - font.descender) / font.unitsPerEm) * fontSize) / 2;
+    const out: SvgGlyphOutline[] = [];
+    for (const entry of entries) {
+      if (!/\S/u.test(entry.char)) continue;
+      if (entry.glyphId === undefined) return null;
+      const lineIdx = lines[entry.graphemeIndex] ?? -1;
+      if (lineIdx < 0) continue;
+      const d = shaper.glyphPath(entry.glyphId);
+      if (d === null) return null;
+      const { x, glyphY } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
+      out.push({ d, x: padH + x, y: padV + glyphY + font.ascender * scale, scale });
+    }
+    return out;
+  }
+
+  /**
+   * The stroke subdivision threshold in font units — Infinity for the raw
+   * polyline. It collapses every input that matters (segmentSize in CSS px,
+   * fontSize, unitsPerEm, whether any effect needs subdivision) into one value.
+   */
+  private _subdivision(scale: number): { maxSegLenFU: number; smoothing: boolean } {
+    const effects = this._resolvedEffects;
+    const pressure = findEffect(effects, 'pressureWidth');
+    const effectsNeedSubdivision =
+      !!findEffect(effects, 'wobble') ||
+      !!findEffect(effects, 'strokeGradient') ||
+      !!findEffect(effects, 'taper') ||
+      (!!pressure && Math.max(0, Math.min(pressure.config.strength ?? 1, 1)) > 0);
+    const smoothing = this._quality?.smoothing === true;
+    const resolvedSegmentSize = this._quality?.segmentSize ?? (effectsNeedSubdivision || smoothing ? 2 : undefined);
+    return { maxSegLenFU: resolvedSegmentSize != null ? resolvedSegmentSize / scale : Infinity, smoothing };
+  }
+
   private _render(): void {
     const canvas = this._canvasEl;
     const font = this._font;
@@ -1349,19 +1512,8 @@ export class TegakiEngine {
     // whether any effect needs subdivision) into a single value, so the cache
     // key is just (font family, maxSegLenFU). When anything that affects
     // subdivision changes, the key changes and the WeakMap is swapped out.
-    const effectsNeedSubdivision =
-      !!findEffect(this._resolvedEffects, 'wobble') ||
-      !!findEffect(this._resolvedEffects, 'strokeGradient') ||
-      !!findEffect(this._resolvedEffects, 'taper') ||
-      (() => {
-        const p = findEffect(this._resolvedEffects, 'pressureWidth');
-        return !!p && Math.max(0, Math.min(p.config.strength ?? 1, 1)) > 0;
-      })();
-    const smoothing = this._quality?.smoothing === true;
-    const userSegmentSize = this._quality?.segmentSize;
-    const resolvedSegmentSize = userSegmentSize ?? (effectsNeedSubdivision || smoothing ? 2 : undefined);
     const scale = fontSize / font.unitsPerEm;
-    const maxSegLenFU = resolvedSegmentSize != null ? resolvedSegmentSize / scale : Infinity;
+    const { maxSegLenFU, smoothing } = this._subdivision(scale);
     const cacheKey = `${font.family}|${maxSegLenFU}|${smoothing ? 's' : 'l'}`;
     if (cacheKey !== this._strokeCacheKey) {
       this._strokeCache = new WeakMap();

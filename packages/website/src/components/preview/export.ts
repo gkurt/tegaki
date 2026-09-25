@@ -45,8 +45,12 @@ export interface ExportProgress {
 
 // --- SVG -------------------------------------------------------------------
 
-export function exportSvg(engine: TegakiEngine, opts: { animated: boolean; loop?: boolean }): Blob {
-  const svg = engine.toSVG({ animated: opts.animated, loop: opts.loop });
+/** The text as a standalone SVG, with the fonts its clip-to-text and fallback characters need embedded. */
+export async function exportSvg(
+  engine: TegakiEngine,
+  opts: { animated: boolean; loop?: boolean; speed?: number; loopHold?: number },
+): Promise<Blob> {
+  const svg = await engine.exportSVG(opts);
   return new Blob([svg], { type: 'image/svg+xml' });
 }
 
@@ -67,11 +71,12 @@ export async function exportPng(engine: TegakiEngine, opts: { background?: strin
 
 export async function exportGif(
   engine: TegakiEngine,
-  opts: { fps?: number; maxWidth?: number; background?: string | null; holdMs?: number } & ExportProgress = {},
+  opts: { fps?: number; maxWidth?: number; background?: string | null; holdMs?: number; speed?: number } & ExportProgress = {},
 ): Promise<Blob> {
   const fps = opts.fps ?? 20;
   const background = opts.background ?? '#ffffff';
   const duration = engine.duration;
+  const speed = opts.speed && opts.speed > 0 ? opts.speed : 1;
   const source = engine.canvas;
   const cssW = source.offsetWidth;
   const cssH = source.offsetHeight;
@@ -88,13 +93,14 @@ export async function exportGif(
   const ctx = target.getContext('2d', { willReadFrequently: true })!;
 
   const gif = GIFEncoder();
-  const frameCount = Math.max(1, Math.ceil(duration * fps));
+  // Frames step real time; the timeline advances `speed` times as fast.
+  const frameCount = Math.max(1, Math.ceil((duration / speed) * fps));
   const delay = Math.round(1000 / fps);
   const restore = engine.currentTime;
 
   for (let i = 0; i <= frameCount; i++) {
     if (opts.signal?.aborted) throw new DOMException('Export aborted', 'AbortError');
-    const t = Math.min(i / fps, duration);
+    const t = Math.min((i / fps) * speed, duration);
     renderAt(engine, t);
     compositeTo(target, source, cssW, cssH, background);
     const { data } = ctx.getImageData(0, 0, outW, outH);
@@ -125,10 +131,11 @@ function pickWebmMime(): string | undefined {
 
 export async function exportWebm(
   engine: TegakiEngine,
-  opts: { fps?: number; background?: string | null } & ExportProgress = {},
+  opts: { fps?: number; background?: string | null; speed?: number } & ExportProgress = {},
 ): Promise<Blob> {
   if (!webmSupported()) throw new Error('WebM capture is not supported in this browser');
   const fps = opts.fps ?? 30;
+  const speed = opts.speed && opts.speed > 0 ? opts.speed : 1;
   const background = opts.background ?? '#ffffff';
   const duration = engine.duration;
   const source = engine.canvas;
@@ -159,7 +166,7 @@ export async function exportWebm(
 
   await new Promise<void>((resolve) => {
     const tick = () => {
-      const elapsed = (performance.now() - startTs) / 1000;
+      const elapsed = ((performance.now() - startTs) / 1000) * speed;
       const t = Math.min(elapsed, duration);
       renderAt(engine, t);
       compositeTo(target, source, cssW, cssH, background);

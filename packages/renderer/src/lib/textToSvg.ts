@@ -6,9 +6,9 @@ import { graphemes, lookupGlyphData } from './utils.ts';
 
 /** Animation flavour of the emitted SVG. */
 export type TextToSvgMode =
-  /** Self-drawing, loops forever via CSS keyframes (constant width). Best for a README hero / embed. */
+  /** Self-drawing, loops forever via CSS keyframes. Best for a README hero / embed. */
   | 'loop'
-  /** Self-drawing once on load, then stays complete (variable width via per-stroke mask reveal). */
+  /** Self-drawing once on load (SMIL), then stays complete. */
   | 'once'
   /** Static final artwork — every stroke fully drawn, no animation. */
   | 'static';
@@ -25,9 +25,9 @@ export interface TextToSvgOptions {
   /** Animation flavour. Default `'loop'`. */
   mode?: TextToSvgMode;
   /**
-   * Per-point width blend for `once` / `static` (0 = uniform mean width, 1 =
-   * full variable width — the canvas look). Ignored in `loop` mode, which is
-   * constant width by construction. Default `1`.
+   * Per-point width blend (0 = uniform mean width, 1 = full variable width —
+   * the canvas look). Default `1`, or `0` in `loop` mode: a constant-width
+   * loop reveals plain dashed paths, with no masks.
    */
   pressure?: number;
   /** Smooth strokes onto a Catmull-Rom spline before serializing. Default `false`. */
@@ -38,8 +38,14 @@ export interface TextToSvgOptions {
    * `smoothing`, otherwise the raw bundled polyline.
    */
   segmentSize?: number;
-  /** Timeline timing config (gaps, easing, stagger). Forwarded to `computeTimeline`. */
+  /** Timeline timing config (gaps, easing, stagger). Forwarded to `computeTimeline`; its easings shape the reveal. */
   timing?: TimelineConfig;
+  /** Playback speed multiplier. Default `1`. */
+  speed?: number;
+  /** `loop` mode: seconds the finished text holds before it fades out. Default `1.5`. */
+  loopHold?: number;
+  /** Crop the viewBox to the ink (plus a small margin) instead of the full layout box. Default `true`. */
+  crop?: boolean;
 }
 
 interface HeadlessLayout {
@@ -100,9 +106,8 @@ function headlessLayout(text: string, font: TegakiBundle, letterSpacingEm = 0): 
  * glyph positions from the bundle's advance widths instead of a measured DOM
  * overlay. This is what the `tegaki` CLI calls.
  *
- * Variable stroke width (`pressure`) is honoured in `once` / `static`; `loop`
- * is constant width by construction. Glow, wobble, gradient, taper, and
- * clip-to-text effects are not modelled in SVG.
+ * Effects, clip-to-text and fallback characters need the engine (`toSVG`);
+ * this draws the strokes with their width and timing only.
  */
 export function textToSvg(text: string, font: TegakiBundle, options: TextToSvgOptions = {}): string {
   const fontSize = options.fontSize ?? 100;
@@ -130,8 +135,7 @@ export function textToSvg(text: string, font: TegakiBundle, options: TextToSvgOp
     for (const charIdx of lines[li]!) graphemeToLine[charIdx] = li;
   }
 
-  // loop is constant width regardless; otherwise full per-point width by default.
-  const pressure = loop ? 0 : Math.max(0, Math.min(options.pressure ?? 1, 1));
+  const pressure = Math.max(0, Math.min(options.pressure ?? (loop ? 0 : 1), 1));
   const smoothing = options.smoothing === true;
   const resolvedSegmentSize = options.segmentSize ?? (pressure > 0 || smoothing ? 2 : undefined);
   const segmentLengthFU = resolvedSegmentSize != null ? resolvedSegmentSize / scale : Infinity;
@@ -146,7 +150,17 @@ export function textToSvg(text: string, font: TegakiBundle, options: TextToSvgOp
     if (!glyph) continue;
     const x = (charOffsets[charIdx] ?? 0) * fontSize;
     const glyphY = lineIdx * lineHeight + halfLeading;
-    placements.push({ glyph, ox: padH + x, oy: padV + glyphY, scale, ascender: font.ascender, offset: entry.offset });
+    placements.push({
+      glyph,
+      ox: padH + x,
+      oy: padV + glyphY,
+      scale,
+      ascender: font.ascender,
+      offset: entry.offset,
+      duration: entry.duration,
+      strokeDelays: entry.strokeDelays,
+      strokeTimeScale: entry.strokeTimeScale,
+    });
   }
 
   const width = padH * 2 + maxRightEm * fontSize;
@@ -164,5 +178,11 @@ export function textToSvg(text: string, font: TegakiBundle, options: TextToSvgOp
     animated,
     loop,
     totalDuration: timeline.totalDuration,
+    fontSize,
+    speed: options.speed,
+    strokeEasing: options.timing?.strokeEasing,
+    glyphEasing: options.timing?.glyphEasing,
+    loopHold: options.loopHold,
+    crop: options.crop,
   });
 }

@@ -44,4 +44,10 @@ export interface ShapeOptions {
 
 export interface BundleShaper {
   shape(text: string, options?: ShapeOptions): ShapedGlyph[];
+  /**
+   * A shaped glyph's outline (a `ShapedGlyph.g` key) as SVG path data in font
+   * units, y up — how SVG export draws text without embedding the font.
+   * Optional; null when the glyph is unknown.
+   */
+  glyphPath?(g: string): string | null;
 }

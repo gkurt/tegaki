@@ -229,6 +229,7 @@ export function Studio() {
               bundleBusy={bundleBusy}
               chars={settings.chars}
               pipeline={settings.pipeline}
+              speed={settings.animSpeed}
             />
             <IconButton
               label={showInspector ? 'Hide inspector (I)' : 'Show inspector (I)'}

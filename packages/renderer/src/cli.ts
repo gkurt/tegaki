@@ -45,6 +45,8 @@ interface CliOptions {
   pressure?: number;
   smoothing: boolean;
   segmentSize?: number;
+  speed?: number;
+  loopHold?: number;
 }
 
 const HELP = `tegaki — animated handwriting SVG generator
@@ -65,7 +67,9 @@ Options:
       --stagger <advance>   Overlap glyphs instead of drawing them in sequence.
                               e.g. "80%" (of the previous glyph) or "0.3" (seconds)
       --stagger-duration <s|auto>   Per-glyph duration when staggering (default: auto)
-      --pressure <0-1>      Variable stroke width for once/static (default: 1)
+      --speed <x>           Playback speed multiplier (default: 1)
+      --loop-hold <s>       loop: seconds the finished text holds before fading (default: 1.5)
+      --pressure <0-1>      Variable stroke width (default: 1; 0 in loop mode)
       --smoothing           Smooth strokes onto a spline
       --segment-size <px>   Stroke subdivision threshold (default: 2 when applicable)
   -h, --help                Show this help
@@ -175,6 +179,13 @@ function parseArgs(argv: string[]): CliOptions {
       case '--pressure':
         opts.pressure = numeric(flag, expectValue(flag, inline, idx));
         break;
+      case '--speed':
+        opts.speed = numeric(flag, expectValue(flag, inline, idx));
+        if (opts.speed <= 0) fail('option --speed expects a positive number');
+        break;
+      case '--loop-hold':
+        opts.loopHold = numeric(flag, expectValue(flag, inline, idx));
+        break;
       case '--smoothing':
         opts.smoothing = true;
         break;
@@ -276,6 +287,8 @@ async function main(): Promise<void> {
     smoothing: opts.smoothing,
     segmentSize: opts.segmentSize,
     timing,
+    speed: opts.speed,
+    loopHold: opts.loopHold,
   });
 
   if (opts.output === '-') {

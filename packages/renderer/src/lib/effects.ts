@@ -58,6 +58,33 @@ export interface EffectDefinition {
   afterRender?(stage: RenderStageContext, config: any): void;
 }
 
+/**
+ * The line and color stops of a `globalGradient` over `bbox`: endpoints that
+ * cover the whole box at any angle. y grows downward, so `angle=0` is
+ * left→right and `angle=90` top→bottom — positive angles rotate clockwise.
+ */
+export function globalGradientGeometry(
+  bbox: LayoutBBox,
+  colors: string[],
+  angle: number,
+): { x1: number; y1: number; x2: number; y2: number; stops: [number, string][] } {
+  // Project the bbox onto the direction vector.
+  const rad = (angle * Math.PI) / 180;
+  const dx = Math.cos(rad);
+  const dy = Math.sin(rad);
+  const cx = bbox.x + bbox.width / 2;
+  const cy = bbox.y + bbox.height / 2;
+  const proj = Math.abs((dx * bbox.width) / 2) + Math.abs((dy * bbox.height) / 2);
+  const stops: [number, string][] =
+    colors.length === 1
+      ? [
+          [0, colors[0]!],
+          [1, colors[0]!],
+        ]
+      : colors.map((c, i) => [i / (colors.length - 1), c]);
+  return { x1: cx - dx * proj, y1: cy - dy * proj, x2: cx + dx * proj, y2: cy + dy * proj, stops };
+}
+
 const defaultEffects: Record<string, any> = { pressureWidth: true };
 
 const knownEffects: Record<string, EffectDefinition> = {
@@ -71,29 +98,9 @@ const knownEffects: Record<string, EffectDefinition> = {
       const colors = config.colors;
       if (!Array.isArray(colors) || colors.length === 0) return;
       const { ctx, bbox } = stage;
-
-      // Project the bbox onto the direction vector to find gradient endpoints
-      // that cover the full box at any angle. y grows downward on canvas, so
-      // `angle=0` (dx=1, dy=0) is left→right and `angle=90` (dx=0, dy=1) is
-      // top→bottom — positive angles rotate clockwise.
-      const rad = ((config.angle ?? 0) * Math.PI) / 180;
-      const dx = Math.cos(rad);
-      const dy = Math.sin(rad);
-      const cx = bbox.x + bbox.width / 2;
-      const cy = bbox.y + bbox.height / 2;
-      const halfW = bbox.width / 2;
-      const halfH = bbox.height / 2;
-      const proj = Math.abs(dx * halfW) + Math.abs(dy * halfH);
-
-      const grad = ctx.createLinearGradient(cx - dx * proj, cy - dy * proj, cx + dx * proj, cy + dy * proj);
-      if (colors.length === 1) {
-        grad.addColorStop(0, colors[0]!);
-        grad.addColorStop(1, colors[0]!);
-      } else {
-        for (let i = 0; i < colors.length; i++) {
-          grad.addColorStop(i / (colors.length - 1), colors[i]!);
-        }
-      }
+      const { x1, y1, x2, y2, stops } = globalGradientGeometry(bbox, colors, config.angle ?? 0);
+      const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+      for (const [offset, color] of stops) grad.addColorStop(offset, color);
       stage.strokeStyle = grad;
     },
   },
