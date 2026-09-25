@@ -3,6 +3,8 @@ export interface GlyphBox {
   /** Grapheme index in the text. */
   index: number;
   char: string;
+  /** Where the grapheme sits in the text layer's text node, in UTF-16 code units. */
+  offset: number;
   x: number;
   y: number;
   width: number;
@@ -34,6 +36,7 @@ export function measureGlyphBoxes(textLayer: HTMLElement, origin: DOMRect): Glyp
         boxes.push({
           index,
           char: segment,
+          offset,
           x: rect.left - origin.left,
           y: rect.top - origin.top,
           width: rect.width,

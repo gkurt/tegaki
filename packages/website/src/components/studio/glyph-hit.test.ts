@@ -4,6 +4,7 @@ import { type GlyphBox, hitGlyph } from './glyph-hit.ts';
 const box = (index: number, x: number, width: number, y = 0, height = 40): GlyphBox => ({
   index,
   char: String(index),
+  offset: index,
   x,
   y,
   width,

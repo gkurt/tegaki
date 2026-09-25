@@ -26,6 +26,13 @@ html {
   background-image: radial-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px);
 }
 
+/* The picked character's debug overlay: the font's own glyph, drawn by the renderer's
+   transparent text layer (see GlyphPicker). A shade over the full overlay's 0.4 red,
+   so it still stands out with Show overlay on. */
+::highlight(tegaki-picked) {
+  color: rgb(255 0 0 / 0.6);
+}
+
 .studio-scroll,
 .studio-scroll-x {
   scrollbar-width: thin;

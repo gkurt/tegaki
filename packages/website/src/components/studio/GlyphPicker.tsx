@@ -1,14 +1,47 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { type GlyphBox, hitGlyph, measureGlyphBoxes } from './glyph-hit.ts';
 import { ArrowUpRightIcon } from './icons.tsx';
 import { cx } from './ui.tsx';
 
 const TEXT_LAYER = '[data-tegaki="overlay"]';
+/** CSS highlight painting the picked characters' font glyphs — styled by `::highlight(tegaki-picked)` in studio.css. */
+const HIGHLIGHT = 'tegaki-picked';
+
+/**
+ * Show the renderer's debug overlay (the font's own glyphs, drawn by the
+ * transparent text layer) for just these characters. A CSS highlight colours
+ * the ranges in place, so they keep the shaping the renderer laid out —
+ * joined Arabic forms, kerning — which a copy of the character wouldn't.
+ */
+function useOverlayHighlight(rootRef: RefObject<HTMLElement | null>, boxes: (GlyphBox | null)[]) {
+  const ranges = boxes.filter((b) => b !== null);
+  const key = ranges.map((b) => `${b.offset}:${b.char}`).join(',');
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` names the ranges
+  useEffect(() => {
+    const node = rootRef.current?.querySelector(TEXT_LAYER)?.firstChild;
+    if (!node || node.nodeType !== Node.TEXT_NODE || ranges.length === 0 || typeof CSS === 'undefined' || !CSS.highlights) return;
+    const text = node.textContent ?? '';
+    const highlight = new Highlight();
+    for (const b of ranges) {
+      // The boxes can trail an edit by a frame; skip ranges that no longer hold their character.
+      if (text.slice(b.offset, b.offset + b.char.length) !== b.char) continue;
+      const range = document.createRange();
+      range.setStart(node, b.offset);
+      range.setEnd(node, b.offset + b.char.length);
+      highlight.add(range);
+    }
+    CSS.highlights.set(HIGHLIGHT, highlight);
+    return () => {
+      if (CSS.highlights.get(HIGHLIGHT) === highlight) CSS.highlights.delete(HIGHLIGHT);
+    };
+  }, [rootRef, key]);
+}
 
 /**
  * Wraps the text renderer so its characters can be picked: hovering outlines
- * the character under the pointer, clicking selects it, and the selected
- * character carries a button that opens it in the glyph inspector.
+ * the character under the pointer and shows its debug overlay, clicking
+ * selects it, and the selected character carries a button that opens it in
+ * the glyph inspector.
  */
 export function GlyphPicker({
   children,
@@ -95,6 +128,7 @@ export function GlyphPicker({
 
   const hoveredBox = hovered === null || hovered === selected ? null : (boxes.find((b) => b.index === hovered) ?? null);
   const inspectable = selectedBox ? canInspect(selectedBox.char) : false;
+  useOverlayHighlight(rootRef, [hoveredBox, selectedBox]);
 
   return (
     <div
