@@ -176,7 +176,7 @@ Common keys (non-exhaustive — `url-state.ts` is the source of truth):
 | Key  | Meaning                                                        | Example              |
 |------|----------------------------------------------------------------|----------------------|
 | `f`  | Font family (Google Fonts name)                                | `f=Caveat`           |
-| `ch` | Character set being processed                                  | `ch=Abc`             |
+| `cs` / `ch` / `cr` | Character set. A preset is written by name (`cs=korean`, `cs=all` = every glyph in the font); an edited preset as the difference — `ch` appended characters, `cr` removed ones. A set that doesn't reduce to a preset exactly is a raw `ch` (as older URLs are) | `cs=latin&ch=€£` |
 | `pl` | Stroke pipeline: `geometry` (default, ink-graph extraction) or `raster`. Also picks the Clip to text default (×1.2 for geometry, off for raster; `ct_=0` turns it off) and the pipeline Download Bundle uses | `pl=raster` |
 | `g`  | Selected glyph (glyph mode)                                    | `g=A`                |
 | `s`  | Active pipeline stage (`outline`/`skeleton`/`final`/...)       | `s=skeleton`         |

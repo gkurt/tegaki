@@ -1,7 +1,7 @@
 import { zipSync } from 'fflate';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TegakiRendererHandle } from 'tegaki';
-import { CHARSET_PRESETS, extractTegakiBundle, type PipelineResult } from 'tegaki-generator';
+import { CHARSET_PRESETS, enumerateFontChars, extractTegakiBundle, type PipelineResult } from 'tegaki-generator';
 import { DEFAULT_EXAMPLE_FONT_TEXT, EXAMPLE_FONT_TEXTS, type Pipeline } from '../preview/constants.ts';
 import { strokeOrderProviders } from '../preview/stroke-order-providers.ts';
 import { defaultClipText } from '../url-state.ts';
@@ -48,6 +48,8 @@ export function Studio() {
   const { font, loading, error, loadFamily, loadFile } = useFontLoader((loaded) => {
     resultsCache.current.clear();
     set('fontFamily', loaded.info.family);
+    // "All in font" follows the font: expand it to the new font's glyphs.
+    setSettings((s) => (s.allChars ? { ...s, chars: enumerateFontChars(loaded.info.font, loaded.info.extraFonts) } : s));
     if (adoptRecommendedCharset.current) {
       adoptRecommendedCharset.current = false;
       const recommended = recommendCharset(charsetCoverage(fontHasChar(loaded.info)));
@@ -59,6 +61,15 @@ export function Studio() {
     const coverage = charsetCoverage(fontHasChar(font.info));
     return { coverage, recommended: recommendCharset(coverage) };
   }, [font]);
+
+  // Track whether the set is "All in font", so the URL can say `cs=all` rather
+  // than list thousands of characters.
+  const fontAllChars = useMemo(() => (font ? enumerateFontChars(font.info.font, font.info.extraFonts) : null), [font]);
+  useEffect(() => {
+    if (fontAllChars === null) return;
+    const isAll = settings.chars === fontAllChars;
+    if (isAll !== settings.allChars) set('allChars', isAll);
+  }, [fontAllChars, settings.chars, settings.allChars, set]);
 
   // Load the URL's font once on mount.
   const initialFamily = useRef(settings.fontFamily);

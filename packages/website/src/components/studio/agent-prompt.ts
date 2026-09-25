@@ -50,6 +50,8 @@ export interface AgentPromptInput {
   charset: {
     /** Preset name, or null for a hand-edited set. */
     preset: string | null;
+    /** Every glyph the font maps ("All in font"). */
+    allInFont?: boolean;
     count: number;
     /** How many of the set's characters the font maps (null before the font loads). */
     mapped: number | null;
@@ -112,10 +114,10 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
     out.push(`- ${font.style} · ${font.unitsPerEm} units per em · ${font.lineCap} line caps`);
     out.push(`- OpenType features: ${font.features.length ? font.features.join(', ') : 'none'}`);
   }
-  const set = charset.preset ? `the ${charset.preset} preset` : 'a custom set';
+  const set = charset.allInFont ? 'every glyph in the font' : charset.preset ? `the ${charset.preset} preset` : 'a custom set';
   const mapped = charset.mapped !== null ? `, ${charset.mapped} of them in the font` : '';
   out.push(`- Character set: ${set} (${charset.count} characters${mapped})`);
-  if (!charset.preset && charset.count <= INLINE_CHARS_MAX) out.push(`  - \`${settings.chars}\``);
+  if (!charset.preset && !charset.allInFont && charset.count <= INLINE_CHARS_MAX) out.push(`  - \`${settings.chars}\``);
   if (charset.recommended && charset.recommended.name !== charset.preset) {
     const r = charset.recommended;
     out.push(`- Tegaki recommends the ${r.name} preset for this font (${r.covered}/${r.total} mapped)`);
@@ -156,13 +158,15 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
   out.push(
     '- In /studio, `m=glyph&g=<char>` inspects one glyph. `gs=<stage>` (geometry) or `s=<stage>` (raster) picks the pipeline stage, from the outline through the extracted strokes to `final`, the glyph as the renderer draws it.',
   );
-  const chars = charset.preset
-    ? charset.preset === 'Latin'
-      ? ''
-      : ` -c "<${PRESET_CONSTANTS[charset.preset] ?? 'chars'}>"`
-    : charset.count <= INLINE_CHARS_MAX
-      ? ` -c "${settings.chars.replaceAll('"', '\\"')}"`
-      : ' -c "<chars>"';
+  const chars = charset.allInFont
+    ? ' -c true'
+    : charset.preset
+      ? charset.preset === 'Latin'
+        ? ''
+        : ` -c "<${PRESET_CONSTANTS[charset.preset] ?? 'chars'}>"`
+      : charset.count <= INLINE_CHARS_MAX
+        ? ` -c "${settings.chars.replaceAll('"', '\\"')}"`
+        : ' -c "<chars>"';
   const source = font?.fileName ? ` --font-file ${font.fileName}` : '';
   const cmd = `bun start generate "${family}"${source}${chars} -p ${settings.pipeline}${flags.length ? ` ${flags.join(' ')}` : ''} -o <output-dir>`;
   out.push(

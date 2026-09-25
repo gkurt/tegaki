@@ -96,3 +96,11 @@ describe('buildAgentPrompt', () => {
     expect(prompt).toContain('-p raster --resolution 600');
   });
 });
+
+describe('all-in-font charset', () => {
+  test('"All in font" asks the CLI for every glyph', () => {
+    const prompt = buildAgentPrompt(input({ charset: { preset: null, allInFont: true, count: 2000, mapped: 2000, recommended: null } }));
+    expect(prompt).toContain('every glyph in the font');
+    expect(prompt).toContain(' -c true ');
+  });
+});

@@ -76,6 +76,7 @@ export function AgentPromptMenu({
         : null,
       charset: {
         preset: CHARSET_PRESETS.find((p) => p.chars === settings.chars)?.name ?? null,
+        allInFont: settings.allChars,
         count: chars.length,
         mapped: hasChar ? chars.filter(hasChar).length : null,
         recommended: charsets?.recommended ?? null,

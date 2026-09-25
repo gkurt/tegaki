@@ -1,5 +1,12 @@
 import type { TegakiEffectConfigs, TegakiMultiEffectName } from 'tegaki';
-import { DEFAULT_CHARS, DEFAULT_GEOMETRY_OPTIONS, DEFAULT_OPTIONS, type GeometryOptions, type PipelineOptions } from 'tegaki-generator';
+import {
+  CHARSET_PRESETS,
+  DEFAULT_CHARS,
+  DEFAULT_GEOMETRY_OPTIONS,
+  DEFAULT_OPTIONS,
+  type GeometryOptions,
+  type PipelineOptions,
+} from 'tegaki-generator';
 import {
   EASING_PRESETS,
   GEOMETRY_STAGES,
@@ -61,6 +68,8 @@ export interface UrlState {
   letterSpacingPx: number;
   /** Width of the text frame in px (null = fill the available space). `/preview` reads the same `w` as its container width. */
   frameWidth: number | null;
+  /** The character set is every glyph the font maps (`cs=all`) — expanded into `chars` once the font loads. */
+  allChars: boolean;
   showOverlay: boolean;
   timeMode: TimeMode;
   /**
@@ -115,6 +124,7 @@ export const URL_DEFAULTS: UrlState = {
   lineHeightRatio: 1.5,
   letterSpacingPx: 0,
   frameWidth: null,
+  allChars: false,
   showOverlay: false,
   timeMode: 'controlled',
   currentTime: 0,
@@ -195,6 +205,67 @@ const PREVIEW_MODES: readonly PreviewMode[] = ['glyph', 'text'];
 const PIPELINES: readonly Pipeline[] = ['raster', 'geometry'];
 const TIME_MODES: readonly TimeMode[] = ['controlled', 'uncontrolled', 'css'];
 
+// ── Character set ─────────────────────────────────────────────────────────
+// A charset preset is written by name (`cs=korean`) and an edited one as the
+// difference from its closest preset — `ch` holds characters appended after it
+// and `cr` the ones taken out — instead of spelling out every character.
+// Sets that don't reduce to a preset exactly (same characters, same order)
+// fall back to the raw `ch`, which is also how older URLs read.
+
+const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+const graphemes = (s: string) => [...segmenter.segment(s)].map((g) => g.segment);
+
+export const charsetSlug = (name: string) => name.toLowerCase().replace(/\s+/g, '-');
+
+export interface CharsetEncoding {
+  /** Preset slug, e.g. `korean`. */
+  preset: string;
+  /** Characters appended after the preset's. */
+  added: string;
+  /** Preset characters left out. */
+  removed: string;
+}
+
+/** Rebuild a character set from a preset plus its edits. Null for an unknown preset. */
+export function decodeChars({ preset, added, removed }: CharsetEncoding): string | null {
+  const base = CHARSET_PRESETS.find((p) => charsetSlug(p.name) === preset);
+  if (!base) return null;
+  const drop = new Set(graphemes(removed));
+  return (
+    graphemes(base.chars)
+      .filter((c) => !drop.has(c))
+      .join('') + added
+  );
+}
+
+/**
+ * The shortest preset-relative spelling of `chars`, or null when no preset
+ * reproduces it exactly or the raw characters would be shorter.
+ */
+export function encodeChars(chars: string): CharsetEncoding | null {
+  const target = graphemes(chars);
+  const present = new Set(target);
+  let best: CharsetEncoding | null = null;
+  let bestCost = Number.POSITIVE_INFINITY;
+  for (const { name, chars: presetChars } of CHARSET_PRESETS) {
+    const base = graphemes(presetChars);
+    const kept = base.filter((c) => present.has(c));
+    // The kept preset characters must lead, in order, for the edit to be exact.
+    if (kept.some((c, i) => target[i] !== c)) continue;
+    const enc = {
+      preset: charsetSlug(name),
+      added: target.slice(kept.length).join(''),
+      removed: base.filter((c) => !present.has(c)).join(''),
+    };
+    const cost = enc.added.length + enc.removed.length;
+    if (cost < bestCost && decodeChars(enc) === chars) {
+      best = enc;
+      bestCost = cost;
+    }
+  }
+  return best && bestCost < chars.length ? best : null;
+}
+
 function parseEnum<T extends string>(raw: string, allowed: readonly T[], fallback: T): T {
   return (allowed as readonly string[]).includes(raw) ? (raw as T) : fallback;
 }
@@ -209,7 +280,11 @@ export function parseUrlState(search: string | URLSearchParams = window.location
   };
 
   if (p.has('f')) state.fontFamily = p.get('f')!;
-  if (p.has('ch')) state.chars = p.get('ch')!;
+  const preset = p.get('cs');
+  if (preset === 'all') state.allChars = true;
+  const presetChars = preset === null ? null : decodeChars({ preset, added: p.get('ch') ?? '', removed: p.get('cr') ?? '' });
+  if (presetChars !== null) state.chars = presetChars;
+  else if (p.has('ch')) state.chars = p.get('ch')!;
   if (p.has('g')) state.selectedChar = p.get('g')!;
   if (p.has('s')) state.activeStage = parseEnum(p.get('s')!, STAGE_KEYS, URL_DEFAULTS.activeStage);
   if (p.has('m')) state.previewMode = parseEnum(p.get('m')!, PREVIEW_MODES, URL_DEFAULTS.previewMode);
@@ -310,7 +385,17 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
   const p = new URLSearchParams();
 
   if (state.fontFamily !== URL_DEFAULTS.fontFamily) p.set('f', state.fontFamily);
-  if (state.chars !== URL_DEFAULTS.chars) p.set('ch', state.chars);
+  if (state.allChars) p.set('cs', 'all');
+  else if (state.chars !== URL_DEFAULTS.chars) {
+    const enc = encodeChars(state.chars);
+    if (enc) {
+      p.set('cs', enc.preset);
+      if (enc.added) p.set('ch', enc.added);
+      if (enc.removed) p.set('cr', enc.removed);
+    } else {
+      p.set('ch', state.chars);
+    }
+  }
   if (state.selectedChar !== URL_DEFAULTS.selectedChar) p.set('g', state.selectedChar);
   if (state.activeStage !== URL_DEFAULTS.activeStage) p.set('s', state.activeStage);
   if (state.previewMode !== URL_DEFAULTS.previewMode) p.set('m', state.previewMode);

@@ -1,5 +1,6 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
+import { DEFAULT_CHARS, KOREAN_CHARS, SIMPLIFIED_CHINESE_CHARS } from 'tegaki-generator';
 import { buildUrlParams, defaultClipText, parseUrlState, URL_DEFAULTS } from './url-state.ts';
 
 describe('parseUrlState', () => {
@@ -90,5 +91,69 @@ describe('text frame width', () => {
     expect(parseUrlState('?w=-5').frameWidth).toBeNull();
     expect(parseUrlState('?w=wide').frameWidth).toBeNull();
     expect(buildUrlParams(URL_DEFAULTS).has('w')).toBe(false);
+  });
+});
+
+describe('character set in the URL', () => {
+  const latin = DEFAULT_CHARS;
+
+  test('a preset is written by name, not character by character', () => {
+    const p = buildUrlParams({ ...URL_DEFAULTS, chars: KOREAN_CHARS });
+    expect(p.get('cs')).toBe('korean');
+    expect(p.has('ch')).toBe(false);
+    expect(parseUrlState(p).chars).toBe(KOREAN_CHARS);
+  });
+
+  test('multi-word preset names become slugs', () => {
+    const p = buildUrlParams({ ...URL_DEFAULTS, chars: SIMPLIFIED_CHINESE_CHARS });
+    expect(p.get('cs')).toBe('simplified-chinese');
+  });
+
+  test('characters appended to a preset are written as additions', () => {
+    const p = buildUrlParams({ ...URL_DEFAULTS, chars: `${KOREAN_CHARS}€£` });
+    expect(p.get('cs')).toBe('korean');
+    expect(p.get('ch')).toBe('€£');
+    expect(parseUrlState(p).chars).toBe(`${KOREAN_CHARS}€£`);
+  });
+
+  test('characters removed from a preset are written as removals', () => {
+    const chars = latin.replace('Q', '').replace('z', '');
+    const p = buildUrlParams({ ...URL_DEFAULTS, chars });
+    expect(p.get('cs')).toBe('latin');
+    expect(p.get('cr')).toBe('Qz');
+    expect(parseUrlState(p).chars).toBe(chars);
+  });
+
+  test('a short unrelated set stays raw', () => {
+    const p = buildUrlParams({ ...URL_DEFAULTS, chars: 'abc' });
+    expect(p.get('ch')).toBe('abc');
+    expect(p.has('cs')).toBe(false);
+  });
+
+  test('a reordered preset stays raw so the glyph order is kept', () => {
+    const chars = [...latin].reverse().join('');
+    const p = buildUrlParams({ ...URL_DEFAULTS, chars });
+    expect(p.has('cs')).toBe(false);
+    expect(parseUrlState(p).chars).toBe(chars);
+  });
+
+  test('older URLs with raw ch still load', () => {
+    expect(parseUrlState('?ch=xyz').chars).toBe('xyz');
+  });
+
+  test('an unknown preset falls back to the raw ch', () => {
+    expect(parseUrlState('?cs=klingon&ch=xyz').chars).toBe('xyz');
+  });
+});
+
+describe('all-in-font charset in the URL', () => {
+  test('"All in font" is written as cs=all without listing the characters', () => {
+    const p = buildUrlParams({ ...URL_DEFAULTS, allChars: true, chars: 'every glyph the font has' });
+    expect(p.get('cs')).toBe('all');
+    expect(p.has('ch')).toBe(false);
+  });
+
+  test('cs=all reads back as the all-in-font flag', () => {
+    expect(parseUrlState('?cs=all').allChars).toBe(true);
   });
 });
