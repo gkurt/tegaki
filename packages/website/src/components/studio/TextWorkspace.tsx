@@ -7,6 +7,7 @@ import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
 import type { UrlState } from '../url-state.ts';
 import { ChevronDownIcon, ExternalLinkIcon, RestartIcon } from './icons.tsx';
 import type { LoadedFont, SetSetting } from './state.ts';
+import { TextFrame } from './TextFrame.tsx';
 import { Transport } from './Transport.tsx';
 import { cx, IconButton, isTypingTarget, Popover, Spinner } from './ui.tsx';
 
@@ -190,8 +191,14 @@ export function TextWorkspace({
           </style>
         )}
 
-        <div className="studio-canvas studio-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-          <div className="min-h-full p-6 sm:p-10">
+        {/* A fixed frame can be wider than the canvas — then the canvas scrolls sideways instead of squeezing it. */}
+        <div
+          className={cx(
+            'studio-canvas studio-scroll min-h-0 flex-1 overflow-y-auto',
+            settings.frameWidth === null ? 'overflow-x-hidden' : 'studio-scroll-x overflow-x-auto',
+          )}
+        >
+          <div className={cx('min-h-full px-6 pt-14 pb-10 sm:px-10 sm:pt-16', settings.frameWidth !== null && 'w-max min-w-full')}>
             {!fontInfo && <CanvasMessage>Load a font to get started</CanvasMessage>}
             {fontInfo && !bundleReady && (
               <CanvasMessage>
@@ -199,33 +206,35 @@ export function TextWorkspace({
               </CanvasMessage>
             )}
             {font && (
-              <TegakiTextPreview
-                ref={rendererRef}
-                className="w-full max-w-3xl text-zinc-900 dark:text-zinc-100"
-                style={
-                  timeMode === 'css'
-                    ? ({ animation: 'tegaki-scroll-progress linear both', animationTimeline: '--tegaki-scroll' } as React.CSSProperties)
-                    : undefined
-                }
-                fontInfo={font.info}
-                fontBuffer={font.buffer}
-                extraFontBuffers={font.extraBuffers}
-                text={text}
-                options={settings.options}
-                pipeline={settings.pipeline}
-                geometryOptions={settings.geometryOptions}
-                time={timeProp}
-                effects={effects}
-                timing={timingConfig}
-                quality={settings.quality}
-                showOverlay={settings.showOverlay}
-                fontSizePx={settings.fontSizePx}
-                lineHeightRatio={settings.lineHeightRatio}
-                letterSpacingPx={settings.letterSpacingPx}
-                resultsCache={resultsCache}
-                onReady={handleReady}
-                useShaper={settings.useShaper}
-              />
+              <TextFrame width={settings.frameWidth} onWidthChange={(w) => set('frameWidth', w)} autoClassName="w-full max-w-3xl">
+                <TegakiTextPreview
+                  ref={rendererRef}
+                  className="w-full text-zinc-900 dark:text-zinc-100"
+                  style={
+                    timeMode === 'css'
+                      ? ({ animation: 'tegaki-scroll-progress linear both', animationTimeline: '--tegaki-scroll' } as React.CSSProperties)
+                      : undefined
+                  }
+                  fontInfo={font.info}
+                  fontBuffer={font.buffer}
+                  extraFontBuffers={font.extraBuffers}
+                  text={text}
+                  options={settings.options}
+                  pipeline={settings.pipeline}
+                  geometryOptions={settings.geometryOptions}
+                  time={timeProp}
+                  effects={effects}
+                  timing={timingConfig}
+                  quality={settings.quality}
+                  showOverlay={settings.showOverlay}
+                  fontSizePx={settings.fontSizePx}
+                  lineHeightRatio={settings.lineHeightRatio}
+                  letterSpacingPx={settings.letterSpacingPx}
+                  resultsCache={resultsCache}
+                  onReady={handleReady}
+                  useShaper={settings.useShaper}
+                />
+              </TextFrame>
             )}
           </div>
         </div>

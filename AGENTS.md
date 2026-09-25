@@ -160,6 +160,8 @@ Dev server: `bun dev` → Astro at `http://localhost:4321/tegaki/`. Two preview 
 
 Glyphs mode inspects one character through the pipeline stages; the last stage, **Final**, is the real renderer (`TegakiTextPreview`) drawing the glyph with the Style / Motion settings. The glyph list's header picks the character set: `charsetCoverage` / `recommendCharset` ([charsets.ts](packages/website/src/components/studio/charsets.ts)) star the preset that fits the font, and picking a font in the studio adopts that preset when the current set is an unedited preset (a font restored from the URL keeps its `ch`).
 
+Text mode draws a dashed frame around the rendered text: drag its right edge (Shift snaps to 10px, arrow keys on the handle step it), pick a width preset or type one from the width label, and Reset / double-click the handle to go back to Auto. The width is the `w` param, so `/preview` and the agent prompt wrap the text the same way ([TextFrame.tsx](packages/website/src/components/studio/TextFrame.tsx)).
+
 "Ask an agent" (next to Export; in the ⋯ menu on phones) copies a Markdown prompt for a coding agent — goal (generate / optimize / fix), the font, charset, non-default settings as CLI flags, the inspected glyph's warnings, and studio + `/preview` links to iterate on. It's built by the pure `buildAgentPrompt` in [agent-prompt.ts](packages/website/src/components/studio/agent-prompt.ts); keep its iteration tips in step with this file.
 - `/tegaki/preview/` — a chrome-free standalone text renderer (`StandaloneTextPreview`) that reads the same URL state and renders only the text. Use this for screenshots / snapshots — no UI to crop out, and `window.__tegakiPreviewReady` / `body[data-tegaki-ready]` are set once the bundle is built so tooling can wait deterministically.
 
@@ -186,6 +188,7 @@ Common keys (non-exhaustive — `url-state.ts` is the source of truth):
 | `as` | Animation speed multiplier                                     | `as=2`               |
 | `fs` | Font size in px                                                | `fs=96`              |
 | `lh` | Line height ratio                                              | `lh=1.5`             |
+| `w`  | Text frame width in px — the studio's resizable text frame, and `/preview`'s container width (unset = fill) | `w=320` |
 | `ol` | Show debug overlay (0/1)                                       | `ol=1`               |
 | `ghl` | Han stroke-order convention: `ja` (default, KanjiVG) or `zh` (Make Me a Hanzi) | `ghl=zh`     |
 | `fx` | Effects state as JSON                                          | `fx=%7B...%7D`       |

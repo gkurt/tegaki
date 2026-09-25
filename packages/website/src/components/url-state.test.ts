@@ -78,3 +78,17 @@ describe('Han locale', () => {
     expect(parseUrlState('?ghl=ko').geometryOptions.hanLocale).toBe(URL_DEFAULTS.geometryOptions.hanLocale);
   });
 });
+
+describe('text frame width', () => {
+  test('w round-trips as the frame width in whole pixels', () => {
+    const state = parseUrlState('?w=412.4');
+    expect(state.frameWidth).toBe(412);
+    expect(buildUrlParams(state).get('w')).toBe('412');
+  });
+
+  test('a missing or invalid w leaves the frame on auto and writes nothing', () => {
+    expect(parseUrlState('?w=-5').frameWidth).toBeNull();
+    expect(parseUrlState('?w=wide').frameWidth).toBeNull();
+    expect(buildUrlParams(URL_DEFAULTS).has('w')).toBe(false);
+  });
+});

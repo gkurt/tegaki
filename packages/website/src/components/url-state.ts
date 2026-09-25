@@ -59,6 +59,8 @@ export interface UrlState {
   lineHeightRatio: number;
   /** Extra spacing between characters, in px (CSS `letter-spacing`). */
   letterSpacingPx: number;
+  /** Width of the text frame in px (null = fill the available space). `/preview` reads the same `w` as its container width. */
+  frameWidth: number | null;
   showOverlay: boolean;
   timeMode: TimeMode;
   /**
@@ -112,6 +114,7 @@ export const URL_DEFAULTS: UrlState = {
   fontSizePx: 128,
   lineHeightRatio: 1.5,
   letterSpacingPx: 0,
+  frameWidth: null,
   showOverlay: false,
   timeMode: 'controlled',
   currentTime: 0,
@@ -215,6 +218,10 @@ export function parseUrlState(search: string | URLSearchParams = window.location
   if (p.has('fs')) state.fontSizePx = Number(p.get('fs'));
   if (p.has('lh')) state.lineHeightRatio = Number(p.get('lh'));
   if (p.has('ls')) state.letterSpacingPx = Number(p.get('ls'));
+  if (p.has('w')) {
+    const w = Number(p.get('w'));
+    state.frameWidth = Number.isFinite(w) && w > 0 ? Math.round(w) : null;
+  }
   if (p.has('ol')) state.showOverlay = p.get('ol') === '1';
   if (p.has('tm')) state.timeMode = parseEnum(p.get('tm')!, TIME_MODES, URL_DEFAULTS.timeMode);
   if (p.has('ct')) {
@@ -312,6 +319,7 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
   if (state.fontSizePx !== URL_DEFAULTS.fontSizePx) p.set('fs', String(state.fontSizePx));
   if (state.lineHeightRatio !== URL_DEFAULTS.lineHeightRatio) p.set('lh', String(state.lineHeightRatio));
   if (state.letterSpacingPx !== URL_DEFAULTS.letterSpacingPx) p.set('ls', String(state.letterSpacingPx));
+  if (state.frameWidth !== null) p.set('w', String(state.frameWidth));
   if (state.showOverlay !== URL_DEFAULTS.showOverlay) p.set('ol', '1');
   if (state.timeMode !== URL_DEFAULTS.timeMode) p.set('tm', state.timeMode);
   if (state.currentTime !== URL_DEFAULTS.currentTime) p.set('ct', String(state.currentTime));
