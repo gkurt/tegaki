@@ -10,6 +10,7 @@ import {
   type Ref,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
@@ -45,6 +46,37 @@ export type TegakiRendererProps<C extends ElementType = 'div', E extends TegakiE
   as?: C;
 } & TegakiRendererBaseProps<E> &
   Omit<ComponentPropsWithoutRef<C>, keyof TegakiRendererBaseProps<Record<string, never>> | 'as'>;
+
+// `useLayoutEffect` warns during SSR on React 18; the caret only exists in the browser anyway.
+const useClientLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+/** The caret's offset in `el`'s text, or `null` when the selection isn't a caret inside it. */
+function caretOffset(el: HTMLElement): number | null {
+  const sel = el.ownerDocument.getSelection();
+  if (!sel?.isCollapsed || !sel.focusNode || !el.contains(sel.focusNode)) return null;
+  const range = el.ownerDocument.createRange();
+  range.setStart(el, 0);
+  range.setEnd(sel.focusNode, sel.focusOffset);
+  return range.toString().length;
+}
+
+/** Put the caret `offset` characters into `el`'s text. */
+function placeCaret(el: HTMLElement, offset: number): void {
+  const sel = el.ownerDocument.getSelection();
+  if (!sel) return;
+  const walker = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let remaining = offset;
+  let last: Text | null = null;
+  for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+    if (remaining <= node.length) {
+      sel.collapse(node, remaining);
+      return;
+    }
+    remaining -= node.length;
+    last = node;
+  }
+  if (last) sel.collapse(last, last.length);
+}
 
 function reactCreateElement(tag: string, props: Record<string, any>, ...children: (ReactNode | string)[]): ReactNode {
   return createElement(tag, { ...props, key: props['data-tegaki'] }, ...children);
@@ -134,6 +166,18 @@ export const TegakiRenderer = forwardRef(function TegakiRendererInner<const E ex
   // --- Editable: contentEditable + input handling ---
   const onTextChangeRef = useRef(onTextChange);
   onTextChangeRef.current = onTextChange;
+  // Re-rendering the edited text rewrites the overlay's text node, which drops
+  // the caret to the start (typing would come out backwards). Note where it
+  // was on each input and put it back once React has committed.
+  const caretRef = useRef<number | null>(null);
+
+  useClientLayoutEffect(() => {
+    const offset = caretRef.current;
+    if (offset === null) return;
+    caretRef.current = null;
+    const overlay = containerRef.current?.querySelector<HTMLElement>('[data-tegaki="overlay"]');
+    if (overlay && caretOffset(overlay) !== offset) placeCaret(overlay, offset);
+  });
 
   useEffect(() => {
     if (!editable) return;
@@ -146,6 +190,7 @@ export const TegakiRenderer = forwardRef(function TegakiRendererInner<const E ex
     overlay.style.caretColor = 'auto';
 
     const handleInput = () => {
+      caretRef.current = caretOffset(overlay);
       const newText = overlay.textContent ?? '';
       setInternalText(newText);
       onTextChangeRef.current?.(newText);
