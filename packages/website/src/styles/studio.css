@@ -1,0 +1,124 @@
+@import "./global.css";
+
+/* ── Studio (/studio) ── */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overscroll-behavior: none;
+}
+
+/* The page scrolls inside its panes, never as a whole. */
+html {
+  scrollbar-gutter: auto;
+}
+
+/* Canvas backdrop: a faint dot grid, like a design tool's artboard area. */
+.studio-canvas {
+  background-color: var(--color-zinc-100);
+  background-image: radial-gradient(rgb(0 0 0 / 0.09) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+[data-theme="dark"] .studio-canvas {
+  background-color: var(--color-zinc-950);
+  background-image: radial-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px);
+}
+
+.studio-scroll,
+.studio-scroll-x {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(120 120 130 / 0.35) transparent;
+}
+
+/* Horizontal strips (stage tabs, glyph strip) scroll without a visible bar on touch. */
+@media (pointer: coarse) {
+  .studio-scroll-x {
+    scrollbar-width: none;
+  }
+}
+
+/* CSS time mode: the scroller *is* the control, so keep its bar visible. */
+.studio-css-scroller {
+  scrollbar-width: auto;
+  scrollbar-color: var(--color-zinc-400) var(--color-zinc-100);
+}
+
+[data-theme="dark"] .studio-css-scroller {
+  scrollbar-color: var(--color-zinc-500) var(--color-zinc-800);
+}
+
+/* Timeline scrubber */
+.studio-scrubber {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 24px;
+  background: transparent;
+  cursor: pointer;
+  --track: var(--color-zinc-200);
+  --fill: var(--color-zinc-900);
+}
+
+[data-theme="dark"] .studio-scrubber {
+  --track: var(--color-zinc-700);
+  --fill: var(--color-zinc-100);
+}
+
+.studio-scrubber::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--fill) var(--pct, 0%), var(--track) var(--pct, 0%));
+}
+
+.studio-scrubber::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--track);
+}
+
+.studio-scrubber::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--fill);
+}
+
+.studio-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 999px;
+  background: var(--fill);
+  border: 2px solid var(--color-white);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.12);
+}
+
+[data-theme="dark"] .studio-scrubber::-webkit-slider-thumb {
+  border-color: var(--color-zinc-900);
+}
+
+.studio-scrubber::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--fill);
+  border: 2px solid var(--color-white);
+}
+
+.studio-scrubber:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+/* DialKit controls, blended into the inspector's surface. */
+.studio-dial.dialkit-root {
+  font-family: inherit;
+  --dial-row-height: 34px;
+  --dial-row-gap: 6px;
+}
+
+.studio-dial.dialkit-root[data-theme="dark"] {
+  --dial-dropdown-bg: var(--color-zinc-800);
+  --dial-glass-bg: var(--color-zinc-900);
+}

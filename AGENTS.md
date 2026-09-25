@@ -123,17 +123,23 @@ packages/generator/src/
 
 ### Website (`packages/website`)
 
-Astro 6 site built on Starlight (theme: Nova) serving the public docs at the root and the interactive studio at `/tegaki/studio/`. Starlight handles the sidebar/content docs under `src/content/docs/`; the studio page is a standalone Astro page mounting the React `GeneratorApp`. (The tool was renamed `/generator` → `/studio`; `/tegaki/generator/` remains as a redirect so old links keep working.)
+Astro 6 site built on Starlight (theme: Nova) serving the public docs at the root and the interactive studio at `/tegaki/studio/`. Starlight handles the sidebar/content docs under `src/content/docs/`; the studio page is a standalone Astro page mounting the React `Studio`. (The tool was renamed `/generator` → `/studio`; `/tegaki/generator/` remains as a redirect so old links keep working.)
 
 ```
 packages/website/
   astro.config.ts             # Astro config — `base: '/tegaki'`, integrations (React, Svelte, Vue, Solid, Starlight), vite aliases (`tegaki@dev`)
   public/                     # Static assets served as-is (favicon, OG card, robots.txt)
   src/
-    pages/studio.astro        # Mounts <GeneratorApp client:only="react" />
+    pages/studio.astro        # Mounts <Studio client:only="react" />; seeds <html data-theme> from Starlight's stored theme
     pages/generator.astro     # Redirect shim → /studio/ (kept for old links)
     components/
-      GeneratorApp.tsx        # The generator UI: glyph inspector + text preview, all state persisted to URL
+      studio/                 # The studio UI (editor layout: top bar, canvas, inspector), all state persisted to URL
+        Studio.tsx            # Root: settings state (useStudioSettings), font loading, top bar, responsive layout
+        TextWorkspace.tsx     # Text preview: text field, renderer canvas, transport / playback
+        GlyphWorkspace.tsx    # Glyph inspector: glyph list, stage tabs, zoomable stage, per-glyph pipeline runs
+        inspector/            # Properties panel — Style / Motion / Pipeline tabs built from DialKit controls
+        FontPicker.tsx ExportMenu.tsx Transport.tsx ZoomStage.tsx ui.tsx icons.tsx state.ts
+      preview/                # Shared by /studio and /preview: TegakiTextPreview, stage views, export, constants
       url-state.ts            # URL <-> state serialization (short keys, only non-defaults written)
       LiveDemo.tsx            # Embeddable React demo used in docs
       HomePageExamples.tsx
@@ -145,18 +151,19 @@ packages/website/
     content.config.ts         # Starlight content collections config
     assets/                   # Logo, images
     styles/global.css         # Tailwind v4 styles (imported via `@tailwindcss/vite`)
+    styles/studio.css         # Studio-only styles (canvas backdrop, scrubber, DialKit tuning) on top of global.css
 ```
 
 Dev server: `bun dev` → Astro at `http://localhost:4321/tegaki/`. Two preview routes share the same URL-state schema:
 
-- `/tegaki/studio/` — the interactive UI (`GeneratorApp`): sidebar, controls, glyph inspector, text preview tab.
+- `/tegaki/studio/` — the interactive UI (`Studio`): Text / Glyphs modes, font picker + Export in the top bar, and an inspector (Style / Motion / Pipeline) docked right on desktop, a bottom sheet below 1024px. Controls are [DialKit](https://github.com/joshpuckett/dialkit) components (`Slider`, `Toggle`, `SelectControl`, …) inside a themed `DialScope` ([dial.tsx](packages/website/src/components/studio/inspector/dial.tsx)); light/dark follows the docs' theme.
 - `/tegaki/preview/` — a chrome-free standalone text renderer (`StandaloneTextPreview`) that reads the same URL state and renders only the text. Use this for screenshots / snapshots — no UI to crop out, and `window.__tegakiPreviewReady` / `body[data-tegaki-ready]` are set once the bundle is built so tooling can wait deterministically.
 
-The Text Preview tab in the studio has an "open in new tab" icon button next to the textarea that opens the current state in `/preview` (just swaps `/studio` → `/preview` in the URL).
+The studio's Text mode has an "open in new tab" icon button next to the text field that opens the current state in `/preview` (just swaps `/studio` → `/preview` in the URL).
 
 #### Testing the preview app via URL state
 
-Both pages persist / read the same state via the short keys defined in [packages/website/src/components/url-state.ts](packages/website/src/components/url-state.ts) (only `GeneratorApp` writes; `/preview` is read-only). This is the primary way for an agent to drive rendering reproducibly — navigate to a URL, inspect the rendered output, change a param, repeat. Only values that differ from defaults are serialized, so unset params are equivalent to defaults.
+Both pages persist / read the same state via the short keys defined in [packages/website/src/components/url-state.ts](packages/website/src/components/url-state.ts) (only `Studio` writes; `/preview` is read-only). This is the primary way for an agent to drive rendering reproducibly — navigate to a URL, inspect the rendered output, change a param, repeat. Only values that differ from defaults are serialized, so unset params are equivalent to defaults.
 
 Common keys (non-exhaustive — `url-state.ts` is the source of truth):
 
