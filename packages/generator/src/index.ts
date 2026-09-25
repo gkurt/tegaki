@@ -1,4 +1,13 @@
-export { ARABIC_CHARS, BENGALI_CHARS, CHARSET_PRESETS, DEVANAGARI_CHARS, HEBREW_CHARS, JAPANESE_CHARS, KOREAN_CHARS } from './charsets.ts';
+export {
+  ARABIC_CHARS,
+  BENGALI_CHARS,
+  CHARSET_PRESETS,
+  DEVANAGARI_CHARS,
+  HEBREW_CHARS,
+  JAPANESE_CHARS,
+  KOREAN_CHARS,
+  SIMPLIFIED_CHINESE_CHARS,
+} from './charsets.ts';
 export {
   type CoverageSummary,
   formatCoverageSummary,
