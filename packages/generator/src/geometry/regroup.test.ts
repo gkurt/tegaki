@@ -450,10 +450,53 @@ describe('regroupStrokesByReference — merging', () => {
   });
 
   test('overlap dedup: ink re-traveling an already-covered corridor is dropped, not chained (ね/ゅ wandering)', () => {
-    // Piece B duplicates the middle of piece A's corridor a width away —
+    // Piece B duplicates the middle of piece A's corridor inside A's pen —
     // the skeleton of a wandering fat region. Chaining would re-draw the
     // middle; the dedup piece set drops B and wins the re-match with A's
     // single clean travel.
+    const a = stroke(
+      pts(
+        [
+          [100, 100],
+          [100, 600],
+        ],
+        60,
+      ),
+    );
+    const b = stroke(
+      pts(
+        [
+          [115, 250],
+          [115, 450],
+        ],
+        20,
+      ),
+    );
+    const refs = [
+      ref([
+        [100, 100],
+        [100, 600],
+      ]),
+    ];
+    const result = regroupStrokesByReference([a, b], refs, OPTIONS);
+    expect(result).not.toBeNull();
+    expect(result!.pruned).toBeGreaterThan(0);
+    expect(result!.strokes.length).toBe(1);
+    const merged = result!.strokes[0]!;
+    // Single travel: no doubled middle, so the length stays near the corridor's.
+    let len = 0;
+    for (let i = 1; i < merged.points.length; i++) {
+      len += Math.hypot(merged.points[i]!.x - merged.points[i - 1]!.x, merged.points[i]!.y - merged.points[i - 1]!.y);
+    }
+    expect(len).toBeLessThan(600);
+    // A continuation piece is NOT a duplicate: covering new reference arc
+    // survives dedup — pinned by the plain-merge tests above, which still
+    // chain end-to-end pieces instead of dropping them.
+  });
+
+  test('coverage veto: a parallel piece whose ink the kept pen does not reach is never pruned (Playfair Display 9)', () => {
+    // B runs alongside A a width away, but A's 30-unit pen paints only the
+    // near third of B's: dropping B would leave a 20-unit band bare.
     const a = stroke(
       pts(
         [
@@ -479,19 +522,7 @@ describe('regroupStrokesByReference — merging', () => {
       ]),
     ];
     const result = regroupStrokesByReference([a, b], refs, OPTIONS);
-    expect(result).not.toBeNull();
-    expect(result!.pruned).toBeGreaterThan(0);
-    expect(result!.strokes.length).toBe(1);
-    const merged = result!.strokes[0]!;
-    // Single travel: no doubled middle, so the length stays near the corridor's.
-    let len = 0;
-    for (let i = 1; i < merged.points.length; i++) {
-      len += Math.hypot(merged.points[i]!.x - merged.points[i - 1]!.x, merged.points[i]!.y - merged.points[i - 1]!.y);
-    }
-    expect(len).toBeLessThan(600);
-    // A continuation piece is NOT a duplicate: covering new reference arc
-    // survives dedup — pinned by the plain-merge tests above, which still
-    // chain end-to-end pieces instead of dropping them.
+    expect(result?.pruned ?? 0).toBe(0);
   });
 
   test('coverage veto: crossing ink the reference lacks is never pruned as duplicate (crossbar 7)', () => {

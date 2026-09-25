@@ -737,8 +737,12 @@ function dedupOverlap(
  * perpendicular crossing stroke (a crossbar over its stem) can't vouch for
  * ink it doesn't re-draw — unless the sample sits inside the kept pen's own
  * radius, where the kept stroke paints it whatever its direction (hairpin
- * turn TIPS point sideways mid-duplicate). Covered when most samples
- * qualify — returns null (the drop may stand), else which condition failed.
+ * turn TIPS point sideways mid-duplicate). A qualifying kept pen must also
+ * PAINT the dropped disk, short of `DEDUP_PAINT_SLACK` of its width: an axis
+ * a width away is alongside, but in a fat junction (Playfair Display 9's
+ * bowl meeting its tail) that leaves the far half of a 100-unit pen's ink
+ * bare. Covered when most samples qualify — returns null (the drop may
+ * stand), else which condition failed.
  *
  * `strict` drops both leniencies (no clamped qualification, no pen-disk
  * direction bypass): only interior parallel hits count. Anything long
@@ -746,6 +750,9 @@ function dedupOverlap(
  * feature sits inside the crossing stroke's pen radius without being a
  * duplicate of anything, and only pure corridor re-travel survives strict.
  */
+/** Share of a dropped point's width a kept pen may leave unpainted and still re-draw it (see spanCoverageGap). */
+const DEDUP_PAINT_SLACK = 0.25;
+
 function spanCoverageGap(span: AxisPoint[], keptSpans: AxisPoint[][], strict = false): 'far' | 'static' | null {
   if (span.length < 2 || polylineLength(span) <= 0) return null;
   let far = false;
@@ -767,6 +774,7 @@ function spanCoverageGap(span: AxisPoint[], keptSpans: AxisPoint[][], strict = f
       const hit = projectOntoPolyline(ks, p);
       if (!hit || hit.d > Math.max(p.width, hit.q.width)) continue;
       near = true;
+      if (hit.d + p.width / 2 > hit.q.width / 2 + DEDUP_PAINT_SLACK * p.width) continue;
       const ha = ks[hit.seg]!;
       const hb = ks[hit.seg + 1]!;
       const segLen = dist(ha, hb);
