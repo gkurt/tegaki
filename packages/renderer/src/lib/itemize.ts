@@ -53,9 +53,9 @@ function scriptOf(ch: string): string {
  * The script each character of `text` is shaped in, by UTF-16 offset — as
  * browsers itemize a paragraph: punctuation, marks and other Common
  * characters take the script before them (the first one after, at the
- * start), and a closing bracket takes its opening bracket's. `null` where
- * the text has no script of its own at all, or the script isn't one
- * harfbuzz is told explicitly.
+ * start), and a closing bracket takes its opening bracket's — as does the
+ * text after it. `null` where the text has no script of its own at all, or
+ * the script isn't one harfbuzz is told explicitly.
  *
  * It decides which glyph a font draws for shared punctuation: Amiri's
  * default `[` is its wide Arabic bracket, with a narrow Latin one swapped in
@@ -81,7 +81,9 @@ export function resolvedScripts(text: string, before: string | null = null): (st
     } else if (CLOSING.has(ch)) {
       const j = openers.findLastIndex((o) => o.close === ch);
       if (j >= 0) {
-        script = out[openers[j]!.at] ?? current;
+        // The text after it continues in that script too, as a browser's
+        // script run does: " (1)" after "[مرحبا]" is Latin, like the "[".
+        script = current = out[openers[j]!.at] ?? current;
         openers.length = j;
       }
     } else if (OPENING.has(ch)) openers.push({ close: OPENING.get(ch)!, at: i });
@@ -95,15 +97,12 @@ export function resolvedScripts(text: string, before: string | null = null): (st
   return out;
 }
 
-/** The script of the last character of `text` that has one of its own — what text after it continues in. */
+/**
+ * The script text after `text` continues in: its last character's resolved
+ * script — the last one of its own, or a closing bracket's opener's.
+ */
 export function trailingScript(text: string): string | null {
-  for (let i = text.length - 1; i >= 0; i--) {
-    const cp = text.codePointAt(i)!;
-    if (cp >= 0xdc00 && cp <= 0xdfff && i > 0) continue;
-    const own = scriptOf(String.fromCodePoint(cp));
-    if (own !== 'Zyyy') return own === 'Zzzz' ? null : own;
-  }
-  return null;
+  return resolvedScripts(text).at(-1) ?? null;
 }
 
 /** Whether characters of these two scripts go in separate shaping runs. */

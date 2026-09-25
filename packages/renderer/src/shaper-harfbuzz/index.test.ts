@@ -211,3 +211,20 @@ describe('bracket mirroring', () => {
     expect(glyphOf(shaper.shape('a ( שלום', { direction: 'rtl' }), 2)).not.toBe(open);
   });
 });
+
+describe('script of shared punctuation', () => {
+  // Amiri's default brackets are its wide Arabic ones; the narrow Latin ones
+  // are swapped in only for Latin text, as browsers itemize it.
+  const amiriUrl = new URL('../../fonts/amiri/amiri.ttf', import.meta.url).href;
+  const amiri = () => harfbuzzShaper({ fontUrl: amiriUrl, features: [], glyphDataById: {} } as unknown as TegakiBundle)!;
+  const glyphsOf = (shaped: ShapedGlyph[], text: string, word: string) => {
+    const at = text.indexOf(word);
+    return shaped.filter((g) => g.cl >= at && g.cl < at + word.length).map((g) => g.g);
+  };
+
+  test('"(1)" after "[مرحبا]" gets the Latin parentheses, as it does after a Latin word', async () => {
+    const shaper = await amiri();
+    const text = 'Hello [مرحبا] (1) world';
+    expect(glyphsOf(shaper.shape(text), text, '(1)')).toEqual(glyphsOf(shaper.shape('a (1)'), 'a (1)', '(1)'));
+  });
+});
