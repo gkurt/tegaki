@@ -12,6 +12,25 @@ export {
 } from '../lib/effects.ts';
 export { ensureFontFace } from '../lib/font.ts';
 export type { BundleShaper, ShapedGlyph, ShapeOptions } from '../lib/shaper.ts';
+export {
+  type ActiveStroke,
+  type FrameContext,
+  type GlyphPlacement,
+  type GlyphSlot,
+  glyphLocalTime,
+  type StrokeFrame,
+  type StrokeHead,
+  type StrokeInstance,
+  type StrokeProgress,
+  type StrokeState,
+  type StrokeTiming,
+  sampleFrame,
+  sampleStroke,
+  strokeInstances,
+  strokeProgressAt,
+  strokeWindow,
+  type TegakiFrame,
+} from '../lib/strokeTimeline.ts';
 export { computeLayoutBbox, computeTextLayout, type LayoutBBox, type TextLayout } from '../lib/textLayout.ts';
 export { type TextToSvgMode, type TextToSvgOptions, textToSvg } from '../lib/textToSvg.ts';
 export {

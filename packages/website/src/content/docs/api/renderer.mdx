@@ -127,6 +127,31 @@ See [Text Shaping](/tegaki/guides/shaping/) for the full setup, bundle requireme
 
 Register a font bundle so it can be referenced by family name (used by the Web Component adapter and any code that wants to pass a bundle name as a string instead of the bundle object).
 
+## Strokes and frames
+
+The engine exposes the timeline one stroke at a time. In React, the engine is on the component's ref (`ref.current.engine`).
+
+### `engine.strokes`
+
+**Type:** `readonly StrokeInstance[]`
+
+Every stroke the text draws, in the order the canvas paints them. Each one has an `id` that stays the same while the timeline does, plus the timeline `entry` it belongs to (character, glyph, position), its `strokeIndex` in the glyph's stroke order, and its `start` and `duration` in seconds. The list is recomputed whenever the timeline is (see `onChangeTimeline`).
+
+### `engine.frameAt(time?)`
+
+**Returns:** `TegakiFrame`
+
+Every stroke at `time` (default: the current time). For each stroke you get its `state` (`'pending'`, `'drawing'` or `'done'`), its eased draw `progress` (0–1), and, once it has started, a `head`: the pen at the end of the ink. The head's `x` and `y` are in CSS px from the top-left of the text box, `angle` is the direction of travel in radians (y points down), and `width` is the ink width in px. Wobble, pressure width and taper are all included. `frame.active` lists the strokes being drawn right now.
+
+The result depends only on `time`, so it works the same under controlled, uncontrolled and CSS time:
+
+```ts
+const frame = engine.frameAt();
+for (const stroke of frame.active) {
+  pen.style.transform = `translate(${stroke.head.x}px, ${stroke.head.y}px) rotate(${stroke.head.angle}rad)`;
+}
+```
+
 ## Helper functions
 
 ### `computeTimeline(text, font)`
@@ -137,4 +162,14 @@ Computes the total animation duration for a given text and font bundle. Useful f
 import { computeTimeline } from 'tegaki';
 
 const { totalDuration } = computeTimeline('Hello', bundle);
+```
+
+### `strokeInstances(timeline, font)`
+
+The `engine.strokes` list for any timeline, with no engine or DOM needed. Use it to schedule things by stroke, for example a sound at each stroke's `start` in a Remotion composition. `sampleStroke(stroke, time, timing?)` gives a stroke's state and progress at a given time.
+
+```ts
+import { computeTimeline, strokeInstances } from 'tegaki/core';
+
+const starts = strokeInstances(computeTimeline('Hello', bundle), bundle).map((s) => s.start);
 ```

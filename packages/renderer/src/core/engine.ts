@@ -27,6 +27,7 @@ import { type CanvasOverflow, glyphInkBounds, inkOverflow, NO_OVERFLOW } from '.
 import type { BundleShaper, ShapeOptions } from '../lib/shaper.ts';
 import { type SubdividedStroke, subdivideStroke } from '../lib/strokeCache.ts';
 import { glowPasses, strokeEffects, wobbledOutline } from '../lib/strokeEffects.ts';
+import { type StrokeInstance, sampleFrame, strokeInstances, type TegakiFrame } from '../lib/strokeTimeline.ts';
 import {
   placementsToSvg,
   type SvgExportConfig,
@@ -261,6 +262,8 @@ export class TegakiEngine {
   // WeakMap are orphaned and GC'd along with the map.
   private _strokeCache: WeakMap<TegakiGlyphData['s'][number], SubdividedStroke> = new WeakMap();
   private _strokeCacheKey = '';
+  /** `strokes`, memoized for the timeline and font it was computed from. */
+  private _strokes: { timeline: Timeline; font: TegakiBundle; list: StrokeInstance[] } | null = null;
 
   // --- Measured from DOM ---
   private _containerWidth = 0;
@@ -408,6 +411,58 @@ export class TegakiEngine {
   computeTimeline(text: string): Timeline {
     if (!this._font) return { entries: [], totalDuration: 0 };
     return computeTimeline(text, this._font, this._timing, this._shaper, this._shapeOptions());
+  }
+
+  /**
+   * Every stroke on the timeline, one per stroke of each glyph, in the order
+   * the canvas paints them: when it starts and how long it draws. Recomputed
+   * with the timeline (see `onChangeTimeline`). Treat as read-only.
+   */
+  get strokes(): readonly StrokeInstance[] {
+    const font = this._font;
+    if (!font?.glyphData) return [];
+    const cached = this._strokes;
+    if (cached?.timeline === this._timeline && cached.font === font) return cached.list;
+    const list = strokeInstances(this._timeline, font);
+    this._strokes = { timeline: this._timeline, font, list };
+    return list;
+  }
+
+  /**
+   * Every stroke at timeline time `time` (default: the current time): its
+   * state and draw progress, and for a started stroke the pen at the end of
+   * its ink — position, direction and width, wobble and taper included — in
+   * CSS px from the top-left of the text box. A pure function of time, so
+   * it holds under controlled, uncontrolled and CSS time alike. Strokes of
+   * glyphs the layout hasn't placed yet are left out.
+   */
+  frameAt(time: number = this.currentTime): TegakiFrame {
+    const font = this._font;
+    const layout = this._layout;
+    const fontSize = this._fontSize;
+    if (!font?.glyphData || !layout || !fontSize) return { time, strokes: [], active: [] };
+    const lineHeight = this._lineHeight;
+    const scale = fontSize / font.unitsPerEm;
+    const halfLeading = (lineHeight - ((font.ascender - font.descender) / font.unitsPerEm) * fontSize) / 2;
+    const graphemeToLine = new Map<number, number>();
+    layout.lines.forEach((line, li) => {
+      for (const charIdx of line) graphemeToLine.set(charIdx, li);
+    });
+    const entries = this._timeline.entries;
+    const clipText = this._quality?.clipText;
+    return sampleFrame(this.strokes, time, {
+      timing: this._timing,
+      effects: this._resolvedEffects,
+      getSubdivided: this._subdivider(font, scale),
+      strokeScale: typeof clipText === 'number' ? clipText : 1,
+      placeEntry: (ei) => {
+        const entry = entries[ei]!;
+        const lineIdx = graphemeToLine.get(entry.graphemeIndex);
+        if (lineIdx === undefined) return null;
+        const { x, glyphY } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
+        return { x, y: glyphY, scale, ascender: font.ascender, seed: this._seed + entry.graphemeIndex };
+      },
+    });
   }
 
   get isPlaying(): boolean {
@@ -1589,6 +1644,32 @@ export class TegakiEngine {
     return { maxSegLenFU: resolvedSegmentSize != null ? resolvedSegmentSize / scale : Infinity, smoothing };
   }
 
+  /**
+   * The engine's cached stroke subdivision at `scale`. `maxSegLenFU` (see
+   * `_subdivision`), the subdivision threshold in font units, collapses every input that matters (segmentSize in CSS px,
+   * fontSize, unitsPerEm, whether any effect needs subdivision) into a single
+   * value, so the cache key is just (font family, maxSegLenFU, smoothing).
+   * When anything that affects subdivision changes, the key changes and the
+   * WeakMap is swapped out.
+   */
+  private _subdivider(font: TegakiBundle, scale: number): (stroke: TegakiGlyphData['s'][number]) => SubdividedStroke {
+    const { maxSegLenFU, smoothing } = this._subdivision(scale);
+    const cacheKey = `${font.family}|${maxSegLenFU}|${smoothing ? 's' : 'l'}`;
+    if (cacheKey !== this._strokeCacheKey) {
+      this._strokeCache = new WeakMap();
+      this._strokeCacheKey = cacheKey;
+    }
+    const strokeCache = this._strokeCache;
+    return (stroke) => {
+      let sub = strokeCache.get(stroke);
+      if (!sub) {
+        sub = subdivideStroke(stroke, maxSegLenFU, smoothing);
+        strokeCache.set(stroke, sub);
+      }
+      return sub;
+    };
+  }
+
   private _render(): void {
     const canvas = this._canvasEl;
     const font = this._font;
@@ -1632,28 +1713,10 @@ export class TegakiEngine {
     const characters = graphemes(this._text);
     const currentTime = this.currentTime;
 
-    // --- Subdivision cache setup ---
-    // `maxSegLenFU` is the subdivision threshold in font units. It collapses
-    // every input that matters (segmentSize in CSS px, fontSize, unitsPerEm,
-    // whether any effect needs subdivision) into a single value, so the cache
-    // key is just (font family, maxSegLenFU). When anything that affects
-    // subdivision changes, the key changes and the WeakMap is swapped out.
+    // --- Subdivision cache setup (see `_subdivider`) ---
     const scale = fontSize / font.unitsPerEm;
-    const { maxSegLenFU, smoothing } = this._subdivision(scale);
-    const cacheKey = `${font.family}|${maxSegLenFU}|${smoothing ? 's' : 'l'}`;
-    if (cacheKey !== this._strokeCacheKey) {
-      this._strokeCache = new WeakMap();
-      this._strokeCacheKey = cacheKey;
-    }
-    const strokeCache = this._strokeCache;
-    const getSubdivided = (stroke: TegakiGlyphData['s'][number]): SubdividedStroke => {
-      let sub = strokeCache.get(stroke);
-      if (!sub) {
-        sub = subdivideStroke(stroke, maxSegLenFU, smoothing);
-        strokeCache.set(stroke, sub);
-      }
-      return sub;
-    };
+    const { maxSegLenFU } = this._subdivision(scale);
+    const getSubdivided = this._subdivider(font, scale);
 
     const clipText = this._quality?.clipText;
     const strokeScale = typeof clipText === 'number' ? clipText : 1;

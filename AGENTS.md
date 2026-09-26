@@ -50,6 +50,7 @@ packages/renderer/src/
     types.ts                  # Engine-level types (TimeControlProp, effect config, etc.)
   lib/                        # Shared helpers used by both core and adapters
     timeline.ts               # computeTimeline() — per-grapheme animation schedule
+    strokeTimeline.ts         # The timeline per stroke: strokeInstances(), the one stroke clock (drawGlyph, svgExport and frameAt all read it), sampleFrame() — pen head per stroke
     textLayout.ts             # Line breaking, advance widths, RTL/LTR
     drawGlyph.ts              # Glyph -> SVG path drawing
     drawFallbackGlyph.ts      # Fallback when glyph missing from bundle

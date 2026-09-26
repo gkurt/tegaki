@@ -2,6 +2,7 @@ import type { LineCap, TegakiGlyphData } from '../types.ts';
 import type { ResolvedEffect } from './effects.ts';
 import { type SubdividedStroke, subdivideStroke } from './strokeCache.ts';
 import { defaultStrokeEasing, glowPasses, strokeEffects } from './strokeEffects.ts';
+import { pointAlong, strokeProgressAt, strokeWindow } from './strokeTimeline.ts';
 
 type Stroke = TegakiGlyphData['s'][number];
 
@@ -120,15 +121,9 @@ export function drawGlyph(
 
   for (let si = 0; si < glyph.s.length; si++) {
     const stroke = glyph.s[si]!;
-    // Stagger-mode static duration scales bundled `d` and `a`; scheduler-set
-    // `strokeDelays` (dot deferral) are already in entry-relative seconds and
-    // bypass the scale.
-    const delay = strokeDelays?.[si] ?? stroke.d * strokeTimeScale;
-    if (localTime < delay) continue;
-    const elapsed = localTime - delay;
-    const animDuration = stroke.a * strokeTimeScale;
-    const linearProgress = animDuration > 0 ? Math.min(elapsed / animDuration, 1) : 1;
-    const progress = strokeEasing ? strokeEasing(linearProgress) : linearProgress;
+    const { delay, duration } = strokeWindow(glyph, si, { strokeDelays, strokeTimeScale });
+    const { state, progress } = strokeProgressAt(localTime, delay, duration, strokeEasing ?? linear);
+    if (state === 'pending') continue;
 
     const rawPts = stroke.p;
     if (rawPts.length === 0) continue;
@@ -195,36 +190,13 @@ export function drawGlyph(
 
     const baseLineWidth = Math.max(avgWidth, 0.5) * scale * strokeScale;
 
-    // Binary search for the last fully-included vertex — i.e. the largest i
-    // with vertices[i].cumLen <= drawLen.
-    let lo = 0;
-    let hi = vertices.length - 1;
-    while (lo < hi) {
-      const mid = (lo + hi + 1) >>> 1;
-      if (vertices[mid]!.cumLen <= drawLen) lo = mid;
-      else hi = mid - 1;
-    }
-    const lastIdx = lo;
-
-    // Interpolate the tail of the last, partially-drawn sub-segment.
-    let tailX = 0;
-    let tailY = 0;
-    let tailWidth = 0;
-    let tailIdx = 0;
-    let tailCumLen = 0;
-    let hasTail = false;
-    if (lastIdx + 1 < vertices.length && drawLen > vertices[lastIdx]!.cumLen) {
-      const a = vertices[lastIdx]!;
-      const b = vertices[lastIdx + 1]!;
-      const segLen = b.cumLen - a.cumLen;
-      const t = segLen > 0 ? (drawLen - a.cumLen) / segLen : 0;
-      tailX = a.x + (b.x - a.x) * t;
-      tailY = a.y + (b.y - a.y) * t;
-      tailWidth = a.width + (b.width - a.width) * t;
-      tailIdx = a.idx + (b.idx - a.idx) * t;
-      tailCumLen = drawLen;
-      hasTail = true;
-    }
+    const { lastIdx, tail } = pointAlong(cached, drawLen);
+    const hasTail = tail !== null;
+    const tailX = tail?.x ?? 0;
+    const tailY = tail?.y ?? 0;
+    const tailWidth = tail?.width ?? 0;
+    const tailIdx = tail?.idx ?? 0;
+    const tailCumLen = tail?.cumLen ?? 0;
 
     // Pre-transform every visible vertex (raw + wobble + scale + translate)
     // exactly once — glow and main passes both iterate this array, and the
@@ -324,3 +296,5 @@ export function drawGlyph(
     fillNibs(stroke, drawLen, pointCumLen, totalLen, (progressAt) => (hasStrokeGradient ? colorAt(progressAt) : defaultStrokePaint));
   }
 }
+
+const linear = (t: number) => t;

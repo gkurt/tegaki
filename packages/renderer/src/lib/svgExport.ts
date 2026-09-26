@@ -1,7 +1,8 @@
 import type { LineCap, TegakiGlyphData } from '../types.ts';
 import { findEffect, type ResolvedEffect } from './effects.ts';
 import { subdivideStroke } from './strokeCache.ts';
-import { defaultStrokeEasing, type GlowPass, glowPasses, type StrokeEffects, strokeEffects, wobbledOutline } from './strokeEffects.ts';
+import { type GlowPass, glowPasses, type StrokeEffects, strokeEffects, wobbledOutline } from './strokeEffects.ts';
+import { glyphLocalTime, strokeProgressAt, strokeWindow } from './strokeTimeline.ts';
 
 /**
  * One positioned glyph ready to serialize. Coordinates are the engine's ctx
@@ -164,8 +165,6 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
-
 // ---------------------------------------------------------------------------
 // Timing — each stroke's draw progress over timeline time, exactly as
 // `drawGlyph` computes it from the engine's current time.
@@ -180,20 +179,13 @@ interface StrokeClock {
 }
 
 function strokeClock(item: SvgGlyphPlacement, si: number, cfg: SvgExportConfig): StrokeClock {
-  const stroke = item.glyph.s[si]!;
-  const scale = item.strokeTimeScale ?? 1;
-  const delay = item.strokeDelays?.[si] ?? stroke.d * scale;
-  const dur = stroke.a * scale;
+  const { delay, duration: dur } = strokeWindow(item.glyph, si, item);
   const slot = item.duration ?? item.glyph.t;
   const easeGlyph = cfg.glyphEasing;
-  const easeStroke = cfg.strokeEasing ?? defaultStrokeEasing;
   const O = item.offset;
   const at = (t: number): number => {
-    let local = Math.max(0, Math.min(t - O, slot));
-    if (easeGlyph && slot > 0) local = easeGlyph(local / slot) * slot;
-    if (local < delay) return -1;
-    const linear = dur > 0 ? Math.min((local - delay) / dur, 1) : 1;
-    return clamp01(easeStroke(linear));
+    const s = strokeProgressAt(glyphLocalTime(t, O, slot, easeGlyph), delay, dur, cfg.strokeEasing);
+    return s.state === 'pending' ? -1 : s.progress;
   };
   // Glyph easing can move a stroke anywhere in its slot; otherwise it runs over its own window.
   if (easeGlyph && slot > 0) return { at, t0: O, t1: O + slot };
