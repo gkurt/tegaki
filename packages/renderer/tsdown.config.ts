@@ -53,7 +53,8 @@ function fontBundlePlugin() {
   return {
     name: 'tegaki-font-bundle',
     transform(code: string, id: string) {
-      if (!id.includes('/fonts/') || !id.endsWith('bundle.ts')) return;
+      // Module ids use backslashes on Windows.
+      if (!id.replaceAll('\\', '/').includes('/fonts/') || !id.endsWith('bundle.ts')) return;
 
       let result = code;
 

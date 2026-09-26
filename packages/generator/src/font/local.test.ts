@@ -2,11 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as opentype from 'opentype.js';
 import { charsHash } from '../constants.ts';
 import { loadLocalFont } from './local.ts';
 
-const caveatPath = new URL('../../../renderer/fonts/caveat/caveat.ttf', import.meta.url).pathname;
+// fileURLToPath, not `.pathname`: on Windows the pathname is `/S:/...`, which no file API opens.
+const caveatPath = fileURLToPath(new URL('../../../renderer/fonts/caveat/caveat.ttf', import.meta.url));
 
 describe('loadLocalFont', () => {
   test("a subset takes the font's own family and the Google kit naming (<family>-<chars hash>.ttf)", async () => {
