@@ -28,7 +28,7 @@
     },
     "e2e/examples": {
       "name": "@tegaki/example-e2e",
-      "version": "0.22.2",
+      "version": "0.23.0",
       "devDependencies": {
         "@playwright/test": "^1.63.0",
         "@types/pngjs": "^6.0.5",
@@ -37,7 +37,7 @@
     },
     "examples/editframe": {
       "name": "@tegaki/example-editframe",
-      "version": "0.23.2",
+      "version": "0.24.0",
       "dependencies": {
         "@editframe/cli": "0.58.4",
         "@editframe/elements": "0.58.4",
@@ -62,11 +62,11 @@
     },
     "examples/hyperframes": {
       "name": "hyperframes",
-      "version": "0.22.2",
+      "version": "0.23.0",
     },
     "examples/next": {
       "name": "@tegaki/example-next",
-      "version": "0.22.2",
+      "version": "0.23.0",
       "dependencies": {
         "next": "^16.3.6",
         "react": "^19.3.0",
@@ -82,7 +82,7 @@
     },
     "examples/nuxt": {
       "name": "@tegaki/example-nuxt",
-      "version": "0.22.2",
+      "version": "0.23.0",
       "dependencies": {
         "nuxt": "^4.5.2",
         "tegaki": "workspace:*",
@@ -96,7 +96,7 @@
     },
     "examples/remotion": {
       "name": "@tegaki/example-remotion",
-      "version": "0.22.2",
+      "version": "0.23.0",
       "dependencies": {
         "@remotion/cli": "4.0.529",
         "@remotion/fonts": "4.0.529",
@@ -114,7 +114,7 @@
     },
     "examples/vite": {
       "name": "@tegaki/example-vite",
-      "version": "0.22.2",
+      "version": "0.23.0",
       "dependencies": {
         "harfbuzzjs": "^1.6.2",
         "react": "^19.3.0",
@@ -131,7 +131,7 @@
     },
     "packages/generator": {
       "name": "tegaki-generator",
-      "version": "0.22.2",
+      "version": "0.23.0",
       "bin": {
         "tegaki": "./dist/cli/index.js",
       },
@@ -154,7 +154,7 @@
     },
     "packages/renderer": {
       "name": "tegaki",
-      "version": "0.22.2",
+      "version": "0.23.0",
       "bin": {
         "tegaki": "./dist/cli.mjs",
       },
@@ -187,7 +187,7 @@
     },
     "packages/website": {
       "name": "@tegaki/website",
-      "version": "0.22.2",
+      "version": "0.23.0",
       "dependencies": {
         "@anthropic-ai/bedrock-sdk": "^0.33.8",
         "@astrojs/check": "^0.9.10",
