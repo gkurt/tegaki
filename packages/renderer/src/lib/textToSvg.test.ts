@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import caveat from '../../fonts/caveat/bundle.ts';
+import nanumPenScript from '../../fonts/nanum-pen-script/bundle.ts';
 import suezOne from '../../fonts/suez-one/bundle.ts';
 import { createHarfbuzzShaper } from '../shaper-harfbuzz/index.ts';
 import type { TegakiBundle } from '../types.ts';
@@ -158,6 +159,17 @@ describe('headlessShapedLayout', () => {
   });
 });
 
+describe('textToSvg with a harfbuzz shaper for a bundle without glyphDataById', () => {
+  const nanum = nanumPenScript as unknown as TegakiBundle;
+
+  test('clipText keeps the ink of a bundle without glyphDataById', async () => {
+    const svg = textToSvg('반가워요', nanum, { mode: 'static', shaper: await shaperFor(nanum), clipText: 1.2 });
+    const mask = svg.match(/<mask id="tk-clip"[\s\S]*?<\/mask>/)?.[0] ?? '';
+    expect([...mask.matchAll(/<path d="[^"]+" transform="translate\([^)]+\) scale\(/g)].length).toBe(4);
+    expect(svg).toContain('mask="url(#tk-clip)"');
+  });
+});
+
 describe('textToSvg with a harfbuzz shaper', () => {
   let shaper: BundleShaper;
   beforeAll(async () => {
@@ -180,6 +192,13 @@ describe('textToSvg with a harfbuzz shaper', () => {
     const plain = textToSvg('H', font, { mode: 'static', shaper, clipText: true });
     const wide = textToSvg('H', font, { mode: 'static', shaper, clipText: 1.5 });
     expect(maxWidth(wide) / maxWidth(plain)).toBeCloseTo(1.5, 1);
+  });
+
+  test('a glyph without an outline leaves the strokes unclipped', () => {
+    const noOutlines: BundleShaper = { shape: (text, options) => shaper.shape(text, options), glyphPath: () => null };
+    const svg = textToSvg('Hi', font, { mode: 'static', shaper: noOutlines, clipText: 1.2 });
+    expect(svg).not.toContain('tk-clip');
+    expect(svg).toContain('stroke-width=');
   });
 
   test("shaped Latin keeps the unshaped layout's glyph placement", () => {

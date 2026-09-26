@@ -60,7 +60,8 @@ export interface TextToSvgOptions {
    * Clip the strokes to the text's glyph outlines, as the renderer's
    * `quality.clipText`: `true`, or a number to also scale every stroke width by
    * it first (the studio uses `1.2` for the geometry pipeline's bundles, so the
-   * clip trims the ink to the letter shapes). Needs a `shaper` with outlines.
+   * clip trims the ink to the letter shapes). Needs a `shaper` with outlines;
+   * when a drawn glyph has none, the strokes are left unclipped.
    */
   clipText?: boolean | number;
   /** Effects, as the renderer's `effects` prop: glow, wobble, taper, strokeGradient, globalGradient. Width blending is `pressure`. */
@@ -119,6 +120,37 @@ function headlessLayout(text: string, font: TegakiBundle, letterSpacingEm = 0): 
   if (current.length) lines.push(current);
 
   return { lines, charOffsets, maxRightEm };
+}
+
+/** A glyph the font draws for a character, offset from the character's origin in font units (y up). */
+interface CharGlyph {
+  g: string;
+  dx: number;
+  dy: number;
+}
+
+/**
+ * The glyphs the font draws for `char` set alone — the outlines to clip an
+ * unshaped timeline's entry to. It carries no glyph id (the bundle has no
+ * `glyphDataById`), and is placed one per character as the font draws it
+ * alone. `null` when the font has no glyph for it (`.notdef`).
+ */
+function charGlyphs(shaper: BundleShaper, char: string, cache: Map<string, CharGlyph[] | null>): CharGlyph[] | null {
+  let glyphs = cache.get(char);
+  if (glyphs === undefined) {
+    let pen = 0;
+    glyphs = [];
+    for (const g of shaper.shape(char)) {
+      if (g.g === '0' || g.g.endsWith(':0')) {
+        glyphs = null;
+        break;
+      }
+      glyphs.push({ g: g.g, dx: pen + g.dx, dy: g.dy });
+      pen += g.ax;
+    }
+    cache.set(char, glyphs);
+  }
+  return glyphs;
 }
 
 /**
@@ -181,11 +213,11 @@ export function textToSvg(text: string, font: TegakiBundle, options: TextToSvgOp
     pressure > 0 || !!findEffect(effects, 'wobble') || !!findEffect(effects, 'strokeGradient') || !!findEffect(effects, 'taper');
   const resolvedSegmentSize = options.segmentSize ?? (effectsNeedSubdivision || smoothing ? 2 : undefined);
   const segmentLengthFU = resolvedSegmentSize != null ? resolvedSegmentSize / scale : Infinity;
-  const clip = options.clipText && shaper?.glyphPath ? options.clipText : false;
-  const strokeScale = typeof clip === 'number' ? clip : 1;
+  let clip = options.clipText && shaper?.glyphPath ? options.clipText : false;
 
   const placements: SvgGlyphPlacement[] = [];
   const outlines: SvgGlyphOutline[] = [];
+  const charGlyphCache = new Map<string, CharGlyph[] | null>();
   for (const entry of timeline.entries) {
     if (entry.char === '\n' || !entry.hasGlyph) continue;
     const charIdx = entry.graphemeIndex;
@@ -208,18 +240,25 @@ export function textToSvg(text: string, font: TegakiBundle, options: TextToSvgOp
       strokeTimeScale: entry.strokeTimeScale,
       seed: (options.seed ?? 0) + charIdx,
     });
-    if (clip && entry.glyphId !== undefined && /\S/u.test(entry.char)) {
-      const d = shaper?.glyphPath?.(entry.glyphId);
-      if (d)
-        outlines.push({
-          d,
-          x: padH + xEm * fontSize,
-          y: padV + glyphY + font.ascender * scale,
-          scale,
-          seed: (options.seed ?? 0) + charIdx,
+    if (clip && shaper && /\S/u.test(entry.char)) {
+      const glyphs = entry.glyphId !== undefined ? [{ g: entry.glyphId, dx: 0, dy: 0 }] : charGlyphs(shaper, entry.char, charGlyphCache);
+      const paths = glyphs?.map((g) => shaper.glyphPath?.(g.g) ?? null);
+      // A glyph with no outline would be masked out whole, so draw every
+      // stroke unclipped instead — as the engine falls back from the outlines.
+      if (!glyphs || !paths || paths.includes(null)) clip = false;
+      else
+        glyphs.forEach((g, i) => {
+          outlines.push({
+            d: paths[i]!,
+            x: padH + xEm * fontSize + g.dx * scale,
+            y: padV + glyphY + (font.ascender - g.dy) * scale,
+            scale,
+            seed: (options.seed ?? 0) + charIdx,
+          });
         });
     }
   }
+  const strokeScale = typeof clip === 'number' ? clip : 1;
 
   const width = padH * 2 + widthEm * fontSize;
   const height = padV * 2 + lines.length * lineHeight;
