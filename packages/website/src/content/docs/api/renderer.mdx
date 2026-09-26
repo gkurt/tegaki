@@ -208,7 +208,7 @@ A plugin is an object with a `name` and any of these hooks:
 
 The built-in [effects](#effects) are plugins too, and run first, so each hook of yours sees what they made: `geometry` gets the path after pressure width, taper and wobble, and `paint` gets the gradient as its `style`.
 
-`ctx` is the canvas context, set up so one unit is one CSS px from the top-left of the text box. The engine saves and restores it around every hook. Underlays go on a layer of their own under the finished ink, so clip-to-text doesn't cut them. `color` is the text's color. `random(key)` returns a random number generator seeded by the renderer's [`seed`](#seed), so the same key gives the same numbers on every frame and, at the same seed, on every load. `prev` is the frame `onFrame` saw last, or `null` the first time.
+`ctx` is the canvas context, set up so one unit is one CSS px from the top-left of the text box. The engine saves and restores it around every hook. Underlays go on a layer of their own under the finished ink, so clip-to-text doesn't cut them. `color` is the text's color, and `step` is the plugin's current drawing if it has [`steps`](#drawings-over-time-steps) (`0` otherwise). `random(key)` returns a random number generator seeded by the renderer's [`seed`](#seed), so the same key gives the same numbers on every frame and, at the same seed, on every load. `prev` is the frame `onFrame` saw last, or `null` the first time.
 
 `ink` gets a copy of the finished ink (`ink`, a canvas in device px) and `bounds`, the box the ink drawn so far covers in the same px as `ctx` (`ctx.getTransform()` maps it to device px). Work inside `bounds`: outside it the canvas is empty, and a filter or blur costs what it covers.
 
@@ -325,6 +325,17 @@ const shimmer: TegakiPlugin = {
 - In controlled time the drawing comes from the time given, so a video renders the same every time. Otherwise it comes from the clock.
 - The ink cycles whenever it's drawn: while the text writes, and on every redraw. With `idle: true` the engine also keeps redrawing once the text is written or paused, in uncontrolled and CSS time.
 - When motion is reduced (see [`reducedMotion`](#reducedmotion)), the first drawing is shown and nothing cycles.
+
+The painting hooks (`paint`, `ink`, `underlay`, `overlay`) are told the plugin's drawing too, as `step`. So a plugin with no `geometry` or `outline` can use `steps` purely as a clock, say for a neon sign's flicker. Its steps don't reshape anything, so they cost nothing but a redraw per step: the strokes aren't placed again for each one, and the canvas doesn't grow for them.
+
+```ts
+const flicker: TegakiPlugin = {
+  name: 'flicker',
+  steps: { count: 240, fps: 20, idle: true },
+  // Dim every glyph now and then: a different pattern each step, the same every time round.
+  paint: (s, next) => next({ ...s, style: seededRandom(s.stroke.seed, s.step)() < 0.1 ? '#888' : s.style }),
+};
+```
 
 ### Plugins with options: `createPlugin(definition)`
 

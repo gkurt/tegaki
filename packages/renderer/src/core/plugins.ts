@@ -48,14 +48,28 @@ export function stepsKey(steps: PluginSteps): string {
   return [...steps.values()].join(',');
 }
 
+/** Whether a plugin's steps change the ink's shape — it has `geometry` or `outline`. Only those need the strokes placed once per drawing; the rest (a flicker) just paint differently. */
+export function shapesInk(plugin: TegakiPlugin): boolean {
+  return !!(plugin.geometry || plugin.outline);
+}
+
+/** The steps of the plugins that shape the ink, and their key — what placed strokes and clip outlines are cached by. */
+export function shapeSteps(steps: PluginSteps): { steps: PluginSteps; key: string } {
+  const out = new Map<TegakiPlugin, number>();
+  for (const [plugin, step] of steps) if (shapesInk(plugin)) out.set(plugin, step);
+  return { steps: out, key: stepsKey(out) };
+}
+
 /**
- * Every combination of the stepped plugins' drawings — what the canvas must
- * hold — or only the first `limit` of them when there are more (a few
- * plugins of a few drawings each is the most anyone needs).
+ * Every combination of the drawings of the stepped plugins that shape the
+ * ink — what the canvas must hold — or only the first `limit` of them when
+ * there are more (a few plugins of a few drawings each is the most anyone
+ * needs). A plugin whose steps only paint (no `geometry` or `outline`)
+ * doesn't move the ink, so it adds none.
  */
 export function allPluginSteps(plugins: readonly TegakiPlugin[], limit = 64): PluginSteps[] {
   let combos: Map<TegakiPlugin, number>[] = [new Map()];
-  for (const { plugin, steps } of steppedPlugins(plugins)) {
+  for (const { plugin, steps } of steppedPlugins(plugins.filter(shapesInk))) {
     const next: Map<TegakiPlugin, number>[] = [];
     for (const combo of combos) {
       for (let i = 0; i < steps.count && next.length < limit; i++) next.push(new Map(combo).set(plugin, i));
@@ -112,23 +126,30 @@ export function outlineWith(
   };
 }
 
+/** A stroke to paint, before the chain tells each plugin its drawing (`step`). */
+export type StrokePaintInput = Omit<TegakiStrokePaintContext, 'step'> & { step?: number };
+
 /**
  * Every `paint` hook as a chain: the first plugin's `next` is the second's
  * hook, and the last one's is `base` (the default painter). Each hook runs
- * between a save and a restore of the canvas state. A hook that throws
- * before calling `next` has the stroke painted as if it weren't there.
+ * between a save and a restore of the canvas state, and is told its
+ * plugin's drawing in `stroke.step`. A hook that throws before calling
+ * `next` has the stroke painted as if it weren't there.
  */
 export function paintWith(
   plugins: readonly TegakiPlugin[],
   onError: PluginErrorHandler,
   base: (stroke: TegakiStrokePaintContext) => void = paintStroke,
-): (stroke: TegakiStrokePaintContext) => void {
-  let next = base;
+  steps?: PluginSteps,
+): (stroke: StrokePaintInput) => void {
+  let next: (stroke: StrokePaintInput) => void = base as (stroke: StrokePaintInput) => void;
   for (let i = plugins.length - 1; i >= 0; i--) {
     const plugin = plugins[i]!;
     if (!plugin.paint) continue;
     const inner = next;
-    next = (stroke) => {
+    const step = steps?.get(plugin) ?? 0;
+    next = (input) => {
+      const stroke = (input.step === step ? input : { ...input, step }) as TegakiStrokePaintContext;
       let called = false;
       const call = (s: TegakiStrokePaintContext) => {
         called = true;

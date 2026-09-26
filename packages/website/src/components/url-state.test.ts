@@ -214,7 +214,7 @@ describe('demo plugins', () => {
 
   test('no plugins writes no pg; some write them back as they were read', () => {
     expect(buildUrlParams(URL_DEFAULTS).has('pg')).toBe(false);
-    expect(buildUrlParams(parseUrlState('?pg=pen,order')).get('pg')).toBe('pen,order');
+    expect(buildUrlParams(parseUrlState('?pg=order,pen')).get('pg')).toBe('order,pen');
   });
 
   test('po reads each plugin’s options as its params take them, dropping unknown plugins, keys and defaults', () => {

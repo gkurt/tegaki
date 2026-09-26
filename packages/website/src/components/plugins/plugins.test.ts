@@ -2,19 +2,26 @@
 import { describe, expect, test } from 'bun:test';
 import { clearance, type PlacedStroke, type StrokeFrame, StrokePath, type TegakiFrame } from 'tegaki/core';
 import { skipPieces } from './ballpoint.ts';
-import { bristles } from './brush.ts';
+import { bristles, brushWidth, splashes } from './brush.ts';
 import { mix, parseCanvasColor } from './color.ts';
 import { colorIndex, PALETTES, pickColor } from './colors.ts';
 import { echoPasses, echoPlugin, lagged } from './echo.ts';
+import { graphiteGray, smudges, splinters } from './graphite.ts';
+import { hapticFor } from './haptics.ts';
 import { createShowcasePlugins, normalizePluginOptions, SHOWCASE_PLUGINS } from './index.ts';
+import { ballAt, landings } from './karaoke.ts';
+import { cooled, emitterAt } from './laser.ts';
+import { brightness } from './neon.ts';
 import { broadNib, nibFactor } from './nib.ts';
 import { grainTile } from './noise.ts';
 import { paperBounds, paperLayout } from './paper.ts';
 import { penPoses } from './pen.ts';
+import { tremorAt, tremorWaves } from './shaky.ts';
+import { leanAbout } from './slant.ts';
 import { penMotion } from './sound.ts';
 import { sparkleAt, strokeSparkles } from './sparkle.ts';
 import { layoutGuides } from './stroke-order.ts';
-import { dryness, inkAge } from './wet.ts';
+import { dryness, inkAge, poolFactors } from './wet.ts';
 
 /** A straight stroke from (x0, y) to (x1, y), `width` px wide. */
 const line = (x0: number, x1: number, y: number, width = 8) =>
@@ -150,7 +157,7 @@ describe('showcase', () => {
 
   test('options state keeps known plugins with something changed, as their params take it', () => {
     expect(normalizePluginOptions({ brush: { bristles: 100, core: 0.45 }, echo: { lag: 0.36 }, nope: { x: 1 } })).toEqual({
-      brush: { bristles: 24 },
+      brush: { bristles: 40 },
     });
     expect(normalizePluginOptions('brush')).toEqual({});
   });
@@ -316,5 +323,152 @@ describe('sparkles', () => {
     expect(late.alpha).toBeLessThan(early.alpha);
     expect(late.y).toBeLessThan(early.y);
     expect(sparkleAt(s!, from, 1.01, 1)).toBeNull();
+  });
+});
+
+describe('wet ink pooling', () => {
+  test('ink swells where the pen lands, most at the start, and not along a straight middle', () => {
+    const f = poolFactors(line(0, 200, 0, 10).points, 1);
+    expect(f[0]!).toBeGreaterThan(f.at(-1)!);
+    expect(f.at(-1)!).toBeGreaterThan(1);
+    expect(f[5]!).toBeCloseTo(1);
+  });
+
+  test('a sharp turn pools', () => {
+    const corner = new StrokePath([
+      ...Array.from({ length: 11 }, (_, i) => ({ x: i * 10, y: 0, width: 8, t: i / 20 })),
+      ...Array.from({ length: 10 }, (_, i) => ({ x: 100, y: (i + 1) * 10, width: 8, t: (11 + i) / 21 })),
+    ]);
+    const f = poolFactors(corner.points, 1);
+    expect(f[10]!).toBeGreaterThan(1.3);
+    expect(poolFactors(corner.points, 0).every((v) => v === 1)).toBe(true);
+  });
+});
+
+describe('big brush', () => {
+  test('pressed fat at the start, lifting to a point at the end', () => {
+    expect(brushWidth(0, 3, 0.5)).toBeCloseTo(4.5);
+    expect(brushWidth(0.5, 3, 0.5)).toBeCloseTo(3);
+    expect(brushWidth(1, 3, 0.5)).toBeLessThan(1.5);
+  });
+
+  test('splatter lands near where the brush lands and leaves', () => {
+    const path = line(0, 400, 0, 20);
+    const drops = splashes(path, 1, lcg(5));
+    expect(drops.length).toBeGreaterThan(0);
+    for (const d of drops) {
+      expect(d.t < 0.12 || d.t > 0.95).toBe(true);
+      expect(Math.abs(d.y)).toBeLessThan(60);
+    }
+    expect(splashes(path, 0, lcg())).toEqual([]);
+  });
+});
+
+describe('slant', () => {
+  test('leans about the baseline: points on it stay, points above it move right', () => {
+    const place = { x: 0, y: 0, scale: 0.1, ascender: 800 };
+    expect(leanAbout({ x: 10, y: 80 }, place, 0.5)).toEqual({ x: 10, y: 80 });
+    expect(leanAbout({ x: 10, y: 60 }, place, 0.5).x).toBeCloseTo(20);
+  });
+});
+
+describe('shaky hand', () => {
+  test('the tremor stays within the amount', () => {
+    const waves = tremorWaves(12, lcg());
+    for (let a = 0; a < 3; a += 0.01) expect(Math.abs(tremorAt(a, waves))).toBeLessThanOrEqual(1);
+    expect(new Set(Array.from({ length: 20 }, (_, i) => tremorAt(i * 0.05, waves).toFixed(3))).size).toBeGreaterThan(10);
+  });
+});
+
+describe('neon', () => {
+  const o = { flicker: 0.4, faulty: 0, warmup: 0.6 };
+
+  test('the same glyph and step flicker the same every time', () => {
+    expect(brightness(3, 17, 2, o)).toBe(brightness(3, 17, 2, o));
+  });
+
+  test('a tube sputters as it warms up, then holds steady but for its hum', () => {
+    const warming = Array.from({ length: 40 }, (_, step) => brightness(3, step, 0.05, o));
+    expect(warming.some((b) => b < 0.2)).toBe(true);
+    const lit = Array.from({ length: 200 }, (_, step) => brightness(3, step, 5, o));
+    expect(Math.min(...lit)).toBeGreaterThan(0.9);
+  });
+
+  test('a faulty tube stutters for good; with no hum a sound one is fully lit', () => {
+    const faulty = Array.from({ length: 400 }, (_, step) => brightness(3, step, 5, { ...o, faulty: 1 }));
+    expect(faulty.some((b) => b < 0.2)).toBe(true);
+    expect(brightness(3, 9, 5, { flicker: 0, faulty: 0, warmup: 0 })).toBe(1);
+  });
+});
+
+describe('laser', () => {
+  test('the line is white-hot where the beam is, cooling to its final color', () => {
+    const red: [number, number, number, number] = [255, 0, 0, 1];
+    const char: [number, number, number, number] = [40, 20, 10, 1];
+    expect(cooled(0, 1, red, char)).toEqual([255, 191, 191, 1]);
+    expect(cooled(0.25, 1, red, char)).toEqual(red);
+    expect(cooled(5, 1, red, char)).toEqual(char);
+  });
+
+  test('the beam comes from off the text on the side asked for', () => {
+    const box = { minX: 0, minY: 0, maxX: 200, maxY: 100 };
+    expect(emitterAt(box, 'top', 100)).toEqual({ x: 100, y: -150 });
+    expect(emitterAt(box, 'left', 100).x).toBeLessThan(0);
+  });
+});
+
+describe('graphite', () => {
+  test('splinters lie off the line, shed along it', () => {
+    const path = line(0, 400, 0, 8);
+    const list = splinters(path, 100, 1, lcg());
+    expect(list).toHaveLength(20);
+    for (const f of list) expect(Math.abs(f.y)).toBeGreaterThanOrEqual(4);
+  });
+
+  test('dust is smudged down and to the right of the line', () => {
+    for (const b of smudges(line(0, 400, 0, 8), 100, 1, lcg())) {
+      expect(b.y).toBeGreaterThan(0);
+      expect(b.alpha).toBeLessThan(0.2);
+    }
+  });
+
+  test('softer graphite is darker', () => {
+    const level = (c: string) => Number(/rgb\((\d+)/.exec(c)![1]);
+    expect(level(graphiteGray(1))).toBeLessThan(level(graphiteGray(0)));
+  });
+});
+
+describe('karaoke', () => {
+  const glyph = (entryIndex: number, x: number, start: number): PlacedStroke =>
+    ({
+      entryIndex,
+      start,
+      place: { x, y: 0, scale: 0.1, ascender: 800 },
+      rawPath: line(x + 10, x + 90, 50),
+      path: line(x + 10, x + 90, 50),
+      glyph: { w: 1000 },
+    }) as unknown as PlacedStroke;
+
+  test('the ball lands on each glyph as it starts, above the line, hopping between', () => {
+    const stops = landings([glyph(0, 0, 0), glyph(1, 100, 1)], 100, 0.1);
+    expect(stops.map((s) => [s.x, s.time])).toEqual([
+      [50, 0],
+      [150, 1],
+    ]);
+    expect(ballAt(stops, 0, 30)).toMatchObject({ x: 50 });
+    const mid = ballAt(stops, 0.5, 30)!;
+    expect(mid.x).toBeCloseTo(100);
+    expect(mid.y).toBeLessThan(stops[0]!.y - 25);
+    expect(ballAt(stops, 9, 30)).toMatchObject({ x: 150 });
+  });
+});
+
+describe('haptics', () => {
+  test('a tap on touch-down, a buzz while writing if asked for, nothing on a seek', () => {
+    expect(hapticFor({ distance: 5, touches: 1 }, { tap: 14, buzz: false }, 1)).toBe(14);
+    expect(hapticFor({ distance: 5, touches: 0 }, { tap: 14, buzz: false }, 1)).toBeNull();
+    expect(hapticFor({ distance: 5, touches: 0 }, { tap: 14, buzz: true }, 1)).toBe(6);
+    expect(hapticFor({ distance: 5, touches: 0 }, { tap: 14, buzz: true }, 0.01)).toBeNull();
+    expect(hapticFor(null, { tap: 14, buzz: true }, 1)).toBeNull();
   });
 });

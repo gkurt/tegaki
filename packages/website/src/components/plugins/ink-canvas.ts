@@ -67,3 +67,32 @@ export function silhouette(
   c.restore();
   return into;
 }
+
+/**
+ * A soft copy of the ink in its own colors, for a glow: the region shrunk
+ * `k` times into `into` — draw it back stretched to the region's size and
+ * the browser's smoothing blurs it by about `k` device px. Unlike a canvas
+ * shadow, it keeps each stroke's color, so a dimmed glyph glows dimmer.
+ */
+export function shrunk(
+  into: HTMLCanvasElement,
+  ink: CanvasImageSource,
+  r: Region,
+  k: number,
+): { canvas: HTMLCanvasElement; w: number; h: number } {
+  const w = Math.max(1, Math.ceil(r.w / k));
+  const h = Math.max(1, Math.ceil(r.h / k));
+  if (into.width < w || into.height < h) {
+    into.width = Math.max(into.width, w);
+    into.height = Math.max(into.height, h);
+  }
+  const c = into.getContext('2d')!;
+  c.save();
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.globalCompositeOperation = 'copy';
+  c.imageSmoothingEnabled = true;
+  c.imageSmoothingQuality = 'high';
+  c.drawImage(ink, r.x, r.y, r.w, r.h, 0, 0, w, h);
+  c.restore();
+  return { canvas: into, w, h };
+}

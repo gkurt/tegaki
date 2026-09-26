@@ -44,7 +44,16 @@ import { cssFontFamily, drawsFallbackGlyphs, graphemes, lookupGlyphData } from '
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
 import { effectPlugins } from './effectPlugins.ts';
-import { allPluginSteps, outlineWith, type PluginSteps, paintWith, pluginStepsAt, reshapeWith, steppedPlugins } from './plugins.ts';
+import {
+  allPluginSteps,
+  outlineWith,
+  type PluginSteps,
+  paintWith,
+  pluginStepsAt,
+  reshapeWith,
+  shapeSteps,
+  steppedPlugins,
+} from './plugins.ts';
 import { buildChildren, buildRootProps, canvasBoxStyle, domCreateElement } from './render-elements.ts';
 import { getShaperForBundle, registerShaper, settledShaperForBundle } from './shaper-registry.ts';
 import type {
@@ -1693,7 +1702,7 @@ export class TegakiEngine {
     fontSize: number,
   ): { path: Path2D; placed: boolean }[] {
     const plugins = this._allPlugins();
-    const { steps, key: stepKey } = this._steps;
+    const { steps, key: stepKey } = shapeSteps(this._steps.steps);
     const reshape = outlineWith(plugins, this._reportPluginError, steps);
     const step = reshape ? segmentLengthFU : 0;
     const key = reshape ? plugins : null;
@@ -1767,7 +1776,9 @@ export class TegakiEngine {
     const deps: unknown[] = [strokes, layout, fontSize, lineHeight, plugins, this._quality, this._seed];
     if (!this._placed?.deps.every((d, i) => d === deps[i])) this._placed = { deps, byStep: new Map() };
     const byStep = this._placed.byStep;
-    const stepKey = [...steps.values()].join(',');
+    // Only the steps of plugins that reshape the ink make a different drawing.
+    const shaping = shapeSteps(steps);
+    const stepKey = shaping.key;
     const cached = byStep.get(stepKey);
     if (cached) return cached;
 
@@ -1781,7 +1792,7 @@ export class TegakiEngine {
     const clipText = this._quality?.clipText;
     const random = (key: string | number) => seededRandom(this._seed, key);
     const list = placeStrokes(strokes, {
-      reshape: reshapeWith(plugins, { fontSize, random }, this._reportPluginError, steps),
+      reshape: reshapeWith(plugins, { fontSize, random }, this._reportPluginError, shaping.steps),
       getSubdivided: this._subdivider(font, scale),
       strokeScale: typeof clipText === 'number' ? clipText : 1,
       placeEntry: (ei) => {
@@ -1921,9 +1932,11 @@ export class TegakiEngine {
     const inkCtx = ink.getContext('2d')!;
     inkCtx.globalCompositeOperation = 'copy';
     inkCtx.drawImage(canvas, 0, 0);
-    const context = { ctx, ink, bounds, fontSize, scale, color, random: (key: string | number) => seededRandom(this._seed, key) };
+    const steps = this._steps.steps;
+    const context = { ctx, ink, bounds, fontSize, scale, color, random: (key: string | number) => seededRandom(this._seed, key), step: 0 };
     for (const plugin of plugins) {
       if (!plugin.ink) continue;
+      context.step = steps.get(plugin) ?? 0;
       ctx.save();
       this._runHook(plugin, 'ink', () => plugin.ink!(context));
       ctx.restore();
@@ -1942,7 +1955,8 @@ export class TegakiEngine {
     fontSize: number,
     color: string,
   ): void {
-    const paint: TegakiPaintContext = { ctx, frame, fontSize, color, random: (key) => seededRandom(this._seed, key) };
+    const steps = this._steps.steps;
+    const paint: TegakiPaintContext = { ctx, frame, fontSize, color, random: (key) => seededRandom(this._seed, key), step: 0 };
 
     if (plugins.some((p) => p.underlay)) {
       const canvas = this._canvasEl;
@@ -1959,7 +1973,7 @@ export class TegakiEngine {
       for (const plugin of plugins) {
         if (!plugin.underlay) continue;
         uctx.save();
-        this._runHook(plugin, 'underlay', () => plugin.underlay!({ ...paint, ctx: uctx }));
+        this._runHook(plugin, 'underlay', () => plugin.underlay!({ ...paint, ctx: uctx, step: steps.get(plugin) ?? 0 }));
         uctx.restore();
       }
       ctx.save();
@@ -1972,7 +1986,7 @@ export class TegakiEngine {
     for (const plugin of plugins) {
       if (!plugin.overlay) continue;
       ctx.save();
-      this._runHook(plugin, 'overlay', () => plugin.overlay!(paint));
+      this._runHook(plugin, 'overlay', () => plugin.overlay!({ ...paint, step: steps.get(plugin) ?? 0 }));
       ctx.restore();
     }
 
@@ -2062,7 +2076,7 @@ export class TegakiEngine {
     const random = (key: string | number) => seededRandom(this._seed, key);
     const frame = sampleFrame(this._placedStrokes(), currentTime, this._timing);
     const strokes = frame.strokes;
-    const paint = paintWith(plugins, this._reportPluginError);
+    const paint = paintWith(plugins, this._reportPluginError, undefined, this._steps.steps);
     const textBox = this._textBox(layout, fontSize, lineHeight);
     // Clipped ink glows as a whole (the glow plugin's `ink`), fallback text with it.
     const fallbackEffects = clipText ? this._resolvedEffects.filter((e) => e.effect !== 'glow') : this._resolvedEffects;
@@ -2160,7 +2174,7 @@ export class TegakiEngine {
         maxSegLenFU,
         document.fonts?.status,
         // The outlines move with the drawing a plugin's steps show.
-        this._steps.key,
+        shapeSteps(this._steps.steps).key,
       ];
       const lastKey = this._maskKey;
       if (!lastKey || lastKey.length !== maskKey.length || maskKey.some((v, i) => v !== lastKey[i])) {

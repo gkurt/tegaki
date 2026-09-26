@@ -1,4 +1,4 @@
-import { type Box, createPlugin, type PlacedStroke, unionBoxes } from 'tegaki/core';
+import { type Box, createPlugin, type PlacedStroke, paintStroke, unionBoxes } from 'tegaki/core';
 
 export type PaperStyle = 'ruled' | 'tian' | 'mi' | 'graph';
 
@@ -83,7 +83,8 @@ export function paperBounds(layout: PaperLayout, style: PaperStyle, fontSize: nu
  * A practice sheet under the text, laid out by where its glyphs sit: school
  * ruled lines (capital line, dashed middle, baseline), a 田字格 or 米字格
  * square around each character — the grids Chinese and Japanese are
- * practised on — or graph paper. An `underlay`: clip-to-text doesn't cut it,
+ * practised on — or graph paper, with a tracing guide of the text to come
+ * if wanted. An `underlay`: clip-to-text doesn't cut it,
  * and it's under the ink. Each stroke knows where its glyph sits (`place`),
  * which is all the layout needs.
  */
@@ -105,12 +106,25 @@ export const paperPlugin = createPlugin({
     },
     color: { type: 'color', label: 'Color', default: '#3b82f6' },
     opacity: { type: 'number', label: 'Opacity', default: 0.45, min: 0.05, max: 1, step: 0.05 },
+    trace: {
+      type: 'select',
+      label: 'Tracing guide',
+      description: 'The text to write, shown on the paper to trace over.',
+      default: 'none',
+      options: [
+        { value: 'none', label: 'None' },
+        { value: 'faint', label: 'Faint' },
+        { value: 'dotted', label: 'Dotted' },
+      ],
+    },
   },
   presets: {
     Kanji: { style: 'mi', color: '#e5484d', opacity: 0.5 },
     Notebook: { style: 'graph', color: '#64748b', opacity: 0.35 },
+    Worksheet: { style: 'ruled', trace: 'dotted' },
+    'Kanji tracing': { style: 'tian', color: '#e5484d', opacity: 0.5, trace: 'faint' },
   },
-  setup: ({ style, color, opacity }) => {
+  setup: ({ style, color, opacity, trace }) => {
     let cached: { first: PlacedStroke | undefined; count: number; fontSize: number; layout: PaperLayout } | null = null;
     const layoutOf = (strokes: readonly PlacedStroke[], fontSize: number) => {
       // Frames come and go, but their strokes stay where the layout put them.
@@ -122,50 +136,80 @@ export const paperPlugin = createPlugin({
     };
     return {
       bounds: ({ strokes, fontSize }) => paperBounds(paperLayout(strokes, fontSize), style, fontSize),
-      underlay({ ctx, frame, fontSize }) {
+      underlay({ ctx, frame, fontSize, color: ink }) {
         const layout = layoutOf(frame.strokes, fontSize);
-        const line = Math.max(1, fontSize * 0.012);
-        const dash = [fontSize * 0.04, fontSize * 0.035];
-        ctx.globalAlpha = opacity;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = line;
-        const rule = (x0: number, y0: number, x1: number, y1: number, dashed = false, alpha = 1) => {
-          ctx.setLineDash(dashed ? dash : []);
-          ctx.globalAlpha = opacity * alpha;
-          ctx.beginPath();
-          ctx.moveTo(x0, y0);
-          ctx.lineTo(x1, y1);
-          ctx.stroke();
-        };
-        if (style === 'ruled') {
-          for (const l of layout.lines) {
-            const x0 = l.left - RUN * fontSize;
-            const x1 = l.right + RUN * fontSize;
-            rule(x0, l.baseline - CAP * fontSize, x1, l.baseline - CAP * fontSize);
-            rule(x0, l.baseline - MIDDLE * fontSize, x1, l.baseline - MIDDLE * fontSize, true, 0.8);
-            rule(x0, l.baseline, x1, l.baseline);
+        drawPaper(layout, fontSize);
+        // The guide, over the paper: each stroke whole, faint, or as a line of dots along its middle.
+        ctx.setLineDash([]);
+        if (trace === 'faint') {
+          ctx.globalAlpha = 0.16;
+          for (const s of frame.strokes) paintStroke({ ctx, stroke: { ...s, state: 'done', progress: 1 }, style: ink, lineCap: 'round' });
+        } else if (trace === 'dotted') {
+          const dot = Math.max(1.5, fontSize * 0.022);
+          ctx.globalAlpha = 0.35;
+          ctx.strokeStyle = ink;
+          ctx.fillStyle = ink;
+          ctx.lineWidth = dot;
+          ctx.lineCap = 'round';
+          ctx.setLineDash([0, dot * 2.4]);
+          for (const s of frame.strokes) {
+            const pts = s.path.points;
+            ctx.beginPath();
+            if (pts.length === 1) {
+              ctx.arc(pts[0]!.x, pts[0]!.y, dot / 2, 0, Math.PI * 2);
+              ctx.fill();
+              continue;
+            }
+            ctx.moveTo(pts[0]!.x, pts[0]!.y);
+            for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i]!.x, pts[i]!.y);
+            ctx.stroke();
           }
-        } else if (style === 'graph') {
-          const box = paperBounds(layout, style, fontSize);
-          if (!box) return;
-          const step = fontSize / 4;
-          const snap = (v: number) => Math.floor(v / step) * step;
-          for (let x = snap(box.minX); x <= box.maxX; x += step)
-            rule(x, box.minY, x, box.maxY, false, Math.round(x / step) % 4 === 0 ? 1 : 0.45);
-          for (let y = snap(box.minY); y <= box.maxY; y += step)
-            rule(box.minX, y, box.maxX, y, false, Math.round(y / step) % 4 === 0 ? 1 : 0.45);
-        } else {
-          for (const c of layout.cells) {
-            ctx.setLineDash([]);
-            ctx.globalAlpha = opacity;
-            ctx.strokeRect(c.x, c.y, c.size, c.size);
-            const mx = c.x + c.size / 2;
-            const my = c.y + c.size / 2;
-            rule(mx, c.y, mx, c.y + c.size, true, 0.8);
-            rule(c.x, my, c.x + c.size, my, true, 0.8);
-            if (style === 'mi') {
-              rule(c.x, c.y, c.x + c.size, c.y + c.size, true, 0.6);
-              rule(c.x + c.size, c.y, c.x, c.y + c.size, true, 0.6);
+        }
+
+        function drawPaper(layout: PaperLayout, fontSize: number) {
+          const line = Math.max(1, fontSize * 0.012);
+          const dash = [fontSize * 0.04, fontSize * 0.035];
+          ctx.globalAlpha = opacity;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = line;
+          const rule = (x0: number, y0: number, x1: number, y1: number, dashed = false, alpha = 1) => {
+            ctx.setLineDash(dashed ? dash : []);
+            ctx.globalAlpha = opacity * alpha;
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x1, y1);
+            ctx.stroke();
+          };
+          if (style === 'ruled') {
+            for (const l of layout.lines) {
+              const x0 = l.left - RUN * fontSize;
+              const x1 = l.right + RUN * fontSize;
+              rule(x0, l.baseline - CAP * fontSize, x1, l.baseline - CAP * fontSize);
+              rule(x0, l.baseline - MIDDLE * fontSize, x1, l.baseline - MIDDLE * fontSize, true, 0.8);
+              rule(x0, l.baseline, x1, l.baseline);
+            }
+          } else if (style === 'graph') {
+            const box = paperBounds(layout, style, fontSize);
+            if (!box) return;
+            const step = fontSize / 4;
+            const snap = (v: number) => Math.floor(v / step) * step;
+            for (let x = snap(box.minX); x <= box.maxX; x += step)
+              rule(x, box.minY, x, box.maxY, false, Math.round(x / step) % 4 === 0 ? 1 : 0.45);
+            for (let y = snap(box.minY); y <= box.maxY; y += step)
+              rule(box.minX, y, box.maxX, y, false, Math.round(y / step) % 4 === 0 ? 1 : 0.45);
+          } else {
+            for (const c of layout.cells) {
+              ctx.setLineDash([]);
+              ctx.globalAlpha = opacity;
+              ctx.strokeRect(c.x, c.y, c.size, c.size);
+              const mx = c.x + c.size / 2;
+              const my = c.y + c.size / 2;
+              rule(mx, c.y, mx, c.y + c.size, true, 0.8);
+              rule(c.x, my, c.x + c.size, my, true, 0.8);
+              if (style === 'mi') {
+                rule(c.x, c.y, c.x + c.size, c.y + c.size, true, 0.6);
+                rule(c.x + c.size, c.y, c.x, c.y + c.size, true, 0.6);
+              }
             }
           }
         }

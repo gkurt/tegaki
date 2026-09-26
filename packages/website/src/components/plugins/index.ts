@@ -18,10 +18,17 @@ import { brushPlugin } from './brush.ts';
 import { colorsPlugin } from './colors.ts';
 import { echoPlugin } from './echo.ts';
 import { grainPlugin } from './grain.ts';
+import { graphitePlugin } from './graphite.ts';
+import { hapticsPlugin } from './haptics.ts';
+import { karaokePlugin } from './karaoke.ts';
+import { laserPlugin } from './laser.ts';
+import { neonPlugin } from './neon.ts';
 import { nibPlugin } from './nib.ts';
 import { paperPlugin } from './paper.ts';
 import { penPlugin } from './pen.ts';
 import { shadowPlugin } from './shadow.ts';
+import { shakyPlugin } from './shaky.ts';
+import { slantPlugin } from './slant.ts';
 import { soundPlugin } from './sound.ts';
 import { sparklePlugin } from './sparkle.ts';
 import { strokeOrderPlugin } from './stroke-order.ts';
@@ -36,27 +43,36 @@ export interface ShowcasePlugin {
 
 // Listed in the order they run, which is the order that matters: geometry
 // first, so the painters get the reshaped strokes; underlays bottom-most
-// first; in the paint chain, whoever sets the color before whoever reads it
-// (Colors, then Wet ink), and Ballpoint's pieces before Wet ink times them;
-// in the ink hooks, grain taken out before the shadow is cast.
+// first, overlays top-most last; in the paint chain, whoever sets the color
+// before whoever reads it (Colors, then Wet ink), Ballpoint's pieces before
+// Wet ink times them, and the painters that bring their own color (Graphite,
+// Neon, Laser) after Colors; in the ink hooks, the glows and grain before
+// the shadow is cast.
 export const SHOWCASE_PLUGINS: readonly ShowcasePlugin[] = [
   // Shipped in tegaki/core, not demos.
   { id: 'vary', factory: variationPlugin },
   { id: 'boil', factory: boilPlugin },
+  { id: 'slant', factory: slantPlugin },
+  { id: 'shaky', factory: shakyPlugin },
   { id: 'nib', factory: nibPlugin },
   { id: 'paper', factory: paperPlugin },
-  { id: 'pen', factory: penPlugin },
   { id: 'order', factory: strokeOrderPlugin },
   { id: 'colors', factory: colorsPlugin },
   { id: 'ball', factory: ballpointPlugin },
+  { id: 'graphite', factory: graphitePlugin },
   { id: 'wet', factory: wetPlugin },
+  { id: 'neon', factory: neonPlugin },
+  { id: 'laser', factory: laserPlugin },
   { id: 'brush', factory: brushPlugin },
   { id: 'echo', factory: echoPlugin },
   { id: 'grain', factory: grainPlugin },
   { id: 'bleed', factory: bleedPlugin },
   { id: 'shadow', factory: shadowPlugin },
   { id: 'sparkle', factory: sparklePlugin },
+  { id: 'karaoke', factory: karaokePlugin },
+  { id: 'pen', factory: penPlugin },
   { id: 'sound', factory: soundPlugin },
+  { id: 'haptics', factory: hapticsPlugin },
 ];
 
 /** Some of a plugin's options, by param key. */

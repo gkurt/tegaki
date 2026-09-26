@@ -1,10 +1,17 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { StrokePath } from '../lib/strokePath.ts';
-import type { StrokeGeometryContext } from '../lib/strokeTimeline.ts';
-import { allPluginSteps, normalizeSteps, outlineWith, pluginStepsAt, reshapeWith, stepAt } from './plugins.ts';
+import type { StrokeFrame, StrokeGeometryContext } from '../lib/strokeTimeline.ts';
+import { allPluginSteps, normalizeSteps, outlineWith, paintWith, pluginStepsAt, reshapeWith, shapeSteps, stepAt } from './plugins.ts';
 import type { TegakiPlugin } from './types.ts';
 
-const boil = (count: number, fps: number, name = 'boil'): TegakiPlugin => ({ name, steps: { count, fps } });
+/** A plugin whose steps reshape the ink (it has `geometry`), as line boil's do. */
+const boil = (count: number, fps: number, name = 'boil'): TegakiPlugin => ({ name, steps: { count, fps }, geometry: (p) => p });
+/** A plugin whose steps only paint, as a flicker's do. */
+const flicker = (count: number, fps: number): TegakiPlugin => ({
+  name: 'flicker',
+  steps: { count, fps, idle: true },
+  paint: (s, next) => next(s),
+});
 
 describe('normalizeSteps', () => {
   test('a count is made whole, and one drawing (or no fps) is nothing to cycle', () => {
@@ -105,5 +112,58 @@ describe('hooks are told their drawing', () => {
     };
     outlineWith([stepped], mock(), new Map([[stepped, 1]]))!([], { place: { x: 0, y: 0, scale: 1, ascender: 0 }, seed: 0, fontSize: 10 });
     expect(step).toBe(1);
+  });
+});
+
+describe('steps that only paint', () => {
+  test("add no drawings for the canvas to hold, and don't key the placed strokes", () => {
+    const shaping = boil(3, 12);
+    const painting = flicker(8, 24);
+    expect(allPluginSteps([shaping, painting])).toHaveLength(3);
+    const { steps } = pluginStepsAt([shaping, painting], 0.1);
+    expect(shapeSteps(steps).steps.has(painting)).toBe(false);
+    expect(shapeSteps(steps).key).toBe(String(steps.get(shaping)));
+  });
+
+  test('paint is told its own plugin’s step, and 0 without steps', () => {
+    const seen: [string, number][] = [];
+    const a: TegakiPlugin = {
+      name: 'a',
+      steps: { count: 4, fps: 10 },
+      paint: (s, next) => {
+        seen.push(['a', s.step]);
+        next(s);
+      },
+    };
+    const b: TegakiPlugin = {
+      name: 'b',
+      paint: (s, next) => {
+        seen.push(['b', s.step]);
+        next(s);
+      },
+    };
+    const ctx = { save() {}, restore() {} } as unknown as CanvasRenderingContext2D;
+    const paint = paintWith(
+      [a, b],
+      () => {},
+      () => {},
+      new Map([[a, 3]]),
+    );
+    paint({
+      ctx,
+      stroke: {} as StrokeFrame,
+      style: '#000',
+      lineCap: 'round',
+      color: '#000',
+      fontSize: 10,
+      scale: 1,
+      textBox: { minX: 0, minY: 0, maxX: 1, maxY: 1 },
+      time: 0,
+      random: () => Math.random,
+    });
+    expect(seen).toEqual([
+      ['a', 3],
+      ['b', 0],
+    ]);
   });
 });

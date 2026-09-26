@@ -48,7 +48,8 @@ export function PluginsPanel({ settings, set }: { settings: UrlState; set: SetSe
         <div className="flex flex-col gap-1">
           <SeedControl value={settings.seed} onChange={(v) => set('seed', v)} />
           <Hint>
-            What Variation, Boil, Brush, Ballpoint, Sparkles and shuffled Colors draw by — the same seed draws the same every time.
+            What Variation, Boil and the random demos — Brush, Ballpoint, Shaky hand, Graphite, Neon, Sparkles, shuffled Colors — draw by:
+            the same seed draws the same every time.
           </Hint>
         </div>
         {SHOWCASE_PLUGINS.map((p) => (
@@ -63,8 +64,8 @@ export function PluginsPanel({ settings, set }: { settings: UrlState; set: SetSe
         ))}
       </DialScope>
       <Hint>
-        Stroke order, Brush and Practice paper's 田字格 / 米字格 suit kanji best — try Klee One with 永 or 書. Sound starts once you've
-        clicked on the page.
+        Stroke order, Brush (try its Scroll preset) and Practice paper's 田字格 / 米字格 suit kanji best — try Klee One with 永 or 書. Neon
+        and Laser shine on the dark theme. Sound starts once you've clicked on the page; Haptics buzz on Android phones.
       </Hint>
     </Section>
   );

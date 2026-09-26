@@ -162,6 +162,13 @@ interface TegakiPluginContext {
    * Key it by what should look the same across frames, e.g. a stroke's id.
    */
   random(key: string | number): () => number;
+  /**
+   * Which of the plugin's {@link TegakiPlugin.steps} drawings is showing,
+   * from `0`; always `0` for a plugin without steps. A plugin whose steps
+   * only paint — no `geometry` or `outline`, say a flicker — costs no more
+   * than a redraw per step.
+   */
+  step: number;
 }
 
 /** What `underlay` and `overlay` paint with. */
@@ -308,7 +315,9 @@ export interface TegakiPlugin {
    * `ctx.step`; the engine keeps them all and shows one at a time — chosen
    * from the time in controlled mode (so a video renders the same every
    * time), from the clock otherwise. The canvas is sized to hold every
-   * drawing. Reduced motion (see `reducedMotion`) holds the first.
+   * drawing. Reduced motion (see `reducedMotion`) holds the first. The
+   * painting hooks are told the drawing too (`step`), so a plugin with no
+   * `geometry` can use steps as a clock for painting alone (a flicker).
    */
   steps?: TegakiPluginSteps;
 }
