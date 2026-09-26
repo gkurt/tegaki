@@ -122,39 +122,6 @@ p code {
   filter: invert(1);
 }
 
-/* ------------------------------------------------------------------ seal */
-
-.seal {
-  display: inline-grid;
-  grid-template-rows: 1fr 1fr;
-  place-items: center;
-  flex: none;
-  font-family: var(--kanji);
-  font-weight: 700;
-  line-height: 1;
-  color: var(--paper);
-  background: var(--seal);
-  border-radius: 0.14em;
-  outline: 0.05em solid color-mix(in srgb, var(--paper) 80%, transparent);
-  outline-offset: -0.16em;
-  transform: rotate(-4deg);
-  user-select: none;
-}
-
-.seal-sm {
-  width: 30px;
-  height: 36px;
-  padding: 4px 0 3px;
-  font-size: 13px;
-}
-
-.seal-lg {
-  width: 1.3em;
-  height: 2.3em;
-  padding: 0.18em 0;
-  font-size: clamp(38px, 5vw, 64px);
-}
-
 /* -------------------------------------------------------------------- nav */
 
 .nav {
@@ -1338,7 +1305,6 @@ p code {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: clamp(8px, 2vw, 28px);
 }
 
 .finale-line {
@@ -1346,16 +1312,6 @@ p code {
   /* "Now, write yours." is 6.2em in Parisienne; keep it on one line (see .hero-headline). */
   font-size: min(clamp(56px, 10.5vw, 168px), (100vw - 2 * clamp(16px, 4vw, 40px)) / 6.3);
   line-height: 1.15;
-}
-
-.finale-writing .seal-lg {
-  margin-bottom: 0.25em;
-  opacity: 0;
-  transform: rotate(-8deg) scale(2.4);
-}
-
-.finale-writing .seal-lg.stamped {
-  animation: stamp 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) forwards;
 }
 
 .cta-center {
@@ -1421,20 +1377,6 @@ p code {
 @keyframes draw {
   from {
     stroke-dashoffset: 200;
-  }
-}
-
-@keyframes stamp {
-  0% {
-    opacity: 0;
-    transform: rotate(-8deg) scale(2.4);
-  }
-  60% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 1;
-    transform: rotate(-8deg) scale(1);
   }
 }
 
@@ -1514,14 +1456,5 @@ p code {
   .replay {
     position: static;
     align-self: flex-end;
-  }
-
-  .finale-writing {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .finale-writing .seal-lg {
-    margin: 12px 0 0;
   }
 }

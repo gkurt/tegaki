@@ -1,13 +1,12 @@
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef } from 'react';
 import { TegakiRenderer } from 'tegaki';
 import { INK, useFont, useInView, useTheme } from './shared.ts';
 
-/** "Now, write yours." — and when the pen lifts, the seal comes down. */
+/** "Now, write yours." */
 export function Finale() {
   const ref = useRef<HTMLDivElement>(null);
   const seen = useInView(ref, { once: true, threshold: 0.5 });
   const font = useFont(seen ? 'Parisienne' : null);
-  const [stamped, setStamped] = useState(false);
   const theme = useTheme();
   const palette = INK[theme];
   const effects = useMemo(
@@ -19,7 +18,7 @@ export function Finale() {
 
   return (
     <div ref={ref} className="finale-writing">
-      {/* Keyed so the line and seal are replaced, not moved, when the font arrives. */}
+      {/* Keyed so the line is replaced, not moved, when the font arrives. */}
       <Fragment key={font ? 'ink' : 'placeholder'}>
         <div className="finale-line" aria-hidden="true">
           {font ? (
@@ -28,17 +27,12 @@ export function Finale() {
               time={{ mode: 'uncontrolled', duration: 4, delay: 0.2 }}
               effects={effects}
               quality={{ smoothing: true, pixelRatio: 1.5 }}
-              onComplete={() => setStamped(true)}
             >
               Now, write yours.
             </TegakiRenderer>
           ) : (
             <span className="write-placeholder">Now, write yours.</span>
           )}
-        </div>
-        <div className={`seal seal-lg${stamped ? ' stamped' : ''}`} aria-hidden="true">
-          <span>手</span>
-          <span>書</span>
         </div>
       </Fragment>
     </div>
