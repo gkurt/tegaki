@@ -76,7 +76,17 @@ async function resolveFont(
   return { family, fontBuffer, extraFontBuffers, fontFileName: basename(fontPaths[0]!), local: false };
 }
 
+/**
+ * Quote one argv entry for Padrone, which joins argv with spaces and tokenizes
+ * the line again: without quotes, `-c "Hello World"` would lose "World" to the
+ * positional family. Its tokenizer reads `"…"` with backslash escapes.
+ */
+export function quoteArg(arg: string): string {
+  return arg === '' || /[\s"'\\]/.test(arg) ? `"${arg.replace(/["\\]/g, '\\$&')}"` : arg;
+}
+
 export const tegakiProgram = createPadrone('tegaki')
+  .runtime({ argv: () => process.argv.slice(2).map(quoteArg) })
   .configure({
     description: 'Generate glyph data for handwriting animation',
   })
@@ -296,4 +306,8 @@ export const tegakiProgram = createPadrone('tegaki')
       }),
   );
 
-if (import.meta.main) await tegakiProgram.cli().drain();
+if (import.meta.main) {
+  // Padrone prints the error but leaves the exit code at 0; scripts and agents read it.
+  const { error } = await tegakiProgram.cli().drain();
+  if (error) process.exitCode = 1;
+}

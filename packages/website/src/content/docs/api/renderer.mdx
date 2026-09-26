@@ -292,15 +292,17 @@ const strokeOrder: TegakiPlugin = {
 
 ## Helper functions
 
-### `computeTimeline(text, font)`
+### `computeTimeline(text, font, timing?, shaper?)`
 
-Computes the total animation duration for a given text and font bundle. Useful for controlled time mode.
+Computes the total animation duration for a given text and font bundle. Useful for controlled time mode, and for sizing a video to the writing.
 
 ```ts
 import { computeTimeline } from 'tegaki';
 
 const { totalDuration } = computeTimeline('Hello', bundle);
 ```
+
+Pass the same `timing` the renderer gets, and — when a shaper is registered — the shaper (`await createHarfbuzzShaper(bundle)` from `tegaki/shaper-harfbuzz`), so the duration matches what is drawn.
 
 ### `strokeInstances(timeline, font)`
 

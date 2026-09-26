@@ -71,7 +71,6 @@ packages/renderer/src/
   solid/                      # SolidJS adapter
   astro/TegakiRenderer.astro  # Astro adapter (SSR-capable)
   wc/                         # Web Component adapter (`<tegaki-renderer>`)
-  remotion/                   # Remotion-specific helpers
 ```
 
 Pre-generated font bundles live outside `src/`, under `packages/renderer/fonts/<family>/` and are regenerated via `bun --filter tegaki generate-fonts`.
