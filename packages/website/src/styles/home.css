@@ -80,7 +80,8 @@ code {
   font-size: 0.86em;
 }
 
-p code {
+p code,
+dd code {
   padding: 0.08em 0.36em;
   border-radius: 5px;
   background: var(--rule-soft);
@@ -1340,6 +1341,42 @@ p code {
 .ship-links a:hover {
   color: var(--seal);
   border-color: var(--seal);
+}
+
+/* ------------------------------------------------------------------- 07 faq */
+
+.faq {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 48px;
+  margin: 0;
+}
+
+.faq-item {
+  padding: 24px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.faq dt {
+  margin-bottom: 8px;
+  font-family: var(--serif);
+  font-size: 24px;
+  line-height: 1.2;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.faq dd {
+  margin: 0;
+  font-size: 16px;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+@media (max-width: 760px) {
+  .faq {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* ---------------------------------------------------------------- finale */

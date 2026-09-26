@@ -9,104 +9,19 @@ import { Scripts } from '../components/home/Scripts';
 import { Styles } from '../components/home/Styles';
 import { TypeIt } from '../components/home/TypeIt';
 import { Write } from '../components/home/Write';
+import { FRAMEWORKS } from '../components/home/snippets';
+import { homeJsonLd, jsonLdString, SHARED_HEAD_LINKS } from '../seo';
+import { FAQ, SITE_URL } from '../site';
 import logoDark from '../assets/tegaki-dark.svg';
 import logo from '../assets/tegaki.svg';
 import '../styles/home.css';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
-const title = 'Tegaki — handwriting animation for any font';
+const title = 'Tegaki — Handwriting Animation Library & Generator for Any Font';
 const description =
-  'Handwriting animation for the web: Tegaki turns any font into text drawn stroke by stroke, in the order a hand would write it. Eight writing systems; React, Svelte, Vue, SolidJS, Astro, Web Components and vanilla JS.';
-
-const FRAMEWORKS = [
-  {
-    id: 'react',
-    label: 'React',
-    lang: 'tsx',
-    code: `import { TegakiRenderer } from 'tegaki';
-import caveat from 'tegaki/fonts/caveat';
-
-export const Note = () => (
-  <TegakiRenderer font={caveat} style={{ fontSize: 56 }}>
-    Hello, world!
-  </TegakiRenderer>
-);`,
-  },
-  {
-    id: 'svelte',
-    label: 'Svelte',
-    lang: 'svelte',
-    code: `<script>
-  import { TegakiRenderer } from 'tegaki/svelte';
-  import caveat from 'tegaki/fonts/caveat';
-</script>
-
-<TegakiRenderer font={caveat} text="Hello, world!"
-  style="font-size: 56px" />`,
-  },
-  {
-    id: 'vue',
-    label: 'Vue',
-    lang: 'vue',
-    code: `<script setup>
-import { TegakiRenderer } from 'tegaki/vue';
-import caveat from 'tegaki/fonts/caveat';
-</script>
-
-<template>
-  <TegakiRenderer :font="caveat" text="Hello, world!" />
-</template>`,
-  },
-  {
-    id: 'solid',
-    label: 'Solid',
-    lang: 'tsx',
-    code: `import { TegakiRenderer } from 'tegaki/solid';
-import caveat from 'tegaki/fonts/caveat';
-
-export const Note = () => (
-  <TegakiRenderer font={caveat} text="Hello, world!"
-    style={{ 'font-size': '56px' }} />
-);`,
-  },
-  {
-    id: 'astro',
-    label: 'Astro',
-    lang: 'astro',
-    code: `---
-import TegakiRenderer from 'tegaki/astro';
-import caveat from 'tegaki/fonts/caveat';
----
-
-<TegakiRenderer font={caveat} text="Hello, world!" />`,
-  },
-  {
-    id: 'wc',
-    label: 'Web Component',
-    lang: 'html',
-    code: `<tegaki-renderer font="Caveat" text="Hello, world!">
-</tegaki-renderer>
-
-<script type="module">
-  import { registerTegakiElement, TegakiEngine } from 'https://esm.sh/tegaki/wc';
-  import caveat from 'https://esm.sh/tegaki/fonts/caveat';
-  TegakiEngine.registerBundle(caveat);
-  registerTegakiElement();
-</script>`,
-  },
-  {
-    id: 'vanilla',
-    label: 'Vanilla',
-    lang: 'js',
-    code: `import { TegakiEngine } from 'tegaki/core';
-import caveat from 'tegaki/fonts/caveat';
-
-new TegakiEngine(document.querySelector('#note'), {
-  font: caveat,
-  text: 'Hello, world!',
-});`,
-  },
-];
+  'Open-source handwriting animation library and generator: any font, written stroke by stroke in natural stroke order. React, Svelte, Vue, Solid, Astro, Web Components, Remotion.';
+// FAQ answers are written in Markdown for llms.txt; here only their `code` spans need rendering.
+const codeSpans = (text: string) => text.split('`').map((part, i) => ({ part, code: i % 2 === 1 }));
 ---
 
 <html lang="en">
@@ -115,14 +30,25 @@ new TegakiEngine(document.querySelector('#note'), {
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
     <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
-    <link rel="canonical" href={new URL(`${base}/`, Astro.site)} />
+    <link rel="canonical" href={SITE_URL} />
+    <link rel="alternate" type="text/markdown" href={`${SITE_URL}index.md`} title="This page as Markdown" />
+    {SHARED_HEAD_LINKS.map((attrs) => <link {...attrs} />)}
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content={new URL(`${base}/tegaki-card.png`, Astro.site)} />
+    <meta property="og:url" content={SITE_URL} />
+    <meta property="og:site_name" content="Tegaki" />
+    <meta property="og:locale" content="en" />
+    <meta property="og:image" content={`${SITE_URL}tegaki-card.png`} />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="640" />
+    <meta property="og:image:alt" content="Tegaki — handwriting animation for any font" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@gkurttech" />
+    <meta name="twitter:creator" content="@gkurttech" />
+    <script type="application/ld+json" set:html={jsonLdString(homeJsonLd(title, description))} />
     <Font cssVariable="--font-geist" preload />
     <Font cssVariable="--font-geist-mono" preload />
     <Font cssVariable="--font-instrument-serif" preload />
@@ -180,11 +106,11 @@ new TegakiEngine(document.querySelector('#note'), {
     <main>
       <section class="hero">
         <p class="eyebrow"><span lang="ja">手書き</span> <i>tegaki</i> — Japanese for “handwriting”</p>
-        <h1 class="sr-only">Every font, written by hand.</h1>
+        <h1 class="sr-only">Every font, written by hand: Tegaki, the handwriting animation library and generator.</h1>
         <Hero client:load />
         <p class="lede">
-          Stroke-by-stroke handwriting animation for any font. Tegaki extracts each glyph's strokes, their order and width, and draws them on a
-          canvas over real, selectable text.
+          An open-source handwriting animation library for any font. Tegaki extracts each glyph's strokes, their order and width, and draws them
+          stroke by stroke on a canvas over real, selectable text.
         </p>
         <div class="cta">
           <a class="button button-primary" href={`${base}/getting-started/`}>
@@ -322,6 +248,23 @@ new TegakiEngine(document.querySelector('#note'), {
             <a href={`${base}/studio/`}>Bring your own font →</a>
           </div>
         </div>
+      </section>
+
+      <section class="chapter" id="faq" aria-labelledby="faq-title">
+        <header class="chapter-head">
+          <span class="chapter-num">07</span>
+          <h2 id="faq-title">Questions, <em>answered</em></h2>
+        </header>
+        <dl class="faq">
+          {
+            FAQ.map(({ q, a }) => (
+              <div class="faq-item">
+                <dt>{q}</dt>
+                <dd>{codeSpans(a).map(({ part, code }) => (code ? <code>{part}</code> : part))}</dd>
+              </div>
+            ))
+          }
+        </dl>
       </section>
 
       <section class="finale">

@@ -9,6 +9,16 @@ body {
   overscroll-behavior: none;
 }
 
+/* The page's heading and description, for crawlers and screen readers only (see studio.astro). */
+.studio-about {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* The page scrolls inside its panes, never as a whole. */
 html {
   scrollbar-gutter: auto;

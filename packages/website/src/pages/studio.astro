@@ -1,18 +1,33 @@
 ---
 import { Studio } from '../components/studio/Studio';
+import { jsonLdString, SHARED_HEAD_LINKS, studioJsonLd } from '../seo';
+import { CARD_IMAGE, SITE_URL } from '../site';
 import '../styles/studio.css';
+
+const title = 'Handwriting Animation Generator — Tegaki Studio';
+const description =
+  'Free handwriting animation generator: turn any font into animated handwriting in your browser. Tune the strokes and timing, then export PNG, GIF, WebM or SVG, or a font bundle for your app.';
+const url = `${SITE_URL}studio/`;
 ---
 
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Handwriting Animation Generator — Tegaki Studio</title>
-    <meta
-      name="description"
-      content="Turn any font into a handwriting animation in your browser. Tune the strokes and timing, then export PNG, GIF, WebM or SVG, or a font bundle for your app."
-    />
+    <title>{title}</title>
+    <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/favicon.svg`} />
+    <link rel="canonical" href={url} />
+    {SHARED_HEAD_LINKS.map((attrs) => <link {...attrs} />)}
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={url} />
+    <meta property="og:site_name" content="Tegaki" />
+    <meta property="og:image" content={CARD_IMAGE} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@gkurttech" />
+    <script type="application/ld+json" set:html={jsonLdString(studioJsonLd(title, description))} />
     <script is:inline>
       // Match the docs' theme choice (Starlight stores it here; '' follows the system) before first paint.
       (() => {
@@ -27,6 +42,16 @@ import '../styles/studio.css';
     </script>
   </head>
   <body>
+    <!-- The app draws in the browser only; this says what the page is to crawlers that don't run JavaScript, and to screen readers. -->
+    <div class="studio-about">
+      <h1>Tegaki Studio: handwriting animation generator</h1>
+      <p>{description}</p>
+      <p>
+        Pick a Google Font or upload your own .ttf or .otf, type your text, and watch it written stroke by stroke. Adjust stroke order, width,
+        timing, easing and effects (glow, wobble, taper, gradients), inspect each glyph through the stroke extraction pipeline, then export the
+        animation or download a font bundle for the Tegaki handwriting animation library.
+      </p>
+    </div>
     <Studio client:only="react" />
   </body>
 </html>

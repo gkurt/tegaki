@@ -160,7 +160,14 @@ packages/website/
     styles/global.css         # Tailwind v4 styles (imported via `@tailwindcss/vite`)
     styles/home.css           # Landing-page styles (paper/ink palette, light + dark)
     styles/studio.css         # Studio-only styles (canvas backdrop, scrubber, DialKit tuning) on top of global.css
+    site.ts                   # Site facts shared by astro.config.ts, page heads and agent files: URLs, sidebar, bundled fonts, FAQ
+    seo.ts                    # schema.org JSON-LD (home, studio, docs) and the <head> links every page shares
+    route-middleware.ts       # Starlight route middleware: each docs page's Markdown alternate link + TechArticle JSON-LD
+    llms/                     # Agent-facing text: mdx-to-markdown.ts (docs MDX → plain Markdown), content.ts (llms.txt, llms-full.txt, index.md, sitemap.md, skill.md)
+    pages/*.md.ts pages/*.txt.ts  # Endpoints writing those files: /llms.txt, /llms-full.txt, /skill.md, /sitemap.md, /index.md, and /<doc>.md next to every docs page
 ```
+
+SEO / agent readiness: every docs page has a Markdown mirror at its path + `.md`, listed in `llms.txt`; the sitemap's `<lastmod>` is each page's last git commit (deploy-docs.yml checks out full history). A new docs page needs an entry in `SIDEBAR` ([site.ts](packages/website/src/site.ts)); a new MDX component used in the docs needs a rule in [mdx-to-markdown.ts](packages/website/src/llms/mdx-to-markdown.ts) so the Markdown stays clean. Keep the home page's FAQ (`FAQ` in site.ts, also its FAQPage JSON-LD and llms.txt) true to the library.
 
 Dev server: `bun dev` → Astro at `http://localhost:4321/tegaki/`. Two preview routes share the same URL-state schema:
 

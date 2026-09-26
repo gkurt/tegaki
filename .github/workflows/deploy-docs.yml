@@ -31,6 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history: the sitemap's <lastmod> is each page's last commit.
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
 
       - name: Setup Pages

@@ -1,6 +1,9 @@
 ---
 title: Text Shaping
 description: Enable ligatures, contextual alternates, and complex scripts (Arabic, Indic) with the harfbuzz shaper.
+head:
+  - tag: title
+    content: 'Text Shaping: Ligatures and Complex Scripts | Tegaki'
 ---
 
 By default Tegaki renders text by walking graphemes one-by-one and looking each character up in the bundle's char-keyed glyph map. This is fast and SSR-safe, but it doesn't know how to form ligatures (`fi`, `ff`), apply contextual alternates (`calt`), or shape complex scripts (Arabic positional forms, Indic conjuncts).

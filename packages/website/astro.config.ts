@@ -1,6 +1,8 @@
+import { execFileSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync } from 'node:fs';
 import { rename, rm } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import react from '@astrojs/react';
 import sitemap from '@astrojs/sitemap';
 import solidJs from '@astrojs/solid-js';
@@ -11,15 +13,41 @@ import tailwindcss from '@tailwindcss/vite';
 import type { AstroIntegration } from 'astro';
 import { defineConfig, fontProviders } from 'astro/config';
 import starlightThemeNova from 'starlight-theme-nova';
+import { SHARED_HEAD_LINKS } from './src/seo.ts';
+import { BASE, CARD_IMAGE, DOCS_DESCRIPTION, REPO_URL, SIDEBAR, SITE, TWITTER_URL } from './src/site.ts';
 
 EventEmitter.defaultMaxListeners = 12;
 
-const site = 'https://gkurt.com';
-const base = '/tegaki';
+const site = SITE;
+const base = BASE;
 
 // Pages kept out of search results: /preview renders only what its URL state
 // asks for (blank without it), and /generator is a redirect to /studio.
 const UNINDEXED_PAGES = ['/preview/', '/generator/'].map((path) => `${site}${base}${path}`);
+
+/**
+ * The sources behind each page, for the sitemap's <lastmod>: a docs page is
+ * its MDX file, the home and studio pages their page file and components.
+ */
+const root = fileURLToPath(new URL('./', import.meta.url));
+
+function pageSources(url: string): string[] {
+  const path = url.slice(`${site}${base}/`.length).replace(/\/$/, '');
+  if (path === '') return ['src/pages/index.astro', 'src/components/home', 'src/site.ts'];
+  if (path === 'studio') return ['src/pages/studio.astro', 'src/components/studio', 'src/components/preview'];
+  return [`src/content/docs/${path}.mdx`, `src/content/docs/${path}.md`].filter((file) => existsSync(`${root}${file}`));
+}
+
+/** When the page's sources last changed in git; needs the full history (deploy-docs.yml fetches it). */
+function lastModified(url: string): string | undefined {
+  const sources = pageSources(url);
+  if (!sources.length) return undefined;
+  try {
+    return execFileSync('git', ['log', '-1', '--format=%cI', '--', ...sources], { cwd: root, encoding: 'utf8' }).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * @astrojs/sitemap always writes an index (`sitemap-index.xml`) over numbered
@@ -45,68 +73,33 @@ export default defineConfig({
   base,
   integrations: [
     // Starlight adds a plain sitemap only when none is configured; this one skips the pages above.
-    sitemap({ filter: (page) => !UNINDEXED_PAGES.includes(page) }),
+    sitemap({
+      filter: (page) => !UNINDEXED_PAGES.includes(page),
+      serialize: (item) => ({ ...item, lastmod: lastModified(item.url) }),
+    }),
     singleSitemap,
     starlight({
       title: 'Tegaki',
-      description:
-        'Animated handwriting from any font. Generate stroke data, render beautiful writing animations in React, Svelte, Vue, SolidJS, Astro, Web Components, or vanilla JS.',
+      description: DOCS_DESCRIPTION,
       logo: { light: './src/assets/tegaki.svg', dark: './src/assets/tegaki-dark.svg', alt: 'Tegaki logo' },
       head: [
         // Social cards need an absolute image URL; a relative one is ignored.
-        { tag: 'meta', attrs: { property: 'og:image', content: `${site}${base}/tegaki-card.png` } },
-        // Replaces Starlight's default link to sitemap-index.xml (see singleSitemap).
-        { tag: 'link', attrs: { rel: 'sitemap', href: `${base}/sitemap.xml` } },
+        { tag: 'meta', attrs: { property: 'og:image', content: CARD_IMAGE } },
+        { tag: 'meta', attrs: { property: 'og:image:width', content: '1280' } },
+        { tag: 'meta', attrs: { property: 'og:image:height', content: '640' } },
+        { tag: 'meta', attrs: { name: 'robots', content: 'index, follow, max-image-preview:large, max-snippet:-1' } },
+        // llms.txt / llms-full.txt, PNG icons, and the sitemap — replacing Starlight's
+        // default link to sitemap-index.xml (see singleSitemap).
+        ...SHARED_HEAD_LINKS.map((attrs) => ({ tag: 'link' as const, attrs })),
       ],
+      // A Markdown alternate and JSON-LD for each docs page.
+      routeMiddleware: './src/route-middleware.ts',
       social: [
-        { icon: 'github', label: 'GitHub', href: 'https://github.com/gkurt/tegaki' },
-        { icon: 'twitter', label: 'Twitter', href: 'https://twitter.com/gkurttech' },
+        { icon: 'github', label: 'GitHub', href: REPO_URL },
+        { icon: 'twitter', label: 'Twitter', href: TWITTER_URL },
         { icon: 'npm', label: 'npm', href: 'https://www.npmjs.com/package/tegaki' },
       ],
-      sidebar: [
-        {
-          label: 'Getting Started',
-          items: [{ label: 'Getting Started', slug: 'getting-started' }],
-        },
-        {
-          label: 'Frameworks',
-          items: [
-            { label: 'React', slug: 'frameworks/react' },
-            { label: 'Svelte', slug: 'frameworks/svelte' },
-            { label: 'Vue', slug: 'frameworks/vue' },
-            { label: 'Nuxt', slug: 'frameworks/nuxt' },
-            { label: 'SolidJS', slug: 'frameworks/solid' },
-            { label: 'Astro', slug: 'frameworks/astro' },
-            { label: 'Web Components', slug: 'frameworks/web-components' },
-            { label: 'Vanilla JS', slug: 'frameworks/vanilla' },
-            { label: 'Remotion', slug: 'frameworks/remotion' },
-          ],
-        },
-        {
-          label: 'Guides',
-          items: [
-            { label: 'Generating Font Data', slug: 'guides/generating' },
-            { label: 'Rendering Animations', slug: 'guides/rendering' },
-            { label: 'Streaming Text', slug: 'guides/streaming' },
-            { label: 'Text Shaping', slug: 'guides/shaping' },
-            { label: 'Bundler Setup', slug: 'guides/bundlers' },
-          ],
-        },
-        {
-          label: 'API Reference',
-          items: [
-            { label: 'TegakiRenderer', slug: 'api/renderer' },
-            { label: 'Generator CLI', slug: 'api/generator' },
-          ],
-        },
-        {
-          label: 'Demos',
-          items: [
-            { label: 'Studio', link: '/studio/' },
-            { label: 'Videos', slug: 'demos/videos' },
-          ],
-        },
-      ],
+      sidebar: SIDEBAR,
       customCss: ['./src/styles/global.css'],
       plugins: [starlightThemeNova({ stylingSystem: 'tailwind' })],
     }),
