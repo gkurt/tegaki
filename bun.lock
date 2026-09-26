@@ -141,7 +141,7 @@
         "fflate": "^0.8.3",
         "harfbuzzjs": "^1.6.2",
         "opentype.js": "^2.0.0",
-        "padrone": "^2.0.0",
+        "padrone": "^2.1.0",
         "tegaki": "workspace:*",
         "zod": "^4.6.5",
       },
@@ -2303,7 +2303,7 @@
 
     "package-manager-detector": ["package-manager-detector@1.8.0", "", {}, "sha512-yQA4H19AmPEoMUeavPMDIe1higySl/gH/yaQrkT/s07Qp+7pp2hYz30N3z2l5BkjVkF9Ow6o0wjJamm2y7Sn0A=="],
 
-    "padrone": ["padrone@2.0.0", "", { "dependencies": { "@standard-schema/spec": "^1.1.0", "enquirer": "^2.4.1" }, "peerDependencies": { "ai": "5 || 6 || 7", "ink": "^6.0.0 || ^7.0.0", "react": ">=18.0.0", "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["ai", "ink", "react", "zod"], "bin": { "padrone": "src/cli/index.ts" } }, "sha512-gDPXMf99yvibji6xFkOAMmPzDMVBA+nLZmVNVve/0EWG2/Y11a/fudLV1OhpmOVDxcBcbzR5utlAayyLb28pzQ=="],
+    "padrone": ["padrone@2.1.0", "", { "dependencies": { "@standard-schema/spec": "^1.1.0", "enquirer": "^2.4.1" }, "peerDependencies": { "ai": "5 || 6 || 7", "ink": "^6.0.0 || ^7.0.0", "react": ">=18.0.0", "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["ai", "ink", "react", "zod"], "bin": { "padrone": "src/cli/index.ts" } }, "sha512-CMSfG443WNU3An3/TDsqmr0vY+lhWhZhz/CEk7iSSNUSpXplp/MWMMoH8DpeiagcgoSkKYF/xSkTE+ZBu4ksMQ=="],
 
     "pagefind": ["pagefind@1.5.2", "", { "optionalDependencies": { "@pagefind/darwin-arm64": "1.5.2", "@pagefind/darwin-x64": "1.5.2", "@pagefind/freebsd-x64": "1.5.2", "@pagefind/linux-arm64": "1.5.2", "@pagefind/linux-x64": "1.5.2", "@pagefind/windows-arm64": "1.5.2", "@pagefind/windows-x64": "1.5.2" }, "bin": { "pagefind": "lib/runner/bin.cjs" } }, "sha512-XTUaK0hXMCu2jszWE584JGQT7y284TmMV9l/HX3rnG5uo3rHI/uHU56XTyyyPFjeWEBxECbAi0CaFDJOONtG0Q=="],
 
