@@ -9,6 +9,8 @@ import { Scripts } from '../components/home/Scripts';
 import { Styles } from '../components/home/Styles';
 import { TypeIt } from '../components/home/TypeIt';
 import { Write } from '../components/home/Write';
+import logoDark from '../assets/tegaki-dark.svg';
+import logo from '../assets/tegaki.svg';
 import '../styles/home.css';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -144,6 +146,8 @@ new TegakiEngine(document.querySelector('#note'), {
 
     <header class="nav">
       <a class="nav-brand" href={`${base}/`} aria-label="Tegaki home">
+        <img class="nav-logo nav-logo-light" src={logo.src} alt="" width="36" height="36" />
+        <img class="nav-logo nav-logo-dark" src={logoDark.src} alt="" width="36" height="36" />
         <span class="nav-name">Tegaki</span>
       </a>
       <nav class="nav-links" aria-label="Main">
@@ -193,7 +197,9 @@ new TegakiEngine(document.querySelector('#note'), {
           <a class="button" href={`${base}/studio/`}>Open the Studio</a>
           <button type="button" class="install" data-copy="npm i tegaki" aria-label="Copy install command">
             <span class="install-prompt">$</span> npm i tegaki
-            <span class="install-state" aria-live="polite">copy</span>
+            <span class="install-state" data-copied="copied" data-failed="press ⌘C">
+              <span class="install-label" aria-live="polite">copy</span>
+            </span>
           </button>
         </div>
         <Greetings client:load />
@@ -350,12 +356,13 @@ new TegakiEngine(document.querySelector('#note'), {
 
       const install = document.querySelector<HTMLButtonElement>('.install');
       install?.addEventListener('click', async () => {
-        const state = install.querySelector('.install-state');
+        const pill = install.querySelector<HTMLElement>('.install-state');
+        const state = install.querySelector('.install-label');
         try {
           await navigator.clipboard.writeText(install.dataset.copy ?? '');
-          if (state) state.textContent = 'copied';
+          if (state) state.textContent = pill?.dataset.copied ?? 'copied';
         } catch {
-          if (state) state.textContent = 'press ⌘C';
+          if (state) state.textContent = pill?.dataset.failed ?? 'press ⌘C';
         }
         setTimeout(() => {
           if (state) state.textContent = 'copy';

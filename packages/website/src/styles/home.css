@@ -146,6 +146,22 @@ p code {
   text-decoration: none;
 }
 
+.nav-logo {
+  display: block;
+  flex: none;
+  width: 36px;
+  height: 36px;
+}
+
+.nav-logo-dark,
+:root[data-theme="dark"] .nav-logo-light {
+  display: none;
+}
+
+:root[data-theme="dark"] .nav-logo-dark {
+  display: block;
+}
+
 .nav-name {
   font-family: var(--serif);
   font-size: 26px;
@@ -372,6 +388,24 @@ p code {
   white-space: nowrap;
 }
 
+/* A tile whose font lands mid-loop joins with its word part-written; fade it in
+   rather than pop. Tiles in the first round fade in on a blank page, unseen. */
+.greeting-ink > * {
+  animation: fade-in 0.6s ease both;
+}
+
+.greeting-spinner {
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--muted);
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: 0.35;
+  animation:
+    fade-in 0.6s ease both,
+    spin 1s linear infinite;
+}
+
 .greeting figcaption {
   display: flex;
   justify-content: space-between;
@@ -440,8 +474,12 @@ p code {
   color: var(--seal);
 }
 
+/* Every label sits in one cell — the other two as hidden pseudo-elements, read
+   from the same data attributes the script swaps in — so the pill is as wide as
+   the longest and swapping labels doesn't resize the button. */
 .install-state {
-  min-width: 56px;
+  display: inline-grid;
+  text-align: center;
   padding: 5px 10px;
   border-radius: 999px;
   background: var(--rule-soft);
@@ -449,6 +487,22 @@ p code {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.install-state > *,
+.install-state::before,
+.install-state::after {
+  grid-area: 1 / 1;
+}
+
+.install-state::before {
+  content: attr(data-copied);
+  visibility: hidden;
+}
+
+.install-state::after {
+  content: attr(data-failed);
+  visibility: hidden;
 }
 
 /* --------------------------------------------------------------- chapters */
@@ -1365,6 +1419,12 @@ p code {
 @keyframes pulse {
   50% {
     opacity: 0.3;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

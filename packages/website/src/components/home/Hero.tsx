@@ -25,22 +25,49 @@ const GREETINGS: Greeting[] = [
   { word: '반가워요', language: 'Korean', lang: 'ko', font: 'Nanum Pen Script', scale: 0.95 },
 ];
 
-function GreetingTile({ greeting, font }: { greeting: Greeting; font: TegakiBundle | undefined }) {
-  const ref = useRef<HTMLElement>(null);
-  const visible = useInView(ref);
+/** Seconds each greeting takes to write, then the pause before the row writes again. */
+const WRITE = 2.4;
+const LOOP_GAP = 2.6;
 
+/**
+ * The row's shared loop, as write progress (0–1, held at 1 through the gap). Its
+ * clock runs only while `playing`, so pausing the row off screen keeps every
+ * tile in step.
+ */
+function useLoopProgress(playing: boolean): number {
+  const [progress, setProgress] = useState(0);
+  const elapsed = useRef(0);
+
+  useEffect(() => {
+    if (!playing) return;
+    let last = performance.now();
+    let raf = requestAnimationFrame(function step(now) {
+      elapsed.current += Math.max(0, now - last) / 1000;
+      last = now;
+      setProgress(Math.min(1, (elapsed.current % (WRITE + LOOP_GAP)) / WRITE));
+      raf = requestAnimationFrame(step);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [playing]);
+
+  return progress;
+}
+
+function GreetingTile({ greeting, font, progress }: { greeting: Greeting; font: TegakiBundle | undefined; progress: number }) {
   return (
-    <figure ref={ref} className="greeting" style={{ '--scale': greeting.scale ?? 1 } as CSSProperties}>
+    <figure className="greeting" style={{ '--scale': greeting.scale ?? 1 } as CSSProperties}>
       <div className="greeting-ink" lang={greeting.lang}>
-        {font && (
+        {font ? (
           <TegakiRenderer
             font={font}
             direction={greeting.dir}
-            time={{ mode: 'uncontrolled', duration: 2.4, loop: true, loopGap: 2.6, playing: visible }}
+            time={{ mode: 'controlled', value: progress, unit: 'progress' }}
             quality={greeting.clip ? { clipText: greeting.clip } : undefined}
           >
             {greeting.word}
           </TegakiRenderer>
+        ) : (
+          <span className="greeting-spinner" aria-hidden="true" />
         )}
       </div>
       <figcaption>
@@ -52,30 +79,36 @@ function GreetingTile({ greeting, font }: { greeting: Greeting; font: TegakiBund
 }
 
 /**
- * A row of greetings, looping in step. Every tile waits for all six fonts — the
- * CJK bundles are the slow ones — so the row writes its first round together
- * rather than the CJK tiles joining a loop late. Fetching starts once the
- * headline's own font is in, so they don't compete with it.
+ * A row of greetings, looping in step. Each tile appears as soon as its font is
+ * in and joins the row's loop where it is, so a slow CJK bundle picks up
+ * mid-stroke instead of starting a round of its own. The loop starts with the
+ * first font. Fetching starts once the headline's own font is in, so they
+ * don't compete with it.
  */
 export function Greetings() {
+  const ref = useRef<HTMLDivElement>(null);
+  const visible = useInView(ref);
   const [fonts, setFonts] = useState<Partial<Record<FontName, TegakiBundle>>>({});
+  const progress = useLoopProgress(visible && Object.keys(fonts).length > 0);
 
   useEffect(() => {
     let cancelled = false;
-    loadFont('Parisienne')
-      .then(() => Promise.all(GREETINGS.map((g) => loadFont(g.font).then((bundle) => [g.font, bundle] as const))))
-      .then((entries) => {
-        if (!cancelled) setFonts(Object.fromEntries(entries));
-      });
+    loadFont('Parisienne').then(() => {
+      for (const g of GREETINGS) {
+        loadFont(g.font).then((bundle) => {
+          if (!cancelled) setFonts((prev) => ({ ...prev, [g.font]: bundle }));
+        });
+      }
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
   return (
-    <div className="greetings">
+    <div ref={ref} className="greetings">
       {GREETINGS.map((g) => (
-        <GreetingTile key={g.lang} greeting={g} font={fonts[g.font]} />
+        <GreetingTile key={g.lang} greeting={g} font={fonts[g.font]} progress={progress} />
       ))}
     </div>
   );
