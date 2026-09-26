@@ -1,6 +1,6 @@
 import { createPlugin } from '../core/createPlugin.ts';
 import { seededRandom } from '../lib/random.ts';
-import type { GlyphPlacement } from '../lib/strokeTimeline.ts';
+import { type FontPoint, inPx } from './glyphSpace.ts';
 
 /** How far each glyph can stray from the font, before `amount` scales it all. */
 export interface VariationOptions {
@@ -18,12 +18,6 @@ export interface VariationOptions {
   warp: number;
   /** Ink width, as a share of the stroke's: 0.1 lets a stroke run up to 10% thinner or thicker. */
   width: number;
-}
-
-/** A point in a glyph's own font units: x from its origin, y down from its baseline. */
-interface FontPoint {
-  x: number;
-  y: number;
 }
 
 /** Where the glyph turns, leans and grows about, in ems from its origin — about the middle of a small letter. */
@@ -77,14 +71,6 @@ export function variationWidth(seed: number, strokeKey: string, o: VariationOpti
   const swell = random() * 2 - 1;
   const w = o.amount * o.width;
   return (t) => Math.max(0.05, 1 + w * (0.7 * overall + 0.5 * swell * Math.sin(Math.PI * t)));
-}
-
-/** `field` moving a point in px, through its glyph's font units. */
-function inPx(field: (p: FontPoint) => FontPoint, place: GlyphPlacement) {
-  return <P extends { x: number; y: number }>(p: P): P => {
-    const moved = field({ x: (p.x - place.x) / place.scale, y: (p.y - place.y) / place.scale - place.ascender });
-    return { ...p, x: place.x + moved.x * place.scale, y: place.y + (moved.y + place.ascender) * place.scale };
-  };
 }
 
 /**

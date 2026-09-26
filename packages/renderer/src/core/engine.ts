@@ -44,7 +44,7 @@ import { cssFontFamily, drawsFallbackGlyphs, graphemes, lookupGlyphData } from '
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
 import { effectPlugins } from './effectPlugins.ts';
-import { outlineWith, paintWith, reshapeWith } from './plugins.ts';
+import { allPluginSteps, outlineWith, type PluginSteps, paintWith, pluginStepsAt, reshapeWith, steppedPlugins } from './plugins.ts';
 import { buildChildren, buildRootProps, canvasBoxStyle, domCreateElement } from './render-elements.ts';
 import { getShaperForBundle, registerShaper, settledShaperForBundle } from './shaper-registry.ts';
 import type {
@@ -297,8 +297,14 @@ export class TegakiEngine {
   private _strokeCacheKey = '';
   /** `strokes`, memoized for the timeline and font it was computed from. */
   private _strokes: { timeline: Timeline; font: TegakiBundle; list: StrokeInstance[] } | null = null;
-  /** `_placedStrokes()`, memoized for what places them (see there). */
-  private _placed: { deps: unknown[]; list: PlacedStroke[] } | null = null;
+  /** `_placedStrokes()`, memoized for what places them (see there) — one list per combination of the plugins' drawings. */
+  private _placed: { deps: unknown[]; byStep: Map<string, PlacedStroke[]> } | null = null;
+  /** The drawing each plugin with `steps` shows now — chosen at the start of every render. */
+  private _steps: { steps: PluginSteps; key: string } = { steps: new Map(), key: '' };
+  /** Where the clock for plugin steps starts, outside controlled time (`performance.now()` ms). */
+  private _clockOrigin = typeof performance !== 'undefined' ? performance.now() : 0;
+  /** The loop that redraws while a plugin's steps cycle on their own (`steps.idle`). */
+  private _idleRafId = 0;
   private _plugins: readonly TegakiPlugin[] = [];
   /** The built-in effects' plugins followed by the user's, memoized for the effects and plugins they came from. */
   private _allPluginsCache: {
@@ -310,7 +316,7 @@ export class TegakiEngine {
   /** Each placed stroke's ink box (see `strokeInkBounds`), by its path — what the frame's ink covers is their union. */
   private _inkBoxes = new WeakMap<StrokePath, Box | null>();
   /** What the ink and the plugins' `bounds` cover, memoized for the placed strokes and plugins it was computed from. */
-  private _pluginBoundsCache: { strokes: PlacedStroke[]; plugins: readonly TegakiPlugin[]; box: Box | null } | null = null;
+  private _pluginBoundsCache: { placed: object; plugins: readonly TegakiPlugin[]; box: Box | null } | null = null;
   /** The text box plugins paint against, memoized for the layout it was computed from. */
   private _textBoxCache: { layout: TextLayout; fontSize: number; lineHeight: number; box: Box } | null = null;
   /** The frame the plugins last saw: `onFrame`'s `prev`. */
@@ -912,11 +918,13 @@ export class TegakiEngine {
     if (dirtyLayout) this._recomputeLayout();
     if (dirtyPlayback) this._evaluatePlayback();
     if (dirtyRender || dirtyTimeline || dirtyLayout) this._render();
+    this._updateIdleLoop();
   }
 
   destroy(): void {
     this._destroyed = true;
     this._stopLoop();
+    this._updateIdleLoop();
     this._resizeObserver.disconnect();
     this._sentinelEl.removeEventListener('transitionend', this._onSentinelTransition);
     if (this._mql) {
@@ -1159,6 +1167,8 @@ export class TegakiEngine {
   private _onReducedMotionChange = (e: MediaQueryListEvent): void => {
     this._prefersReducedMotion = e.matches;
     this._evaluatePlayback();
+    this._updateIdleLoop();
+    this._render();
   };
 
   private get _motionReduced(): boolean {
@@ -1683,7 +1693,8 @@ export class TegakiEngine {
     fontSize: number,
   ): { path: Path2D; placed: boolean }[] {
     const plugins = this._allPlugins();
-    const reshape = outlineWith(plugins, this._reportPluginError);
+    const { steps, key: stepKey } = this._steps;
+    const reshape = outlineWith(plugins, this._reportPluginError, steps);
     const step = reshape ? segmentLengthFU : 0;
     const key = reshape ? plugins : null;
     if (this._maskPaths.shaper !== this._shaper || this._maskPaths.plugins !== key || this._maskPaths.step !== step) {
@@ -1697,7 +1708,7 @@ export class TegakiEngine {
         return { path, placed: false };
       }
       const seed = g.seed ?? 0;
-      const id = `${seed}|${g.x}|${g.y}|${g.scale}|${g.d}`;
+      const id = `${stepKey}|${seed}|${g.x}|${g.y}|${g.scale}|${g.d}`;
       let path = cache.get(id);
       if (!path) {
         path = new Path2D();
@@ -1745,7 +1756,7 @@ export class TegakiEngine {
    * layout, font size and line height, the plugins, quality (subdivision,
    * clip-to-text width) and the seed.
    */
-  private _placedStrokes(): PlacedStroke[] {
+  private _placedStrokes(steps: PluginSteps = this._steps.steps): PlacedStroke[] {
     const font = this._font;
     const layout = this._layout;
     const fontSize = this._fontSize;
@@ -1754,8 +1765,11 @@ export class TegakiEngine {
     const lineHeight = this._lineHeight;
     const plugins = this._allPlugins();
     const deps: unknown[] = [strokes, layout, fontSize, lineHeight, plugins, this._quality, this._seed];
-    const cached = this._placed;
-    if (cached?.deps.every((d, i) => d === deps[i])) return cached.list;
+    if (!this._placed?.deps.every((d, i) => d === deps[i])) this._placed = { deps, byStep: new Map() };
+    const byStep = this._placed.byStep;
+    const stepKey = [...steps.values()].join(',');
+    const cached = byStep.get(stepKey);
+    if (cached) return cached;
 
     const scale = fontSize / font.unitsPerEm;
     const halfLeading = (lineHeight - ((font.ascender - font.descender) / font.unitsPerEm) * fontSize) / 2;
@@ -1767,7 +1781,7 @@ export class TegakiEngine {
     const clipText = this._quality?.clipText;
     const random = (key: string | number) => seededRandom(this._seed, key);
     const list = placeStrokes(strokes, {
-      reshape: reshapeWith(plugins, { fontSize, random }, this._reportPluginError),
+      reshape: reshapeWith(plugins, { fontSize, random }, this._reportPluginError, steps),
       getSubdivided: this._subdivider(font, scale),
       strokeScale: typeof clipText === 'number' ? clipText : 1,
       placeEntry: (ei) => {
@@ -1778,9 +1792,46 @@ export class TegakiEngine {
         return { x, y: glyphY, scale, ascender: font.ascender, seed: this._seed + entry.graphemeIndex };
       },
     });
-    this._placed = { deps, list };
+    byStep.set(stepKey, list);
     return list;
   }
+
+  /** The clock plugin steps run on: the time in controlled mode (so a video draws the same every time), seconds since the engine started otherwise. */
+  private _stepClock(): number {
+    if (this._timeControl.mode === 'controlled') return this.currentTime;
+    const now = typeof performance !== 'undefined' ? performance.now() : 0;
+    return (now - this._clockOrigin) / 1000;
+  }
+
+  /** Each stepped plugin's drawing now — the first of each under reduced motion. */
+  private _stepsNow(): { steps: PluginSteps; key: string } {
+    return pluginStepsAt(this._allPlugins(), this._motionReduced ? 0 : this._stepClock());
+  }
+
+  /**
+   * Run the idle loop while a plugin's steps should cycle on their own: some
+   * plugin asks for it (`steps.idle`), time isn't controlled, and motion
+   * isn't reduced. It redraws only when the drawing changes.
+   */
+  private _updateIdleLoop(): void {
+    const want =
+      !this._destroyed &&
+      this._timeControl.mode !== 'controlled' &&
+      !this._motionReduced &&
+      steppedPlugins(this._allPlugins()).some((s) => s.steps.idle);
+    if (want && !this._idleRafId) this._idleRafId = requestAnimationFrame(this._idleTick);
+    else if (!want && this._idleRafId) {
+      cancelAnimationFrame(this._idleRafId);
+      this._idleRafId = 0;
+    }
+  }
+
+  private _idleTick = (): void => {
+    this._idleRafId = 0;
+    if (this._destroyed) return;
+    if (this._stepsNow().key !== this._steps.key) this._render();
+    this._updateIdleLoop();
+  };
 
   /** The built-in effects' plugins, then the user's: every plugin the engine runs, in order. */
   private _allPlugins(): readonly TegakiPlugin[] {
@@ -1822,15 +1873,22 @@ export class TegakiEngine {
    */
   private _pluginBounds(fontSize: number, scale: number): Box | null {
     const plugins = this._allPlugins();
-    const strokes = this._placedStrokes();
+    this._placedStrokes();
+    const placed = this._placed;
+    if (!placed) return null;
     const cached = this._pluginBoundsCache;
-    if (cached?.strokes === strokes && cached.plugins === plugins) return cached.box;
-    const boxes: (Box | null)[] = strokes.map(strokeInkBounds);
-    for (const plugin of plugins) {
-      if (plugin.bounds) this._runHook(plugin, 'bounds', () => boxes.push(plugin.bounds!({ strokes, fontSize, scale })));
+    if (cached?.placed === placed && cached.plugins === plugins) return cached.box;
+    // Every drawing the plugins' steps cycle through, so the canvas holds still while they do.
+    const boxes: (Box | null)[] = [];
+    for (const steps of allPluginSteps(plugins)) {
+      const strokes = this._placedStrokes(steps);
+      for (const stroke of strokes) boxes.push(strokeInkBounds(stroke));
+      for (const plugin of plugins) {
+        if (plugin.bounds) this._runHook(plugin, 'bounds', () => boxes.push(plugin.bounds!({ strokes, fontSize, scale })));
+      }
     }
     const box = unionBoxes(boxes);
-    this._pluginBoundsCache = { strokes, plugins, box };
+    this._pluginBoundsCache = { placed, plugins, box };
     return box;
   }
 
@@ -1963,6 +2021,7 @@ export class TegakiEngine {
     // quadratic cost in pixels filled.
     const pixelRatio = Math.max(this._quality?.pixelRatio ?? 1, 0);
     const effectiveDpr = dpr * pixelRatio;
+    this._steps = this._stepsNow();
     this._fitCanvasToInk();
     const w = canvas.offsetWidth;
     const h = canvas.offsetHeight;
@@ -2100,6 +2159,8 @@ export class TegakiEngine {
         plugins,
         maxSegLenFU,
         document.fonts?.status,
+        // The outlines move with the drawing a plugin's steps show.
+        this._steps.key,
       ];
       const lastKey = this._maskKey;
       if (!lastKey || lastKey.length !== maskKey.length || maskKey.some((v, i) => v !== lastKey[i])) {

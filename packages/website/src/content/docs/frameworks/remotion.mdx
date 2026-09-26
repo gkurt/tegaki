@@ -116,6 +116,15 @@ const progress = Math.max(0, Math.min(1, (frame - delayFrames) / drawFrames));
 
 Wobble, gradients and plugins such as `variationPlugin` draw their randomness from the renderer's [`seed`](/tegaki/api/renderer/#seed). It defaults to `0`, so every frame matches, including frames rendered in parallel tabs. To give a video a different look, pass another fixed number (`seed={7}`). Never pass `seed="random"` in a composition, because each rendering tab would pick its own seed and the handwriting would jump between frames.
 
+`boilPlugin` picks its drawing from the time you pass, so it renders the same every time too. It follows the timeline's seconds, so pass the time in seconds rather than as progress if the boil should run at video speed and go on after the text is written:
+
+```tsx
+const { fps } = useVideoConfig();
+<TegakiRenderer font={caveat} plugins={plugins} time={{ mode: 'controlled', value: frame / fps }} />;
+```
+
+Time past the end keeps the text finished, and the boil keeps cycling.
+
 ## Natural pacing
 
 `unit: 'progress'` stretches or squeezes the writing to fit the composition. To keep Tegaki's own pace (its per-stroke timing, as on a web page), pass the time in **seconds** and size the composition from the timeline with `calculateMetadata`:

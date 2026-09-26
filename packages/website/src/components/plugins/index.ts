@@ -4,6 +4,7 @@
 // the agent prompt leave them out.
 
 import {
+  boilPlugin,
   changedPluginOptions,
   type TegakiPlugin,
   type TegakiPluginFactory,
@@ -25,8 +26,9 @@ export interface ShowcasePlugin {
 }
 
 export const SHOWCASE_PLUGINS: readonly ShowcasePlugin[] = [
-  // Shipped in tegaki/core, not a demo: listed first so it reshapes the strokes the others paint.
+  // Shipped in tegaki/core, not demos: listed first so they reshape the strokes the others paint.
   { id: 'vary', factory: variationPlugin },
+  { id: 'boil', factory: boilPlugin },
   { id: 'pen', factory: penPlugin },
   { id: 'order', factory: strokeOrderPlugin },
   { id: 'brush', factory: brushPlugin },

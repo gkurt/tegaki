@@ -50,6 +50,7 @@ export {
   type TimelineEntry,
   type TimelineStaggerConfig,
 } from '../lib/timeline.ts';
+export { type BoilOptions, boilField, boilPlugin, boilWidth } from '../plugins/boil.ts';
 export { type VariationOptions, variationField, variationPlugin, variationWidth } from '../plugins/variation.ts';
 export type * from '../types.ts';
 export type { TegakiEffectConfigs, TegakiEffects } from '../types.ts';
@@ -88,6 +89,7 @@ export type {
   TegakiOutlineContext,
   TegakiPaintContext,
   TegakiPlugin,
+  TegakiPluginSteps,
   TegakiQuality,
   TegakiStrokePaintContext,
   TegakiSvgOptions,

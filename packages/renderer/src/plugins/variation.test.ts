@@ -90,7 +90,7 @@ describe('variationPlugin', () => {
   test('a stroke and its glyph outline move together, so clip-to-text follows the ink', () => {
     const plugin = variationPlugin();
     const g = { seed: 4, place, fontSize, stroke: { strokeIndex: 0 } } as unknown as TegakiGeometryContext & StrokeGeometryContext;
-    const o: TegakiOutlineContext = { seed: 4, place, fontSize };
+    const o: TegakiOutlineContext = { seed: 4, place, fontSize, step: 0 };
     const moved = plugin.geometry!(path, g).points.map(({ x, y }) => ({ x, y }));
     const outline = plugin.outline!(
       path.points.map(({ x, y }) => ({ x, y })),

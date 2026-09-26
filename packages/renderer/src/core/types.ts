@@ -180,6 +180,8 @@ export interface TegakiPaintContext extends TegakiPluginContext {
 export interface TegakiGeometryContext extends StrokeGeometryContext {
   /** Font size in px. */
   fontSize: number;
+  /** Which of the plugin's {@link TegakiPlugin.steps} drawings to make, from `0`; always `0` for a plugin without steps. */
+  step: number;
   /** See {@link TegakiPluginContext.random}. */
   random(key: string | number): () => number;
 }
@@ -191,6 +193,27 @@ export interface TegakiOutlineContext {
   seed: number;
   /** Font size in px. */
   fontSize: number;
+  /** Which of the plugin's {@link TegakiPlugin.steps} drawings this is, as for its strokes' `geometry`. */
+  step: number;
+}
+
+/**
+ * A plugin's cycle of drawings: the ink redrawn `count` ways, one after
+ * another, `fps` times a second, the way line boil makes hand-drawn
+ * animation shimmer. See {@link TegakiPlugin.steps}.
+ */
+export interface TegakiPluginSteps {
+  /** How many drawings the cycle has (at least 1). */
+  count: number;
+  /** Drawings a second (8–12 reads as hand-drawn). */
+  fps: number;
+  /**
+   * Keep cycling once the text is written, or while it's paused, in
+   * uncontrolled and CSS time — the engine redraws at `fps` for as long as
+   * the renderer lives. Controlled time always takes the drawing from the
+   * time it's given, so it holds still when the time does. Default `false`.
+   */
+  idle?: boolean;
 }
 
 /** A stroke a `paint` hook paints, and how the next hook will paint it. */
@@ -277,6 +300,15 @@ export interface TegakiPlugin {
    * it the same from frame to frame: the canvas is sized once, not per frame.
    */
   bounds?(ctx: TegakiBoundsContext): Box | null;
+  /**
+   * Redraw the ink as a cycle of drawings over time. `geometry` and
+   * `outline` are called once per drawing per layout, told which one in
+   * `ctx.step`; the engine keeps them all and shows one at a time — chosen
+   * from the time in controlled mode (so a video renders the same every
+   * time), from the clock otherwise. The canvas is sized to hold every
+   * drawing. Reduced motion (see `reducedMotion`) holds the first.
+   */
+  steps?: TegakiPluginSteps;
 }
 
 // ---------------------------------------------------------------------------

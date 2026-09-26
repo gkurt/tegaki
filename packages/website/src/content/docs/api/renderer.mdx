@@ -203,6 +203,7 @@ A plugin is an object with a `name` and any of these hooks:
 | `onFrame(frame, prev)` | after every frame is painted | sound, events, syncing other UI |
 | `bounds({ strokes, fontSize, scale })` | when the layout changes | reserving room for what you paint outside the ink |
 | `outline(contour, ctx)` | once per glyph, with clip-to-text on | reshaping the letter shapes the ink is clipped to, in step with `geometry` |
+| `steps: { count, fps, idle? }` | not a hook: a setting | redrawing the ink a few ways in turn, over time (see [Drawings over time](#drawings-over-time-steps)) |
 
 The built-in [effects](#effects) are plugins too, and run first, so each hook of yours sees what they made: `geometry` gets the path after pressure width, taper and wobble, and `paint` gets the gradient as its `style`.
 
@@ -306,6 +307,24 @@ const strokeOrder: TegakiPlugin = {
 };
 ```
 
+### Drawings over time: `steps`
+
+`geometry` runs once per layout, so on its own it can't change the ink over time. `steps` lets it: the plugin asks for a cycle of `count` drawings shown `fps` times a second, and its `geometry` and `outline` are called once per drawing per layout, told which one in `ctx.step` (from `0`). The engine keeps every drawing and shows one at a time, so cycling costs nothing per frame. This is how line boil works in hand-drawn animation.
+
+```ts
+const shimmer: TegakiPlugin = {
+  name: 'shimmer',
+  steps: { count: 3, fps: 12 },
+  geometry: (path, ctx) => path.map((p) => ({ ...p, y: p.y + (ctx.step - 1) * 0.8 })),
+};
+```
+
+- The canvas is sized to hold every drawing, so it holds still while they cycle.
+- `frameAt()`, `underlay`, `overlay` and `onFrame` all see the drawing on screen.
+- In controlled time the drawing comes from the time given, so a video renders the same every time. Otherwise it comes from the clock.
+- The ink cycles whenever it's drawn: while the text writes, and on every redraw. With `idle: true` the engine also keeps redrawing once the text is written or paused, in uncontrolled and CSS time.
+- When motion is reduced (see [`reducedMotion`](#reducedmotion)), the first drawing is shown and nothing cycles.
+
 ### Plugins with options: `createPlugin(definition)`
 
 `createPlugin` turns a plugin into a factory that takes options. List what the plugin can be set to in `params`, and write the hooks in `setup`, which gets every option filled in:
@@ -386,6 +405,28 @@ How each glyph strays comes from its seed, the renderer's [`seed`](#seed) plus t
 | `width` | `0.12` | Ink width, as a share of the stroke's. |
 
 It comes with three presets: `Subtle`, `Loose` and `Signature`. Like any plugin, it isn't part of `toSVG`.
+
+### Line boil: `boilPlugin`
+
+The shimmer of hand-drawn animation, stop motion and games drawn that way: the ink is redrawn a few slightly different ways, in turn, several times a second. Each glyph moves through its own smooth field for each drawing, and the clip outline moves with it. It uses [`steps`](#drawings-over-time-steps).
+
+```tsx
+import { boilPlugin } from 'tegaki/core';
+
+const plugins = [boilPlugin()]; // boils while the text writes
+const always = [boilPlugin({ idle: true, fps: 8 })]; // and after it's written, choppier
+```
+
+| Option | Default | What it changes |
+|--------|---------|-----------------|
+| `drawings` | `3` | How many drawings the cycle has (2–8). |
+| `fps` | `12` | Drawings a second. 12 is animation "on twos"; 8 is choppier. |
+| `amount` | `0.012` | How far the line wanders, in ems. |
+| `detail` | `0.3` | `0` bends the lines slowly; `1` makes them jitter along their length. |
+| `width` | `0.08` | How much the ink width wanders, as a share of the stroke's. |
+| `idle` | `false` | Keep boiling once the text is written, or while it's paused (uncontrolled and CSS time). |
+
+Presets: `Cartoon` (3 drawings at 8 fps, slow bends, keeps boiling), `Nervous` (fast fine jitter) and `Sketchy` (wide, with width wander, keeps boiling). Each glyph boils its own way, from the renderer's [`seed`](#seed).
 
 ## Helper functions
 
