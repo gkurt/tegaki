@@ -220,6 +220,8 @@ export interface TegakiPluginSteps {
 export interface TegakiStrokePaintContext extends StrokePaint, TegakiPluginContext {
   /** The box the text's lines fill, in the same px as the stroke's path. */
   textBox: Box;
+  /** Timeline seconds of the frame being drawn — with the stroke's `start` and `duration`, how long ago the pen passed a point. */
+  time: number;
   /** px per font unit. */
   scale: number;
 }

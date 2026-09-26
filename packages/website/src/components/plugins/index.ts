@@ -12,11 +12,20 @@ import {
   type TegakiPluginParams,
   variationPlugin,
 } from 'tegaki/core';
+import { ballpointPlugin } from './ballpoint.ts';
+import { bleedPlugin } from './bleed.ts';
 import { brushPlugin } from './brush.ts';
+import { colorsPlugin } from './colors.ts';
 import { echoPlugin } from './echo.ts';
+import { grainPlugin } from './grain.ts';
+import { nibPlugin } from './nib.ts';
+import { paperPlugin } from './paper.ts';
 import { penPlugin } from './pen.ts';
+import { shadowPlugin } from './shadow.ts';
 import { soundPlugin } from './sound.ts';
+import { sparklePlugin } from './sparkle.ts';
 import { strokeOrderPlugin } from './stroke-order.ts';
+import { wetPlugin } from './wet.ts';
 
 export interface ShowcasePlugin {
   /** Its key in the URL (`pg`, `po`) — kept short, and stable across renames. */
@@ -25,14 +34,28 @@ export interface ShowcasePlugin {
   factory: TegakiPluginFactory;
 }
 
+// Listed in the order they run, which is the order that matters: geometry
+// first, so the painters get the reshaped strokes; underlays bottom-most
+// first; in the paint chain, whoever sets the color before whoever reads it
+// (Colors, then Wet ink), and Ballpoint's pieces before Wet ink times them;
+// in the ink hooks, grain taken out before the shadow is cast.
 export const SHOWCASE_PLUGINS: readonly ShowcasePlugin[] = [
-  // Shipped in tegaki/core, not demos: listed first so they reshape the strokes the others paint.
+  // Shipped in tegaki/core, not demos.
   { id: 'vary', factory: variationPlugin },
   { id: 'boil', factory: boilPlugin },
+  { id: 'nib', factory: nibPlugin },
+  { id: 'paper', factory: paperPlugin },
   { id: 'pen', factory: penPlugin },
   { id: 'order', factory: strokeOrderPlugin },
+  { id: 'colors', factory: colorsPlugin },
+  { id: 'ball', factory: ballpointPlugin },
+  { id: 'wet', factory: wetPlugin },
   { id: 'brush', factory: brushPlugin },
   { id: 'echo', factory: echoPlugin },
+  { id: 'grain', factory: grainPlugin },
+  { id: 'bleed', factory: bleedPlugin },
+  { id: 'shadow', factory: shadowPlugin },
+  { id: 'sparkle', factory: sparklePlugin },
   { id: 'sound', factory: soundPlugin },
 ];
 

@@ -152,7 +152,7 @@ packages/website/
         inspector/            # Properties panel — Style / Motion / Plugins / Pipeline tabs built from DialKit controls
         FontPicker.tsx ExportMenu.tsx Transport.tsx ZoomStage.tsx ui.tsx icons.tsx state.ts
       preview/                # Shared by /studio and /preview: TegakiTextPreview, stage views, export, constants
-      plugins/                # Demo TegakiPlugins for the studio's Plugins tab (pen, stroke order, brush, echo, sound)
+      plugins/                # Demo TegakiPlugins for the studio's Plugins tab (index.ts lists them in the order they run), plus their shared helpers: color.ts, noise.ts (paper texture), ink-canvas.ts (an ink hook's region, a blurred silhouette)
       url-state.ts            # URL <-> state serialization (short keys, only non-defaults written)
       home/                   # Landing-page islands: Hero + Greetings, ControlledTime (scroll-linked `time="css"` + slider), Scripts, Styles, TypeIt (editable), ChatStream, Write, Finale; shared.ts (font loading, useInView, useTheme)
       LiveDemo.tsx            # Embeddable React demo used in docs
@@ -189,7 +189,7 @@ The renderer's `seed` (default `0`, so a render is the same on every load and in
 
 Plugin `steps` (`{ count, fps, idle? }`): the engine reshapes each drawing once per layout (`ctx.step` in `geometry` / `outline`), caches them all (`_placedStrokes(steps)`, clip outlines keyed by the step), sizes the canvas to every drawing, and picks one per render — from the time in controlled mode, the clock otherwise; `idle` runs a redraw loop after the text is written (uncontrolled / CSS time), and reduced motion holds drawing 0.
 
-The inspector's **Plugins** tab (Text mode) switches on the shipped `variationPlugin` (issue #31) and `boilPlugin`, and demo plugins that show off the renderer's `TegakiPlugin` API, written the way a user of `tegaki` would: a fountain pen at the pen head (overlay), stroke-order numbers and arrows kept clear of the ink (underlay + overlay), a bristly brush (paint), echo passes over each stroke (paint), and a pencil scratch sound (onFrame). Each is made with `createPlugin` ([createPlugin.ts](packages/renderer/src/core/createPlugin.ts)), and the tab builds its controls — preset chips, then a DialKit control per param — from the factory's `params` / `presets`, so a new param or preset shows up in the UI with no panel code. They live in [components/plugins/](packages/website/src/components/plugins) and are only for showing: the `pg` param (which are on) and `po` (their changed options) carry them to `/preview`, but Export and Ask an agent leave them out.
+The inspector's **Plugins** tab (Text mode) switches on the shipped `variationPlugin` (issue #31) and `boilPlugin`, and demo plugins that show off the renderer's `TegakiPlugin` API, written the way a user of `tegaki` would: one or more per hook: a broad calligraphy nib (geometry), practice paper — ruled lines, 田字格 / 米字格 squares or graph paper, laid out by each stroke's `place` (underlay), a fountain pen at the pen head (overlay), stroke-order numbers and arrows kept clear of the ink (underlay + overlay), palette colors per glyph or stroke, a ballpoint that skips, wet ink that dries lighter behind the pen (from the paint context's `time`), a bristly brush and echo passes (paint), paper grain, ink bleed and a drop shadow (ink), sparkles behind the pen (overlay), and a pencil scratch sound (onFrame). Each is made with `createPlugin` ([createPlugin.ts](packages/renderer/src/core/createPlugin.ts)), and the tab builds its controls — preset chips, then a DialKit control per param — from the factory's `params` / `presets`, so a new param or preset shows up in the UI with no panel code. They live in [components/plugins/](packages/website/src/components/plugins) and are only for showing: the `pg` param (which are on) and `po` (their changed options) carry them to `/preview`, but Export and Ask an agent leave them out.
 - `/tegaki/preview/` — a chrome-free standalone text renderer (`StandaloneTextPreview`) that reads the same URL state and renders only the text. Use this for screenshots / snapshots — no UI to crop out, and `window.__tegakiPreviewReady` / `body[data-tegaki-ready]` are set once the bundle is built so tooling can wait deterministically.
 
 The studio's Text mode has an "open in new tab" icon button next to the text field that opens the current state in `/preview` (just swaps `/studio` → `/preview` in the URL).
@@ -220,9 +220,9 @@ Common keys (non-exhaustive — `url-state.ts` is the source of truth):
 | `ol` | Show debug overlay (0/1)                                       | `ol=1`               |
 | `ghl` | Han stroke-order convention: `ja` (default, KanjiVG) or `zh` (Make Me a Hanzi) | `ghl=zh`     |
 | `fx` | Effects state as JSON                                          | `fx=%7B...%7D`       |
-| `pg` | Plugins switched on, comma-separated (`vary`, `boil`, `pen`, `order`, `brush`, `echo`, `sound`) | `pg=vary,pen` |
+| `pg` | Plugins switched on, comma-separated (`vary`, `boil`, `nib`, `paper`, `pen`, `order`, `colors`, `ball`, `wet`, `brush`, `echo`, `grain`, `bleed`, `shadow`, `sparkle`, `sound`) | `pg=vary,pen` |
 | `po` | Demo plugins' options as JSON, by plugin id — only non-defaults, only for plugins in `pg`; resolved through each factory's params (numbers clamped, unknown keys dropped) | `po=%7B%22echo%22%3A%7B%22lag%22%3A0.2%7D%7D` |
-| `rs` | The renderer's `seed` (unset = 0): wobble phase, gradient hue, what Variation and Brush draw by | `rs=42` |
+| `rs` | The renderer's `seed` (unset = 0): wobble phase, gradient hue, what Variation, Boil and the random demos (Brush, Ballpoint, Sparkles, shuffled Colors) draw by | `rs=42` |
 | `se` / `ge` | Stroke / glyph easing preset                            | `se=ease-out-cubic`  |
 | `pr` / `ss` | Render quality — pixel ratio / stroke segment size      | `pr=2&ss=1`          |
 

@@ -2092,7 +2092,7 @@ export class TegakiEngine {
         for (; si < strokes.length && strokes[si]!.entryIndex === ei; si++) {
           const stroke = strokes[si]!;
           if (stroke.state === 'pending') continue;
-          paint({ ctx, stroke, style: color, lineCap: font.lineCap, color, fontSize, scale, textBox, random });
+          paint({ ctx, stroke, style: color, lineCap: font.lineCap, color, fontSize, scale, textBox, time: currentTime, random });
           inkBoxes.push(this._inkBox(stroke));
         }
       } else if (currentTime >= entry.offset + entry.duration) {

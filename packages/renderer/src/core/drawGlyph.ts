@@ -106,6 +106,7 @@ export function drawGlyph(
       fontSize: pos.fontSize,
       scale,
       textBox,
+      time: localTime,
       random,
     });
   }

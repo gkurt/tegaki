@@ -176,6 +176,7 @@ Every stroke at `time` (default: the current time). For each stroke you get:
 - `path`: the whole stroke as the canvas draws it, a [`StrokePath`](#strokepath) in CSS px from the top-left of the text box, reshaped by every plugin's `geometry` (the built-in wobble, pressure width and taper among them). `rawPath` is the stroke as the bundle has it, before any of them: unwobbled, with the bundle's own widths.
 - `nibs`: the stroke's nib stamps (blobs the pen leaves at some points), placed along `path`: `t`, an offset `dx`/`dy` in px, radii `rx`/`ry` as multiples of the ink width there, and an `angle`.
 - `seed`: a number fixed per glyph, which the built-in effects vary by.
+- `place`: where the stroke's glyph sits: `x` and `y` in px (the top of the glyph's ascender at its left edge), `scale` (px per font unit) and `ascender` (in font units), so the baseline is at `y + ascender * scale`. With `glyph.w * scale`, the glyph's advance, it's what a practice grid lays its squares out by.
 - `head`: once the stroke has started, the pen at the end of the ink, `path.pointAt(progress)`. It has `x` and `y`, `angle` (the direction of travel in radians, with y pointing down) and `width` (the ink width in px).
 
 `frame.active` lists the strokes being drawn right now. A stroke's `path` is the same object from frame to frame until the layout changes, so anything you compute from it can be cached against it (in a `WeakMap`, for example).
@@ -226,7 +227,7 @@ const swell: TegakiPlugin = {
 
 ### Painting strokes
 
-`paint` gets each stroke as it's drawn (`stroke.stroke`, a stroke of [the frame](#engineframeattime) with its `path` and `progress`) and `next`, which paints it the way the rest of the chain would: the plugins after yours, then the default painter. Change what you pass to `next` (`style`, the stroke's `path`), call it more than once, draw around it, or skip it. `style` is a CSS color, a canvas gradient or pattern, or a function giving the color at each draw progress. `textBox` is the box the text's lines fill, and `scale` is px per font unit.
+`paint` gets each stroke as it's drawn (`stroke.stroke`, a stroke of [the frame](#engineframeattime) with its `path` and `progress`) and `next`, which paints it the way the rest of the chain would: the plugins after yours, then the default painter. Change what you pass to `next` (`style`, the stroke's `path`), call it more than once, draw around it, or skip it. `style` is a CSS color, a canvas gradient or pattern, or a function giving the color at each draw progress. `textBox` is the box the text's lines fill, and `scale` is px per font unit. `time` is the frame's time in seconds: with the stroke's `start` and `duration`, `time - (start + duration * t)` is about how long ago the pen passed the point at progress `t`, for ink that dries or fades.
 
 ```ts
 const shadow: TegakiPlugin = {

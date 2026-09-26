@@ -47,7 +47,9 @@ export function PluginsPanel({ settings, set }: { settings: UrlState; set: SetSe
       <DialScope className="mt-2 flex flex-col gap-3">
         <div className="flex flex-col gap-1">
           <SeedControl value={settings.seed} onChange={(v) => set('seed', v)} />
-          <Hint>What Variation strays by, and Brush lays its hairs by — the same seed draws the same every time.</Hint>
+          <Hint>
+            What Variation, Boil, Brush, Ballpoint, Sparkles and shuffled Colors draw by — the same seed draws the same every time.
+          </Hint>
         </div>
         {SHOWCASE_PLUGINS.map((p) => (
           <PluginControls
@@ -60,7 +62,10 @@ export function PluginsPanel({ settings, set }: { settings: UrlState; set: SetSe
           />
         ))}
       </DialScope>
-      <Hint>Stroke order and Brush suit kanji best — try Klee One with 永 or 書. Sound starts once you've clicked on the page.</Hint>
+      <Hint>
+        Stroke order, Brush and Practice paper's 田字格 / 米字格 suit kanji best — try Klee One with 永 or 書. Sound starts once you've
+        clicked on the page.
+      </Hint>
     </Section>
   );
 }

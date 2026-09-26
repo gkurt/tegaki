@@ -285,6 +285,8 @@ export interface PlacedStroke extends StrokeInstance {
   nibs: readonly StrokeNib[];
   /** A number fixed per glyph, for effects that vary from glyph to glyph. */
   seed: number;
+  /** Where its glyph sits — the same for every stroke of the glyph (see {@link StrokeGeometryContext.place}). */
+  place: GlyphPlacement;
 }
 
 /** What a `geometry` hook knows about the stroke it reshapes. */
@@ -362,7 +364,14 @@ export function placeStrokes(instances: readonly StrokeInstance[], ctx: PlaceCon
           },
         })
       : rawPath;
-    out.push({ ...instance, path, rawPath, nibs: strokeNibs(instance.stroke, sub, place.scale), seed: place.seed });
+    out.push({
+      ...instance,
+      path,
+      rawPath,
+      nibs: strokeNibs(instance.stroke, sub, place.scale),
+      seed: place.seed,
+      place: { x: place.x, y: place.y, scale: place.scale, ascender: place.ascender },
+    });
   }
   return out;
 }
