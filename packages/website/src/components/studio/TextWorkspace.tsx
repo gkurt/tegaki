@@ -1,6 +1,7 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TegakiBundle, TegakiRendererHandle, TimeControlProp } from 'tegaki';
 import type { PipelineResult } from 'tegaki-generator';
+import { createShowcasePlugins } from '../plugins/index.ts';
 import { TEXT_PRESETS } from '../preview/constants.ts';
 import { TegakiTextPreview } from '../preview/TegakiTextPreview.tsx';
 import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
@@ -91,6 +92,7 @@ export function TextWorkspace({
 
   playbackRef.current = { pause: () => setPlaying(false) };
 
+  const plugins = useMemo(() => createShowcasePlugins(settings.plugins), [settings.plugins]);
   const effects = useMemo(
     () => buildEffects(settings.effectsState, settings.customEffects),
     [settings.effectsState, settings.customEffects],
@@ -272,6 +274,7 @@ export function TextWorkspace({
                     effects={effects}
                     timing={timingConfig}
                     quality={settings.quality}
+                    plugins={plugins}
                     showOverlay={settings.showOverlay}
                     fontSizePx={settings.fontSizePx}
                     lineHeightRatio={settings.lineHeightRatio}

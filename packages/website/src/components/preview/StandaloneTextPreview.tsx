@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TegakiBundle, TegakiRendererHandle, TimeControlProp } from 'tegaki';
 import { type ParsedFontInfo, parseFont } from 'tegaki-generator';
+import { createShowcasePlugins } from '../plugins/index.ts';
 import { parseUrlState } from '../url-state.ts';
 import { fetchFontFromCDN } from './font-cdn.ts';
 import { TegakiTextPreview } from './TegakiTextPreview.tsx';
@@ -65,6 +66,7 @@ export function StandaloneTextPreview() {
   }, [state.fontFamily]);
 
   const effects = useMemo(() => buildEffects(state.effectsState, state.customEffects), [state.effectsState, state.customEffects]);
+  const plugins = useMemo(() => createShowcasePlugins(state.plugins), [state.plugins]);
 
   const { strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration } = state;
   const timingConfig = useMemo(
@@ -125,6 +127,7 @@ export function StandaloneTextPreview() {
         effects={effects}
         timing={timingConfig}
         quality={state.quality}
+        plugins={plugins}
         showOverlay={state.showOverlay}
         fontSizePx={state.fontSizePx}
         lineHeightRatio={state.lineHeightRatio}

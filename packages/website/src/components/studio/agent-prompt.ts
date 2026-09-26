@@ -81,7 +81,8 @@ export function nonDefaultFlags(options: PipelineOptions, geometry: GeometryOpti
 
 /** The studio link (current state) and a /preview link paused on a deterministic frame. */
 export function agentUrls(settings: UrlState, siteUrl: string): { studio: string; preview: string } {
-  const params = buildUrlParams(settings);
+  // The demo plugins draw over the render — not what an agent tuning the strokes should judge.
+  const params = buildUrlParams({ ...settings, plugins: [] });
   const studio = `${siteUrl}/studio/${params.size ? `?${params}` : ''}`;
   const preview = new URLSearchParams(params);
   for (const key of ['m', 'g', 's', 'gs']) preview.delete(key);

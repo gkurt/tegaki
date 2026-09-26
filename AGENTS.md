@@ -145,9 +145,10 @@ packages/website/
         Studio.tsx            # Root: settings state (useStudioSettings), font loading, top bar, responsive layout
         TextWorkspace.tsx     # Text preview: text field, renderer canvas, transport / playback
         GlyphWorkspace.tsx    # Glyph inspector: glyph list, stage tabs, zoomable stage, per-glyph pipeline runs
-        inspector/            # Properties panel — Style / Motion / Pipeline tabs built from DialKit controls
+        inspector/            # Properties panel — Style / Motion / Plugins / Pipeline tabs built from DialKit controls
         FontPicker.tsx ExportMenu.tsx Transport.tsx ZoomStage.tsx ui.tsx icons.tsx state.ts
       preview/                # Shared by /studio and /preview: TegakiTextPreview, stage views, export, constants
+      plugins/                # Demo TegakiPlugins for the studio's Plugins tab (pen, stroke order, brush, echo, sound)
       url-state.ts            # URL <-> state serialization (short keys, only non-defaults written)
       home/                   # Landing-page islands: Hero + Greetings, ControlledTime (scroll-linked `time="css"` + slider), Scripts, Styles, TypeIt (editable), ChatStream, Write, Finale; shared.ts (font loading, useInView, useTheme)
       LiveDemo.tsx            # Embeddable React demo used in docs
@@ -172,6 +173,8 @@ A character can be drawn with more than one glyph — contextual alternates (Cav
 Text mode draws a dashed frame around the rendered text: drag its right edge (Shift snaps to 10px, arrow keys on the handle step it), pick a width preset or type one from the width label, and Reset / double-click the handle to go back to Auto. The width is the `w` param, so `/preview` and the agent prompt wrap the text the same way ([TextFrame.tsx](packages/website/src/components/studio/TextFrame.tsx)). Hovering a character outlines it and clicking selects it; the selected character's ↗ button opens it in Glyphs mode, adding it to the character set if it's missing. The picker reads the renderer's timeline for the glyph it drew there ([glyph-cluster.ts](packages/website/src/components/studio/glyph-cluster.ts)): a ligature is outlined and picked as one, and when the glyph is one of the character's forms the button names it (`a.ss02 · calt`, `ffi ligature`) and opens that form. Character boxes are measured from the renderer's DOM text layer (`[data-tegaki="overlay"]`) with Ranges ([GlyphPicker.tsx](packages/website/src/components/studio/GlyphPicker.tsx), [glyph-hit.ts](packages/website/src/components/studio/glyph-hit.ts)).
 
 "Ask an agent" (next to Export; in the ⋯ menu on phones) copies a Markdown prompt for a coding agent — goal (generate / optimize / fix), the font, charset, non-default settings as CLI flags, the inspected glyph's warnings, and studio + `/preview` links to iterate on. It's built by the pure `buildAgentPrompt` in [agent-prompt.ts](packages/website/src/components/studio/agent-prompt.ts); keep its iteration tips in step with this file.
+
+The inspector's **Plugins** tab (Text mode) switches on demo plugins that show off the renderer's `TegakiPlugin` API, written the way a user of `tegaki` would: a fountain pen at the pen head (overlay), stroke-order numbers and arrows kept clear of the ink (underlay + overlay), a bristly brush (paint), echo passes over each stroke (paint), and a pencil scratch sound (onFrame). They live in [components/plugins/](packages/website/src/components/plugins) and are only for showing: the `pg` param carries them to `/preview`, but Export and Ask an agent leave them out.
 - `/tegaki/preview/` — a chrome-free standalone text renderer (`StandaloneTextPreview`) that reads the same URL state and renders only the text. Use this for screenshots / snapshots — no UI to crop out, and `window.__tegakiPreviewReady` / `body[data-tegaki-ready]` are set once the bundle is built so tooling can wait deterministically.
 
 The studio's Text mode has an "open in new tab" icon button next to the text field that opens the current state in `/preview` (just swaps `/studio` → `/preview` in the URL).
@@ -202,6 +205,7 @@ Common keys (non-exhaustive — `url-state.ts` is the source of truth):
 | `ol` | Show debug overlay (0/1)                                       | `ol=1`               |
 | `ghl` | Han stroke-order convention: `ja` (default, KanjiVG) or `zh` (Make Me a Hanzi) | `ghl=zh`     |
 | `fx` | Effects state as JSON                                          | `fx=%7B...%7D`       |
+| `pg` | Demo plugins switched on, comma-separated (`pen`, `order`, `brush`, `echo`, `sound`) | `pg=pen,order` |
 | `se` / `ge` | Stroke / glyph easing preset                            | `se=ease-out-cubic`  |
 | `pr` / `ss` | Render quality — pixel ratio / stroke segment size      | `pr=2&ss=1`          |
 

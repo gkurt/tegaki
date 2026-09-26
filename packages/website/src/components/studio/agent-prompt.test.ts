@@ -46,6 +46,12 @@ describe('agentUrls', () => {
     const { preview } = agentUrls({ ...URL_DEFAULTS, timeMode: 'controlled', currentTime: 1.5 }, SITE);
     expect(new URL(preview).searchParams.get('ct')).toBe('1.5');
   });
+
+  test('the demo plugins stay out of both links', () => {
+    const { studio, preview } = agentUrls({ ...URL_DEFAULTS, plugins: ['pen', 'brush'] }, SITE);
+    expect(studio).not.toContain('pg=');
+    expect(new URL(preview).searchParams.has('pg')).toBe(false);
+  });
 });
 
 describe('buildAgentPrompt', () => {

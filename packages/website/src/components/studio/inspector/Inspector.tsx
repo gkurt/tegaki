@@ -8,19 +8,22 @@ import type { SetSetting } from '../state.ts';
 import { cx, IconButton } from '../ui.tsx';
 import { MotionPanel } from './MotionPanel.tsx';
 import { PipelinePanel } from './PipelinePanel.tsx';
+import { PluginsPanel } from './PluginsPanel.tsx';
 import { StylePanel } from './StylePanel.tsx';
 
-type Tab = 'style' | 'motion' | 'pipeline';
+type Tab = 'style' | 'motion' | 'pipeline' | 'plugins';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'style', label: 'Style' },
   { key: 'motion', label: 'Motion' },
   { key: 'pipeline', label: 'Pipeline' },
+  { key: 'plugins', label: 'Plugins' },
 ];
 
 /**
  * The properties panel. Style and Motion tune the renderer (text mode only);
- * Pipeline tunes stroke extraction and what goes into the bundle.
+ * Pipeline tunes stroke extraction and what goes into the bundle; Plugins
+ * switches on demo plugins over the text (text mode only, not exported).
  */
 export function Inspector({
   mode,
@@ -79,6 +82,7 @@ export function Inspector({
       <div className="studio-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain" role="tabpanel">
         {tab === 'style' && <StylePanel settings={settings} set={set} />}
         {tab === 'motion' && <MotionPanel settings={settings} set={set} />}
+        {tab === 'plugins' && <PluginsPanel settings={settings} set={set} />}
         {tab === 'pipeline' && (
           <PipelinePanel settings={settings} set={set} fontInfo={fontInfo} charsets={charsets} onPipelineChange={onPipelineChange} />
         )}

@@ -193,3 +193,14 @@ describe('all-in-font charset in the URL', () => {
     expect(parseUrlState('?cs=all').allChars).toBe(true);
   });
 });
+
+describe('demo plugins', () => {
+  test('pg keeps the known plugins, once each, in the order they run', () => {
+    expect(parseUrlState('?pg=sound,bogus,pen,pen').plugins).toEqual(['pen', 'sound']);
+  });
+
+  test('no plugins writes no pg; some write them back as they were read', () => {
+    expect(buildUrlParams(URL_DEFAULTS).has('pg')).toBe(false);
+    expect(buildUrlParams(parseUrlState('?pg=pen,order')).get('pg')).toBe('pen,order');
+  });
+});

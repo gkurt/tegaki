@@ -7,6 +7,7 @@ import {
   type GeometryOptions,
   type PipelineOptions,
 } from 'tegaki-generator';
+import { normalizePluginIds } from './plugins/index.ts';
 import {
   EASING_PRESETS,
   GEOMETRY_STAGES,
@@ -103,6 +104,8 @@ export interface UrlState {
   staggerAdvance: string;
   /** Stagger per-glyph duration. `'auto'` keeps bundled timing; numeric string scales strokes to that many seconds. */
   staggerDuration: string;
+  /** The demo plugins switched on (ids from `SHOWCASE_PLUGINS`), in the order they run. */
+  plugins: string[];
 }
 
 /**
@@ -148,6 +151,7 @@ export const URL_DEFAULTS: UrlState = {
   staggerEnabled: false,
   staggerAdvance: '0.2',
   staggerDuration: 'auto',
+  plugins: [],
 };
 
 // Short keys for compact URLs — only non-default values are written
@@ -345,6 +349,7 @@ export function parseUrlState(search: string | URLSearchParams = window.location
   if (p.has('st')) state.staggerEnabled = p.get('st') === '1';
   if (p.has('sa')) state.staggerAdvance = p.get('sa')!;
   if (p.has('sd')) state.staggerDuration = p.get('sd')!;
+  if (p.has('pg')) state.plugins = normalizePluginIds(p.get('pg')!.split(','));
   if (p.has('pl')) state.pipeline = parseEnum(p.get('pl')!, PIPELINES, URL_DEFAULTS.pipeline);
   if (p.has('gs')) state.geometryStage = parseEnum(p.get('gs')!, GEOMETRY_STAGE_KEYS, URL_DEFAULTS.geometryStage);
 
@@ -446,6 +451,7 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
   if (state.staggerEnabled !== URL_DEFAULTS.staggerEnabled) p.set('st', '1');
   if (state.staggerAdvance !== URL_DEFAULTS.staggerAdvance) p.set('sa', state.staggerAdvance);
   if (state.staggerDuration !== URL_DEFAULTS.staggerDuration) p.set('sd', state.staggerDuration);
+  if (state.plugins.length > 0) p.set('pg', state.plugins.join(','));
   if (state.pipeline !== URL_DEFAULTS.pipeline) p.set('pl', state.pipeline);
   if (state.geometryStage !== URL_DEFAULTS.geometryStage) p.set('gs', state.geometryStage);
 

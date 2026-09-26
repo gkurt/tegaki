@@ -5,6 +5,7 @@ import {
   type TegakiEffects,
   TegakiEngine,
   type TegakiGlyphData,
+  type TegakiPlugin,
   type TegakiQuality,
   TegakiRenderer,
   type TegakiRendererHandle,
@@ -94,6 +95,8 @@ export interface TegakiTextPreviewProps {
   effects?: TegakiEffects<Record<string, any>>;
   timing?: TimelineConfig;
   quality?: TegakiQuality;
+  /** Plugins for the renderer — keep the array the same between renders unless it changes: a new one re-lays the text. */
+  plugins?: readonly TegakiPlugin[];
   showOverlay?: boolean;
   fontSizePx?: number;
   /** Multiple of the font size; null = `normal` (the font's own line spacing). */
@@ -133,6 +136,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     geometryOptions = DEFAULT_GEOMETRY_OPTIONS,
     time,
     effects,
+    plugins,
     timing,
     quality,
     showOverlay,
@@ -500,6 +504,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       showOverlay={showOverlay}
       effects={effects}
       quality={quality}
+      plugins={plugins}
       timing={timing}
       shaper={useShaper}
       onChangeTimeline={handleTimelineChange}
