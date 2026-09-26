@@ -1,3 +1,6 @@
+import type { StrokePaint } from '../lib/paintStroke.ts';
+import type { Box, StrokePath } from '../lib/strokePath.ts';
+import type { GlyphPlacement, PlacedStroke, StrokeGeometryContext, TegakiFrame } from '../lib/strokeTimeline.ts';
 import type { Timeline, TimelineConfig } from '../lib/timeline.ts';
 import type { TegakiBundle, TegakiEffects } from '../types.ts';
 
@@ -144,6 +147,130 @@ export interface TegakiQuality {
 }
 
 // ---------------------------------------------------------------------------
+// Plugins
+// ---------------------------------------------------------------------------
+
+/** What every plugin hook that paints can use. */
+interface TegakiPluginContext {
+  /** Font size in px. */
+  fontSize: number;
+  /** The text's color (its CSS color). */
+  color: string;
+  /**
+   * A random number generator (0–1) seeded by the renderer and key: the
+   * same key yields the same numbers every frame, so painting doesn't flicker.
+   * Key it by what should look the same across frames, e.g. a stroke's id.
+   */
+  random(key: string | number): () => number;
+}
+
+/** What `underlay` and `overlay` paint with. */
+export interface TegakiPaintContext extends TegakiPluginContext {
+  /**
+   * The canvas context, in CSS px with its origin at the top-left of the text
+   * box — the space of every stroke's path and head. Its state is saved
+   * before the call and restored after.
+   */
+  ctx: CanvasRenderingContext2D;
+  /** The frame being drawn. */
+  frame: TegakiFrame;
+}
+
+/** What a `geometry` hook knows about the stroke it reshapes. */
+export interface TegakiGeometryContext extends StrokeGeometryContext {
+  /** Font size in px. */
+  fontSize: number;
+  /** See {@link TegakiPluginContext.random}. */
+  random(key: string | number): () => number;
+}
+
+/** A glyph outline an `outline` hook reshapes: where the glyph sits, as for its strokes. */
+export interface TegakiOutlineContext {
+  place: GlyphPlacement;
+  /** The number fixed per glyph that its strokes get too. */
+  seed: number;
+  /** Font size in px. */
+  fontSize: number;
+}
+
+/** A stroke a `paint` hook paints, and how the next hook will paint it. */
+export interface TegakiStrokePaintContext extends StrokePaint, TegakiPluginContext {
+  /** The box the text's lines fill, in the same px as the stroke's path. */
+  textBox: Box;
+}
+
+/** What an `ink` hook post-processes. */
+export interface TegakiInkContext extends TegakiPluginContext {
+  /** The canvas context, in text-box px like the other hooks'. Draw with `setTransform(1, 0, 0, 1, 0, 0)` to work in device pixels. */
+  ctx: CanvasRenderingContext2D;
+  /** A copy of the finished ink (strokes and fallback text, clipped to the text if that's on), in device pixels, the size of the canvas. */
+  ink: HTMLCanvasElement;
+  /** px per font unit. */
+  scale: number;
+}
+
+/** What a plugin sizes its {@link TegakiPlugin.bounds} from. */
+export interface TegakiBoundsContext {
+  /** Every placed stroke, drawn yet or not. */
+  strokes: readonly PlacedStroke[];
+  /** Font size in px. */
+  fontSize: number;
+  /** px per font unit. */
+  scale: number;
+}
+
+/**
+ * Paints alongside the handwriting, reshapes it, or reacts to it. Every hook
+ * is optional. The built-in effects are plugins too, run before these, so a
+ * plugin sees the ink they make. Painting is a function of the frame alone:
+ * the renderer can draw any time, in any order (controlled time, scrubbing,
+ * CSS time).
+ */
+export interface TegakiPlugin {
+  /** Names the plugin in error messages. */
+  name: string;
+  /**
+   * Reshape a stroke's ink: move its points, change its widths. Called once
+   * per layout per stroke with the path the plugins before it made (the
+   * first gets the stroke as the bundle has it), not per frame. Return a new
+   * path; {@link StrokePath.map} keeps where the pen is exact. A dot is a
+   * path of one point.
+   */
+  geometry?(path: StrokePath, ctx: TegakiGeometryContext): StrokePath;
+  /**
+   * Reshape a glyph outline contour (points in px) the way `geometry`
+   * reshapes the glyph's strokes, for clip-to-text: a wobble moves the
+   * letter's edges with its strokes. Called once per layout.
+   */
+  outline?(contour: readonly { x: number; y: number }[], ctx: TegakiOutlineContext): { x: number; y: number }[];
+  /**
+   * Paint a stroke, every frame it's drawn. `next` paints it the way the rest
+   * of the chain does — the plugins after this one, then the default painter
+   * ({@link paintStroke}). Change what it gets (`style`, the stroke's `path`),
+   * call it more than once, draw around it, or don't call it at all.
+   */
+  paint?(stroke: TegakiStrokePaintContext, next: (stroke: TegakiStrokePaintContext) => void): void;
+  /** Post-process the finished ink every frame, before `underlay` and `overlay`: a glow, a shadow, a filter. */
+  ink?(ink: TegakiInkContext): void;
+  /** Paint under the ink. Clip-to-text doesn't clip it. */
+  underlay?(paint: TegakiPaintContext): void;
+  /** Paint over the ink. Clip-to-text doesn't clip it. */
+  overlay?(paint: TegakiPaintContext): void;
+  /**
+   * Called after every render with the frame drawn and the one drawn before
+   * it (`null` the first time) — for side effects such as sound. A render can
+   * repeat a time (a resize) or jump (a seek, a loop): compare the two frames.
+   */
+  onFrame?(frame: TegakiFrame, prev: TegakiFrame | null): void;
+  /**
+   * The box the plugin paints in over the whole animation, in the same
+   * space as ctx — the canvas grows to hold it, as it holds the ink. Keep
+   * it the same from frame to frame: the canvas is sized once, not per frame.
+   */
+  bounds?(ctx: TegakiBoundsContext): Box | null;
+}
+
+// ---------------------------------------------------------------------------
 // Engine options
 // ---------------------------------------------------------------------------
 
@@ -158,6 +285,12 @@ export interface TegakiEngineOptions {
   timing?: TimelineConfig;
   /** Render-quality knobs (supersampling, segment subdivision). */
   quality?: TegakiQuality;
+  /**
+   * Plugins that reshape or paint the ink, paint under or over it, or react
+   * to the frames drawn (see {@link TegakiPlugin}). Run in order, after the
+   * built-in effects. Not part of `toSVG`.
+   */
+  plugins?: readonly TegakiPlugin[];
   showOverlay?: boolean;
   onComplete?: () => void;
   /**

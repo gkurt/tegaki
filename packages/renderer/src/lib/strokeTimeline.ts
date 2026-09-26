@@ -1,15 +1,15 @@
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
-import type { ResolvedEffect } from './effects.ts';
 import { type SubdividedStroke, subdivideStroke } from './strokeCache.ts';
-import { defaultStrokeEasing, type StrokeEffects, strokeEffects } from './strokeEffects.ts';
+import { defaultStrokeEasing } from './strokeEffects.ts';
+import { type Box, type PathSample, StrokePath, unionBoxes } from './strokePath.ts';
 import type { Timeline, TimelineEntry } from './timeline.ts';
 import { lookupGlyphData } from './utils.ts';
 
 // The timeline one stroke at a time. `computeTimeline` schedules glyphs (an
 // entry per glyph, with per-stroke overrides for deferred dots and stagger
 // scaling); this module resolves that into when each stroke draws, and what
-// it looks like at a given time — the one clock the canvas (`drawGlyph`), the
-// SVG export and `TegakiEngine.frameAt` all read.
+// it looks like at a given time — the one clock the canvas, the SVG export and
+// `TegakiEngine.frameAt` all read.
 
 type Stroke = TegakiGlyphData['s'][number];
 
@@ -193,72 +193,183 @@ export interface GlyphPlacement {
   ascender: number;
 }
 
-/** The pen at the drawing end of a stroke, in CSS px. */
-export interface StrokeHead {
-  x: number;
-  y: number;
-  /** Direction the pen travels, in radians (y down: `π/2` points down). `0` for a dot. */
-  angle: number;
-  /** Width of the ink under the pen, in px. */
-  width: number;
-}
+/** The pen at the drawing end of a stroke, in CSS px. `angle` is `0` for a dot. */
+export type StrokeHead = PathSample;
 
 /**
- * The pen on a stroke drawn to `progress` — where the canvas ends the ink,
- * wobble, pressure width and taper included. `strokeScale` is clip-to-text's
- * width multiplier.
+ * A stroke as the bundle has it, in CSS px at `place`: its subdivided
+ * polyline, each point as wide as the bundle says (times `strokeScale`,
+ * clip-to-text's width multiplier). A point's `t` is the draw progress at
+ * which the pen reaches it. A dot — one point, or points that all coincide —
+ * is a path of one point. `null` for a stroke with no points.
  */
-export function strokeHead(
-  stroke: Stroke,
-  sub: SubdividedStroke,
-  progress: number,
-  place: GlyphPlacement,
-  fx: Pick<StrokeEffects, 'wobbleDx' | 'wobbleDy' | 'pressure' | 'taper' | 'needsPerSegment'>,
-  strokeScale = 1,
-): StrokeHead | null {
+export function rawStrokePath(stroke: Stroke, sub: SubdividedStroke, place: GlyphPlacement, strokeScale = 1): StrokePath | null {
   const pts = stroke.p;
   if (pts.length === 0) return null;
   const { scale } = place;
+  const ws = scale * strokeScale;
   const px = (x: number) => place.x + x * scale;
   const py = (y: number) => place.y + (y + place.ascender) * scale;
-  const at = (v: { x: number; y: number; idx: number }): [number, number] => [
-    px(v.x + fx.wobbleDx(v.x, v.y, v.idx)),
-    py(v.y + fx.wobbleDy(v.x, v.y, v.idx)),
-  ];
-
   const p0 = pts[0]!;
-  const isDot = pts.length === 1 || pts.every((p) => p[0] === p0[0] && p[1] === p0[1]);
-  if (isDot || sub.vertices.length < 2 || sub.totalLen <= 0) {
-    const [x, y] = at({ x: p0[0]!, y: p0[1]!, idx: 0 });
-    // A dot's width doesn't vary within it: pressure blends a width with itself.
-    return { x, y, angle: 0, width: Math.max(p0[2]!, 0.5) * scale * strokeScale * fx.taper(0.5) };
+  if (isDot(stroke) || sub.vertices.length < 2 || sub.totalLen <= 0) {
+    return new StrokePath([{ x: px(p0[0]!), y: py(p0[1]!), width: p0[2]! * ws, t: 0 }]);
   }
-
-  const { lastIdx, tail } = pointAlong(sub, sub.totalLen * progress);
-  const v = sub.vertices;
-  // The sub-segment the pen is on: the one the tail sits in, else the one it just finished.
-  const aIdx = tail ? lastIdx : Math.max(0, lastIdx - 1);
-  const [ax, ay] = at(v[aIdx]!);
-  const [bx, by] = at(v[aIdx + 1]!);
-  const head = tail ?? v[lastIdx]!;
-  const [x, y] = tail ? at(tail) : lastIdx === aIdx ? [ax, ay] : [bx, by];
-
-  const baseWidth = Math.max(sub.avgWidth, 0.5) * scale * strokeScale;
-  let width = baseWidth;
-  if (fx.needsPerSegment) {
-    const perPoint = head.width * scale * strokeScale;
-    width = Math.max(baseWidth + (perPoint - baseWidth) * fx.pressure, 0.5 * scale * strokeScale) * fx.taper(head.cumLen / sub.totalLen);
-  }
-  return { x, y, angle: Math.atan2(by - ay, bx - ax), width };
+  const inv = 1 / sub.totalLen;
+  return new StrokePath(sub.vertices.map((v) => ({ x: px(v.x), y: py(v.y), width: v.width * ws, t: v.cumLen * inv })));
 }
 
+function isDot(stroke: Stroke): boolean {
+  const pts = stroke.p;
+  const p0 = pts[0]!;
+  return pts.length === 1 || pts.every((p) => p[0] === p0[0] && p[1] === p0[1]);
+}
+
+/**
+ * A nib stamp (see `Nib`): an ellipse of ink the stroke leaves at one point,
+ * such as a calligraphic terminal. It is placed relative to the stroke's path,
+ * so it moves with the ink and swells and thins with it.
+ */
+export interface StrokeNib {
+  /** Draw progress of the point it sits on; it appears once the pen gets there. */
+  t: number;
+  /** Offset of its centre from the path's point at `t`, in px. */
+  dx: number;
+  dy: number;
+  /** Radii, as multiples of the ink's width at `t`. */
+  rx: number;
+  ry: number;
+  /** Rotation of the `rx` axis, in radians. */
+  angle: number;
+}
+
+function strokeNibs(stroke: Stroke, sub: SubdividedStroke, scale: number): StrokeNib[] {
+  const nibs = stroke.n;
+  if (!nibs) return NO_NIBS;
+  const out: StrokeNib[] = [];
+  const dot = isDot(stroke) || sub.totalLen <= 0;
+  for (const nib of nibs) {
+    const k = nib[0]!;
+    const at = stroke.p[k];
+    if (!at) continue;
+    // A radius against the width of the point it sits on, so it scales as that width does.
+    const width = Math.max(at[2]!, 0.5);
+    out.push({
+      t: dot ? 0 : (sub.pointCumLen[k] ?? 0) / sub.totalLen,
+      dx: nib[1]! * scale,
+      dy: nib[2]! * scale,
+      rx: nib[3]! / 2 / width,
+      ry: nib[4]! / 2 / width,
+      angle: nib[5]!,
+    });
+  }
+  return out;
+}
+
+const NO_NIBS: StrokeNib[] = [];
+
 // ---------------------------------------------------------------------------
-// Frames — every stroke at one moment.
+// Placed strokes and frames.
 // ---------------------------------------------------------------------------
 
+/** A stroke placed in the layout: its geometry, which doesn't change with time. */
+export interface PlacedStroke extends StrokeInstance {
+  /**
+   * The ink as the canvas draws it, in CSS px from the top-left of the text
+   * box: `rawPath` reshaped by every plugin's `geometry` (the built-in
+   * wobble, pressure width and taper among them).
+   */
+  path: StrokePath;
+  /** The stroke as the bundle has it, before any plugin reshapes it (see {@link rawStrokePath}). */
+  rawPath: StrokePath;
+  /** Nib stamps along `path`. */
+  nibs: readonly StrokeNib[];
+  /** A number fixed per glyph, for effects that vary from glyph to glyph. */
+  seed: number;
+}
+
+/** What a `geometry` hook knows about the stroke it reshapes. */
+export interface StrokeGeometryContext {
+  stroke: StrokeInstance;
+  /** The stroke as the bundle has it — the first hook's input. */
+  rawPath: StrokePath;
+  /** Where its glyph sits: px from font units are `x + fx * scale`, `y + (fy + ascender) * scale`. */
+  place: GlyphPlacement;
+  /** px of ink width per font unit of the bundle's widths: `place.scale` times clip-to-text's width multiplier. */
+  widthScale: number;
+  /** A number fixed per glyph. */
+  seed: number;
+  /** Where along the bundle's own points draw progress `t` falls: `0` at the first point, `1` at the second, and so on. */
+  bundleIndexAt(t: number): number;
+}
+
+export interface PlaceContext {
+  /**
+   * Where entry `entryIndex` is drawn, and the seed its effects use (the
+   * engine's seed plus the grapheme index). `null` for an entry the layout
+   * doesn't place; its strokes are left out.
+   */
+  placeEntry(entryIndex: number): (GlyphPlacement & { seed: number }) | null;
+  /** Reshape each stroke's `rawPath` into the ink (the plugins' `geometry` hooks). Default: the raw path. */
+  reshape?(path: StrokePath, ctx: StrokeGeometryContext): StrokePath;
+  /** The subdivision the canvas draws each stroke with. Default: the raw polyline. */
+  getSubdivided?(stroke: Stroke): SubdividedStroke;
+  /** Clip-to-text's width multiplier. Default `1`. */
+  strokeScale?: number;
+}
+
+/** The box a placed stroke's ink covers once drawn — its path and its nib stamps. `null` for an empty path. */
+export function strokeInkBounds(stroke: Pick<PlacedStroke, 'path' | 'nibs'>): Box | null {
+  const box = stroke.path.bounds();
+  if (stroke.nibs.length === 0) return box;
+  return unionBoxes([
+    box,
+    ...stroke.nibs.map((nib) => {
+      const at = stroke.path.pointAt(nib.t);
+      const r = Math.max(nib.rx, nib.ry) * at.width;
+      return { minX: at.x + nib.dx - r, minY: at.y + nib.dy - r, maxX: at.x + nib.dx + r, maxY: at.y + nib.dy + r };
+    }),
+  ]);
+}
+
+/** Place every stroke in the layout. Strokes with no points, or of glyphs the layout doesn't place, are left out. */
+export function placeStrokes(instances: readonly StrokeInstance[], ctx: PlaceContext): PlacedStroke[] {
+  const out: PlacedStroke[] = [];
+  const subdivide = ctx.getSubdivided ?? ((s: Stroke) => subdivideStroke(s, Infinity));
+  const strokeScale = ctx.strokeScale ?? 1;
+  // Instances come grouped by entry: place each glyph once.
+  let entryIndex = -1;
+  let place: (GlyphPlacement & { seed: number }) | null = null;
+  for (const instance of instances) {
+    if (instance.entryIndex !== entryIndex) {
+      entryIndex = instance.entryIndex;
+      place = ctx.placeEntry(entryIndex);
+    }
+    if (!place) continue;
+    const sub = subdivide(instance.stroke);
+    const rawPath = rawStrokePath(instance.stroke, sub, place, strokeScale);
+    if (!rawPath) continue;
+    const path = ctx.reshape
+      ? ctx.reshape(rawPath, {
+          stroke: instance,
+          rawPath,
+          place,
+          widthScale: place.scale * strokeScale,
+          seed: place.seed,
+          bundleIndexAt: (t) => {
+            if (sub.totalLen <= 0) return 0;
+            const { lastIdx, tail } = pointAlong(sub, sub.totalLen * t);
+            return (tail ?? sub.vertices[lastIdx]!).idx;
+          },
+        })
+      : rawPath;
+    out.push({ ...instance, path, rawPath, nibs: strokeNibs(instance.stroke, sub, place.scale), seed: place.seed });
+  }
+  return out;
+}
+
 /** A stroke at one moment of the timeline. */
-export interface StrokeFrame extends StrokeInstance, StrokeProgress {
-  /** The pen at the drawing end of the ink; `null` while the stroke is pending. */
+export interface StrokeFrame extends PlacedStroke, StrokeProgress {
+  /** The pen at the drawing end of the ink — `path.pointAt(progress)`; `null` while the stroke is pending. */
   head: StrokeHead | null;
 }
 
@@ -269,53 +380,22 @@ export type ActiveStroke = StrokeFrame & { head: StrokeHead };
 export interface TegakiFrame {
   /** Timeline seconds. */
   time: number;
-  /** Every laid-out stroke, in drawing order (see {@link strokeInstances}). */
+  /** Every placed stroke, in drawing order (see {@link strokeInstances}). */
   strokes: StrokeFrame[];
   /** The strokes being drawn right now — where the pens are. */
   active: ActiveStroke[];
 }
 
-export interface FrameContext {
-  timing?: StrokeTiming;
-  /**
-   * Where entry `entryIndex` is drawn, and the seed its effects use (the
-   * engine's seed plus the grapheme index). `null` for an entry the layout
-   * doesn't place; its strokes are left out of the frame.
-   */
-  placeEntry(entryIndex: number): (GlyphPlacement & { seed: number }) | null;
-  /** Effects that move the ink or change its width: wobble, pressureWidth, taper. */
-  effects?: ResolvedEffect[];
-  /** The subdivision the canvas draws each stroke with. Default: the raw polyline. */
-  getSubdivided?(stroke: Stroke): SubdividedStroke;
-  /** Clip-to-text's width multiplier. Default `1`. */
-  strokeScale?: number;
-}
-
-/** Sample every stroke at timeline time `time`. */
-export function sampleFrame(instances: readonly StrokeInstance[], time: number, ctx: FrameContext): TegakiFrame {
+/** Sample every placed stroke at timeline time `time`. */
+export function sampleFrame(placed: readonly PlacedStroke[], time: number, timing?: StrokeTiming): TegakiFrame {
   const strokes: StrokeFrame[] = [];
   const active: ActiveStroke[] = [];
-  const subdivide = ctx.getSubdivided ?? ((s: Stroke) => subdivideStroke(s, Infinity));
-  // Instances come grouped by entry: place each glyph and resolve its effects once.
-  let entryIndex = -1;
-  let place: (GlyphPlacement & { seed: number }) | null = null;
-  let fx: StrokeEffects | null = null;
-  for (const instance of instances) {
-    if (instance.entryIndex !== entryIndex) {
-      entryIndex = instance.entryIndex;
-      place = ctx.placeEntry(entryIndex);
-      fx = null;
-    }
-    if (!place) continue;
-    const sample = sampleStroke(instance, time, ctx.timing);
-    let head: StrokeHead | null = null;
-    if (sample.state !== 'pending') {
-      fx ??= strokeEffects(ctx.effects ?? [], place.seed, '');
-      head = strokeHead(instance.stroke, subdivide(instance.stroke), sample.progress, place, fx, ctx.strokeScale);
-    }
-    const frame: StrokeFrame = { ...instance, ...sample, head };
+  for (const stroke of placed) {
+    const sample = sampleStroke(stroke, time, timing);
+    const head = sample.state === 'pending' ? null : stroke.path.pointAt(sample.progress);
+    const frame: StrokeFrame = { ...stroke, ...sample, head };
     strokes.push(frame);
-    if (sample.state === 'drawing' && head) active.push(frame as ActiveStroke);
+    if (head && sample.state === 'drawing') active.push(frame as ActiveStroke);
   }
   return { time, strokes, active };
 }

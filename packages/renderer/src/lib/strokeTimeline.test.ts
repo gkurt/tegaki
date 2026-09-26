@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
-import { drawGlyph } from './drawGlyph.ts';
-import type { ResolvedEffect } from './effects.ts';
 import { subdivideStroke } from './strokeCache.ts';
-import { sampleFrame, sampleStroke, strokeHead, strokeInstances } from './strokeTimeline.ts';
+import { type PlacedStroke, placeStrokes, rawStrokePath, sampleFrame, sampleStroke, strokeInstances } from './strokeTimeline.ts';
 import { computeTimeline } from './timeline.ts';
 
 type Pt = [number, number, number];
@@ -125,12 +123,13 @@ describe('sampleStroke', () => {
   });
 });
 
-describe('strokeHead', () => {
+describe('rawStrokePath', () => {
   const sub = subdivideStroke(two.s[0]!, Infinity);
-  const noFx = { wobbleDx: () => 0, wobbleDy: () => 0, pressure: 0, taper: () => 1, needsPerSegment: false };
+  const pathOf = (g: TegakiGlyphData, si: number, at = place, strokeScale = 1) =>
+    rawStrokePath(g.s[si]!, subdivideStroke(g.s[si]!, Infinity), at, strokeScale)!;
 
-  test('sits where the ink ends, heading along the stroke', () => {
-    const head = strokeHead(two.s[0]!, sub, 0.5, { x: 10, y: 20, scale: 2, ascender: 0 }, noFx)!;
+  test('the head sits where the ink ends, heading along the stroke', () => {
+    const head = rawStrokePath(two.s[0]!, sub, { x: 10, y: 20, scale: 2, ascender: 0 })!.pointAt(0.5);
     expect(head.x).toBeCloseTo(110, 6);
     expect(head.y).toBeCloseTo(20, 6);
     expect(head.angle).toBeCloseTo(0, 6);
@@ -138,66 +137,84 @@ describe('strokeHead', () => {
   });
 
   test('a downward stroke heads down (y grows downward)', () => {
-    const head = strokeHead(two.s[1]!, subdivideStroke(two.s[1]!, Infinity), 1, place, noFx)!;
+    const head = pathOf(two, 1).pointAt(1);
     expect(head.angle).toBeCloseTo(Math.PI / 2, 6);
     expect(head.y).toBeCloseTo(100, 6);
   });
 
   test('a finished stroke keeps the direction of its last segment', () => {
-    const head = strokeHead(two.s[0]!, sub, 1, place, noFx)!;
+    const head = pathOf(two, 0).pointAt(1);
     expect(head.x).toBeCloseTo(100, 6);
     expect(head.angle).toBeCloseTo(0, 6);
   });
 
-  test('taper thins the pen as it nears the end', () => {
-    const head = strokeHead(two.s[0]!, sub, 0.9, place, { ...noFx, needsPerSegment: true, taper: (p) => 1 - p })!;
-    expect(head.width).toBeCloseTo(1, 6);
+  test("widths are the bundle's, scaled by the placement and clip-to-text's stroke scale", () => {
+    expect(pathOf(two, 0, { ...place, scale: 2 }, 1.5).points.map((p) => p.width)).toEqual([30, 30]);
   });
 
-  test('a dot is its own head', () => {
-    const head = strokeHead(dot.s[0]!, subdivideStroke(dot.s[0]!, Infinity), 1, place, noFx)!;
+  test('a dot is a single point, and its own head', () => {
+    const path = pathOf(dot, 0);
+    expect(path.points).toHaveLength(1);
+    const head = path.pointAt(1);
     expect([head.x, head.y, head.angle, head.width]).toEqual([10, 10, 0, 8]);
   });
 });
 
-describe('sampleFrame', () => {
+describe('placeStrokes reshape', () => {
+  const strokes = strokeInstances(computeTimeline('a', bundle), bundle);
+
+  test('reshape makes the ink; the raw path stays as the bundle has it', () => {
+    const [first] = placeStrokes(strokes, { placeEntry: () => place, reshape: (path) => path.map((p) => ({ ...p, x: p.x + 3 })) });
+    expect(first!.path.points[0]).toMatchObject({ x: 3, y: 0 });
+    expect(first!.rawPath.points[0]).toMatchObject({ x: 0, y: 0 });
+  });
+
+  test("bundleIndexAt maps draw progress onto the bundle's own points", () => {
+    const seen: number[] = [];
+    const fine = (s: TegakiGlyphData['s'][number]) => subdivideStroke(s, 10);
+    placeStrokes(strokes.slice(0, 1), {
+      placeEntry: () => place,
+      getSubdivided: fine,
+      reshape: (path, g) => {
+        seen.push(g.bundleIndexAt(0), g.bundleIndexAt(0.5), g.bundleIndexAt(1));
+        return path;
+      },
+    });
+    expect(seen).toEqual([0, 0.5, 1]);
+  });
+
+  test('each stroke carries its glyph seed', () => {
+    const placed = placeStrokes(strokes, { placeEntry: () => ({ ...place, seed: 9 }) });
+    expect(placed.map((s) => s.seed)).toEqual([9, 9]);
+  });
+});
+
+describe('placeStrokes / sampleFrame', () => {
   const timeline = computeTimeline('ai', bundle, { glyphGap: 0 });
   const strokes = strokeInstances(timeline, bundle);
+  const placed = placeStrokes(strokes, { placeEntry: () => place });
 
   test('pending strokes have no head; the active list holds the strokes being drawn', () => {
-    const frame = sampleFrame(strokes, 1.25, { timing: { strokeEasing: linear }, placeEntry: () => place });
+    const frame = sampleFrame(placed, 1.25, { strokeEasing: linear });
     expect(frame.strokes.map((s) => s.state)).toEqual(['done', 'drawing', 'pending']);
     expect(frame.strokes[2]!.head).toBeNull();
     expect(frame.active.map((s) => s.id)).toEqual(['0:1']);
     expect(frame.active[0]!.head.y).toBeCloseTo(50, 6);
   });
 
-  test('strokes of glyphs the layout does not place are left out', () => {
-    const frame = sampleFrame(strokes, 10, { placeEntry: (ei) => (ei === 0 ? place : null) });
-    expect(frame.strokes.map((s) => s.entry.char)).toEqual(['a', 'a']);
+  test('the head is the path at the stroke progress', () => {
+    const s = sampleFrame(placed, 1.25, { strokeEasing: linear }).active[0]!;
+    expect(s.head).toEqual(s.path.pointAt(s.progress));
   });
 
-  test('the head is where the canvas ends the ink, wobble included', () => {
-    const wobble: ResolvedEffect[] = [{ effect: 'wobble', order: 0, config: { amplitude: 4 } }];
-    const at = { x: 30, y: 40, scale: 1.5, ascender: 0, seed: 7 };
-    const frame = sampleFrame(strokes, 0.4, { timing: { strokeEasing: linear }, effects: wobble, placeEntry: () => at });
-    const head = frame.active[0]!.head;
+  test('frames share the placed paths', () => {
+    const a = sampleFrame(placed, 0.2).strokes[0]!;
+    const b = sampleFrame(placed, 0.9).strokes[0]!;
+    expect(a.path).toBe(b.path);
+  });
 
-    // A 2D context stub that keeps the last point the ink was drawn to.
-    let last: [number, number] = [NaN, NaN];
-    const ctx = new Proxy({} as Record<string, unknown>, {
-      get: (target, key) => {
-        if (key === 'lineTo') return (x: number, y: number) => (last = [x, y]);
-        return target[key as string] ?? (() => {});
-      },
-      set: (target, key, value) => {
-        target[key as string] = value;
-        return true;
-      },
-    }) as unknown as CanvasRenderingContext2D;
-    const pos = { x: at.x, y: at.y, fontSize: 150, unitsPerEm: 100, ascender: 0, descender: 0 };
-    drawGlyph(ctx, two, pos, 0.4, 'round', '#000', wobble, at.seed, undefined, linear);
-    expect(head.x).toBeCloseTo(last[0], 6);
-    expect(head.y).toBeCloseTo(last[1], 6);
+  test('strokes of glyphs the layout does not place are left out', () => {
+    const some: PlacedStroke[] = placeStrokes(strokes, { placeEntry: (ei: number) => (ei === 0 ? place : null) });
+    expect(some.map((s) => s.entry.char)).toEqual(['a', 'a']);
   });
 });

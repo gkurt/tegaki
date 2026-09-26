@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { findEffect, getEffectDefinition, hasRenderHooks, resolveEffects } from './effects.ts';
+import { findEffect, globalGradientGeometry, resolveEffects } from './effects.ts';
 import { computeLayoutBbox, type TextLayout } from './textLayout.ts';
 
 describe('resolveEffects', () => {
@@ -25,6 +25,10 @@ describe('resolveEffects', () => {
     expect(resolved).toEqual([]);
   });
 
+  test('only built-in names are inferred from a key', () => {
+    expect(resolveEffects({ pressureWidth: false, sparkle: true, toString: true } as Record<string, unknown>)).toEqual([]);
+  });
+
   test('respects `order` for sort', () => {
     const resolved = resolveEffects({
       glow: { radius: 5, order: 2 },
@@ -35,128 +39,34 @@ describe('resolveEffects', () => {
   });
 });
 
-describe('getEffectDefinition', () => {
-  test('returns a definition object for every built-in effect', () => {
-    for (const name of ['glow', 'wobble', 'pressureWidth', 'taper', 'strokeGradient', 'globalGradient']) {
-      expect(getEffectDefinition(name)).toBeDefined();
-    }
-  });
-
-  test('returns undefined for unknown names', () => {
-    expect(getEffectDefinition('sparkle')).toBeUndefined();
-    // Prototype-pollution guard: inherited properties do not count as known effects.
-    expect(getEffectDefinition('toString')).toBeUndefined();
-    expect(getEffectDefinition('__proto__')).toBeUndefined();
-  });
-
-  test('per-stroke effects declare no render hooks', () => {
-    for (const name of ['glow', 'wobble', 'pressureWidth', 'taper', 'strokeGradient']) {
-      const def = getEffectDefinition(name);
-      expect(def?.beforeRender).toBeUndefined();
-      expect(def?.afterRender).toBeUndefined();
-    }
-  });
-
-  test('globalGradient declares a beforeRender hook', () => {
-    const def = getEffectDefinition('globalGradient');
-    expect(typeof def?.beforeRender).toBe('function');
-    expect(def?.afterRender).toBeUndefined();
-  });
-});
-
-describe('hasRenderHooks', () => {
-  test('false when no resolved effect declares a hook', () => {
-    const resolved = resolveEffects({ glow: true, wobble: true });
-    expect(hasRenderHooks(resolved)).toBe(false);
-  });
-
-  test('true when globalGradient is resolved', () => {
-    const resolved = resolveEffects({ globalGradient: { colors: ['#000', '#fff'] } });
-    expect(hasRenderHooks(resolved)).toBe(true);
-  });
-
-  test('false when effects list is empty', () => {
-    expect(hasRenderHooks([])).toBe(false);
-  });
-});
-
-describe('globalGradient beforeRender', () => {
-  // Minimal fake ctx: records createLinearGradient args + collects color stops.
-  // Only the methods the hook touches are implemented.
-  function makeMockStage(bbox: { x: number; y: number; width: number; height: number }) {
-    const stops: [number, string][] = [];
-    const gradientCalls: number[][] = [];
-    const fakeGradient = {
-      addColorStop(offset: number, color: string) {
-        stops.push([offset, color]);
-      },
-    };
-    const ctx = {
-      createLinearGradient(x0: number, y0: number, x1: number, y1: number) {
-        gradientCalls.push([x0, y0, x1, y1]);
-        return fakeGradient;
-      },
-    } as unknown as CanvasRenderingContext2D;
-    const stage = {
-      ctx,
-      layout: { lines: [], charOffsets: [], charWidths: [] },
-      fontSize: 100,
-      lineHeight: 120,
-      unitsPerEm: 1000,
-      ascender: 800,
-      descender: -200,
-      bbox,
-      baseColor: '#000',
-      seed: 0,
-    } as any;
-    return { stage, stops, gradientCalls, fakeGradient };
-  }
-
-  test('no-op when colors is missing or empty', () => {
-    const { stage, gradientCalls } = makeMockStage({ x: 0, y: 0, width: 200, height: 100 });
-    getEffectDefinition('globalGradient')?.beforeRender?.(stage, {});
-    getEffectDefinition('globalGradient')?.beforeRender?.(stage, { colors: [] });
-    expect(gradientCalls).toEqual([]);
-    expect(stage.strokeStyle).toBeUndefined();
-  });
-
-  test('angle 0 (default) produces a horizontal gradient across bbox width', () => {
-    const { stage, gradientCalls, stops, fakeGradient } = makeMockStage({ x: 0, y: 0, width: 200, height: 100 });
-    getEffectDefinition('globalGradient')?.beforeRender?.(stage, { colors: ['#f00', '#00f'] });
-    // Gradient line spans the full width at y=center.
-    expect(gradientCalls).toEqual([[0, 50, 200, 50]]);
-    expect(stops).toEqual([
+describe('globalGradientGeometry', () => {
+  test('angle 0 spans the box width at its vertical centre', () => {
+    const g = globalGradientGeometry({ x: 0, y: 0, width: 200, height: 100 }, ['#f00', '#00f'], 0);
+    expect([g.x1, g.y1, g.x2, g.y2]).toEqual([0, 50, 200, 50]);
+    expect(g.stops).toEqual([
       [0, '#f00'],
       [1, '#00f'],
     ]);
-    expect(stage.strokeStyle).toBe(fakeGradient);
   });
 
-  test('angle 90 produces a vertical gradient across bbox height', () => {
-    const { stage, gradientCalls } = makeMockStage({ x: 0, y: 0, width: 200, height: 100 });
-    getEffectDefinition('globalGradient')?.beforeRender?.(stage, { colors: ['#f00', '#00f'], angle: 90 });
-    // Floating-point tolerance around sin(90°)·halfH = 50.
-    const [x0, y0, x1, y1] = gradientCalls[0] as [number, number, number, number];
-    expect(Math.abs(x0 - 100)).toBeLessThan(1e-6);
-    expect(Math.abs(x1 - 100)).toBeLessThan(1e-6);
-    expect(Math.abs(y0 - 0)).toBeLessThan(1e-6);
-    expect(Math.abs(y1 - 100)).toBeLessThan(1e-6);
+  test('angle 90 spans the box height at its horizontal centre', () => {
+    const g = globalGradientGeometry({ x: 0, y: 0, width: 200, height: 100 }, ['#f00', '#00f'], 90);
+    expect(g.x1).toBeCloseTo(100);
+    expect(g.x2).toBeCloseTo(100);
+    expect(g.y1).toBeCloseTo(0);
+    expect(g.y2).toBeCloseTo(100);
   });
 
-  test('three-stop gradient places stops at 0, 0.5, 1', () => {
-    const { stage, stops } = makeMockStage({ x: 0, y: 0, width: 300, height: 100 });
-    getEffectDefinition('globalGradient')?.beforeRender?.(stage, { colors: ['#f00', '#0f0', '#00f'] });
-    expect(stops).toEqual([
+  test('three colors stop at 0, 0.5 and 1', () => {
+    expect(globalGradientGeometry({ x: 0, y: 0, width: 300, height: 100 }, ['#f00', '#0f0', '#00f'], 0).stops).toEqual([
       [0, '#f00'],
       [0.5, '#0f0'],
       [1, '#00f'],
     ]);
   });
 
-  test('single color degenerate case emits that color at both endpoints', () => {
-    const { stage, stops } = makeMockStage({ x: 0, y: 0, width: 100, height: 50 });
-    getEffectDefinition('globalGradient')?.beforeRender?.(stage, { colors: ['#abc'] });
-    expect(stops).toEqual([
+  test('a single color fills both ends', () => {
+    expect(globalGradientGeometry({ x: 0, y: 0, width: 100, height: 50 }, ['#abc'], 0).stops).toEqual([
       [0, '#abc'],
       [1, '#abc'],
     ]);

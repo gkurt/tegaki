@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import type { ResolvedEffect } from '../lib/effects.ts';
+import { placementsToSvg, type SvgExportConfig } from '../lib/svgExport.ts';
 import type { LineCap, TegakiGlyphData } from '../types.ts';
 import { drawGlyph } from './drawGlyph.ts';
-import type { ResolvedEffect } from './effects.ts';
-import { placementsToSvg, type SvgExportConfig } from './svgExport.ts';
 
 // A bent stroke of three segments whose width varies, so pressure draws it segment by segment.
 const glyph: TegakiGlyphData = {

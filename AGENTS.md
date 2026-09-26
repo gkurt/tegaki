@@ -43,18 +43,24 @@ packages/renderer/src/
   index.ts                    # Re-exports React adapter
   types.ts                    # Shared types: Point, TimedPoint, BBox, Stroke, TegakiBundle, TegakiEffects, etc.
   core/                       # Framework-agnostic engine
-    engine.ts                 # TegakiEngine — timeline, playback, time control, bundle loading
+    engine.ts                 # TegakiEngine — timeline, playback, time control, bundle loading, frameAt(), and the render: every stroke through the plugins (types in core/types.ts)
+    plugins.ts                # Runs a plugin list's hooks as one: geometry in sequence, paint as a chain of next() ending in paintStroke
+    effectPlugins.ts          # The built-in effects as plugins (pressureWidth/taper/wobble = geometry, gradients = paint, glow = ink); run ahead of the user's
+    drawGlyph.ts              # drawGlyph() — one glyph through the same plugins, for use outside the engine
     createBundle.ts           # Builds a TegakiBundle from parts
     bundle-registry.ts        # Global bundle registry (register/lookup by family name)
     render-elements.ts        # Low-level SVG element construction
     types.ts                  # Engine-level types (TimeControlProp, effect config, etc.)
   lib/                        # Shared helpers used by both core and adapters
     timeline.ts               # computeTimeline() — per-grapheme animation schedule
-    strokeTimeline.ts         # The timeline per stroke: strokeInstances(), the one stroke clock (drawGlyph, svgExport and frameAt all read it), sampleFrame() — pen head per stroke
+    strokeTimeline.ts         # The timeline per stroke: strokeInstances(), the one stroke clock (the canvas, svgExport and frameAt all read it), placeStrokes() — each stroke's rawPath reshaped by the plugins' geometry into its ink, a StrokePath in text-box px — and sampleFrame(), the pen head per stroke
+    strokePath.ts             # StrokePath (pointAt / slice / bounds / map) and the geometry helpers plugins use: offsetPath, inkEdge, clearance, unionBoxes, expandBox
+    paintStroke.ts            # paintStroke() — the default painter: a placed stroke's path up to its progress, then its nib stamps
+    random.ts                 # seededRandom(seed, key) — deterministic per-key randomness (plugins' `random`)
     textLayout.ts             # Line breaking, advance widths, RTL/LTR
-    drawGlyph.ts              # Glyph -> SVG path drawing
     drawFallbackGlyph.ts      # Fallback when glyph missing from bundle
-    effects.ts                # Glow, wobble, pressureWidth, taper, gradient
+    effects.ts                # resolveEffects() — the `effects` option as a sorted list; globalGradient geometry
+    strokeEffects.ts          # The per-stroke effect math (wobble, taper, gradient colors, glow passes) the effect plugins and svgExport share
     strokeCache.ts            # Memoized stroke subdivision (CSS-pixel aware)
     css-properties.ts         # CSS custom property plumbing for animation state
     font.ts                   # FontFace registration helpers

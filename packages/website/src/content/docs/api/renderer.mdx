@@ -75,8 +75,17 @@ Effects configuration:
   pressureWidth?: { strength: number },
   taper?: { startLength: number, endLength: number },
   strokeGradient?: { colors: string | string[], saturation?: number, lightness?: number },
+  globalGradient?: { colors: string[], angle?: number },
 }
 ```
+
+The effects are [plugins](#plugins) built into the renderer, run ahead of your own: pressure width, taper and wobble reshape each stroke (`geometry`), the gradients choose its paint (`paint`), and glow lights up the finished ink as a whole (`ink`), so strokes don't glow over one another.
+
+### `plugins`
+
+**Type:** `readonly TegakiPlugin[]`
+
+Code that reshapes or paints the ink, paints under or over it, or runs on every frame drawn: a brush, a pen at the tip, stroke-order arrows, sound. They run after the built-in [effects](#effects). See [Plugins](#plugins). In React, keep the array stable (define it outside the component or memoize it), since a new array redraws the canvas. Plugins are functions, so the Astro component doesn't take them, and `toSVG` leaves them out.
 
 ### `style`
 
@@ -141,7 +150,16 @@ Every stroke the text draws, in the order the canvas paints them. Each one has a
 
 **Returns:** `TegakiFrame`
 
-Every stroke at `time` (default: the current time). For each stroke you get its `state` (`'pending'`, `'drawing'` or `'done'`), its eased draw `progress` (0–1), and, once it has started, a `head`: the pen at the end of the ink. The head's `x` and `y` are in CSS px from the top-left of the text box, `angle` is the direction of travel in radians (y points down), and `width` is the ink width in px. Wobble, pressure width and taper are all included. `frame.active` lists the strokes being drawn right now.
+Every stroke at `time` (default: the current time). For each stroke you get:
+
+- `state`: `'pending'`, `'drawing'` or `'done'`.
+- `progress`: the eased draw progress, 0–1.
+- `path`: the whole stroke as the canvas draws it, a [`StrokePath`](#strokepath) in CSS px from the top-left of the text box, reshaped by every plugin's `geometry` (the built-in wobble, pressure width and taper among them). `rawPath` is the stroke as the bundle has it, before any of them: unwobbled, with the bundle's own widths.
+- `nibs`: the stroke's nib stamps (blobs the pen leaves at some points), placed along `path`: `t`, an offset `dx`/`dy` in px, radii `rx`/`ry` as multiples of the ink width there, and an `angle`.
+- `seed`: a number fixed per glyph, which the built-in effects vary by.
+- `head`: once the stroke has started, the pen at the end of the ink, `path.pointAt(progress)`. It has `x` and `y`, `angle` (the direction of travel in radians, with y pointing down) and `width` (the ink width in px).
+
+`frame.active` lists the strokes being drawn right now. A stroke's `path` is the same object from frame to frame until the layout changes, so anything you compute from it can be cached against it (in a `WeakMap`, for example).
 
 The result depends only on `time`, so it works the same under controlled, uncontrolled and CSS time:
 
@@ -150,6 +168,121 @@ const frame = engine.frameAt();
 for (const stroke of frame.active) {
   pen.style.transform = `translate(${stroke.head.x}px, ${stroke.head.y}px) rotate(${stroke.head.angle}rad)`;
 }
+```
+
+## Plugins
+
+A plugin is an object with a `name` and any of these hooks:
+
+| Hook | Called | Use it for |
+|------|--------|------------|
+| `geometry(path, ctx)` | once per stroke, when the layout changes | moving the ink's points, changing its widths |
+| `paint(stroke, next)` | every frame, for each stroke drawn | a brush, a texture, a paint of your own |
+| `ink({ ctx, ink, scale, … })` | every frame, after the strokes | glows, shadows, filters over the finished ink |
+| `underlay({ ctx, frame, fontSize, color, random })` | every frame, before the ink | guides, stroke-order arrows, paper texture |
+| `overlay({ ctx, frame, fontSize, color, random })` | every frame, after the ink | a pen at the tip, highlights |
+| `onFrame(frame, prev)` | after every frame is painted | sound, events, syncing other UI |
+| `bounds({ strokes, fontSize, scale })` | when the layout changes | reserving room for what you paint outside the ink |
+| `outline(contour, ctx)` | once per glyph, with clip-to-text on | reshaping the letter shapes the ink is clipped to, in step with `geometry` |
+
+The built-in [effects](#effects) are plugins too, and run first, so each hook of yours sees what they made: `geometry` gets the path after pressure width, taper and wobble, and `paint` gets the gradient as its `style`.
+
+`ctx` is the canvas context, set up so one unit is one CSS px from the top-left of the text box. The engine saves and restores it around every hook. Underlays go on a layer of their own under the finished ink, so clip-to-text doesn't cut them. `color` is the text's color. `random(key)` returns a random number generator seeded per renderer, so the same key gives the same numbers on every frame. `prev` is the frame `onFrame` saw last, or `null` the first time.
+
+The canvas only reaches a little past the ink, so anything painted further out is cut off. Return a box (`{ minX, minY, maxX, maxY }`, in the same px) from `bounds` and the canvas grows to hold it. A hook that throws is logged once and skipped, and the rest of the render carries on.
+
+### Reshaping the ink
+
+`geometry` gets a stroke's [`StrokePath`](#strokepath) and returns the one to draw. It runs once per layout, not per frame. Build the new path with `path.map`, which keeps the pen's position exact between points. `ctx` has the stroke (`ctx.stroke`), where its glyph sits (`ctx.place`), its `rawPath` and its `seed`. A dot is a path of one point.
+
+```ts
+const swell: TegakiPlugin = {
+  name: 'swell',
+  geometry: (path) => path.map((p) => ({ ...p, width: p.width * (0.4 + 1.4 * Math.sin(Math.PI * p.t)) })),
+};
+```
+
+### Painting strokes
+
+`paint` gets each stroke as it's drawn (`stroke.stroke`, a stroke of [the frame](#engineframeattime) with its `path` and `progress`) and `next`, which paints it the way the rest of the chain would: the plugins after yours, then the default painter. Change what you pass to `next` (`style`, the stroke's `path`), call it more than once, draw around it, or skip it. `style` is a CSS color, a canvas gradient or pattern, or a function giving the color at each draw progress. `textBox` is the box the text's lines fill.
+
+```ts
+const shadow: TegakiPlugin = {
+  name: 'shadow',
+  paint(s, next) {
+    const path = s.stroke.path.map((p) => ({ ...p, x: p.x + 4, y: p.y + 4 }));
+    next({ ...s, style: 'rgba(40, 80, 200, 0.35)', stroke: { ...s.stroke, path } });
+    next(s);
+  },
+};
+```
+
+### Painting around the ink
+
+A pen at the tip:
+
+```ts
+import { expandBox, type TegakiPlugin, unionBoxes } from 'tegaki/core';
+
+const pen: TegakiPlugin = {
+  name: 'pen',
+  bounds: ({ strokes, fontSize }) => expandBox(unionBoxes(strokes.map((s) => s.path.bounds())), fontSize * 0.4),
+  overlay: ({ ctx, frame }) => {
+    for (const { head } of frame.active) {
+      ctx.save();
+      ctx.translate(head.x, head.y);
+      ctx.rotate(-Math.PI / 4);
+      ctx.drawImage(penImage, -4, -penImage.height);
+      ctx.restore();
+    }
+  },
+};
+```
+
+A tick for each stroke that starts:
+
+```ts
+const ticks: TegakiPlugin = {
+  name: 'ticks',
+  onFrame: (frame, prev) => {
+    for (const s of frame.active) {
+      const before = prev?.strokes.find((p) => p.id === s.id);
+      if (!before || before.state === 'pending') tick.play();
+    }
+  },
+};
+```
+
+Stroke-order arrows that run alongside the first part of each stroke, a gap off its ink, on whichever side is clear of the character's other strokes:
+
+```ts
+import { clearance, expandBox, inkEdge, offsetPath, type PlacedStroke, type StrokePath, type TegakiPlugin, unionBoxes } from 'tegaki/core';
+
+const arrows = new WeakMap<StrokePath, StrokePath>();
+function arrowFor(stroke: PlacedStroke, all: readonly PlacedStroke[]): StrokePath {
+  let arrow = arrows.get(stroke.path);
+  if (arrow) return arrow;
+  const others = all.filter((o) => o.entryIndex === stroke.entryIndex && o !== stroke).map((o) => o.path);
+  const lead = stroke.path.slice(0, 0.4);
+  const left = offsetPath(lead, inkEdge(5));
+  const right = offsetPath(lead, inkEdge(5, -1));
+  arrow = clearance(left.pointAt(0.5), others) >= clearance(right.pointAt(0.5), others) ? left : right;
+  arrows.set(stroke.path, arrow);
+  return arrow;
+}
+
+const strokeOrder: TegakiPlugin = {
+  name: 'stroke-order',
+  bounds: ({ strokes }) => unionBoxes(strokes.map((s) => expandBox(arrowFor(s, strokes).bounds(), 6))),
+  underlay: ({ ctx, frame }) => {
+    for (const s of frame.strokes) {
+      ctx.strokeStyle = s.state === 'pending' ? '#bbb' : '#e5484d';
+      ctx.beginPath();
+      for (const p of arrowFor(s, frame.strokes).points) ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    }
+  },
+};
 ```
 
 ## Helper functions
@@ -173,3 +306,41 @@ import { computeTimeline, strokeInstances } from 'tegaki/core';
 
 const starts = strokeInstances(computeTimeline('Hello', bundle), bundle).map((s) => s.start);
 ```
+
+### `StrokePath`
+
+A polyline of points, each with `x`, `y`, `width` (the ink width there) and `t` (the draw progress at that point, 0–1). The paths in a frame are in CSS px. `new StrokePath(points)` makes one.
+
+- `length`: the arc length in px.
+- `pointAt(t)`: the point at draw progress `t`, as `{ x, y, angle, width }`.
+- `slice(from, to)`: the part between two progress values, as a path of its own with `t` running from 0 to 1 again.
+- `bounds()`: the box the ink covers, with each point padded by half its width, or `null` for an empty path.
+- `map(fn)`: a path of the points `fn` makes from these. Between points it maps the exact pen position here, so the pen stays on the new ink (see [Reshaping the ink](#reshaping-the-ink)).
+
+### `paintStroke(stroke)`
+
+The default painter, the end of every `paint` chain: paints `stroke.stroke.path` up to its `progress` with `stroke.style` and `stroke.lineCap`, each stretch as wide as the path is there, then its nib stamps. Use it to paint a stroke outside the engine.
+
+### `offsetPath(path, distance)`
+
+A path running parallel to `path`, `distance` px to its left (negative for the right, with y pointing down). `distance` can also be a function of each point, to follow a stroke that swells and thins. Corners are mitered, or beveled when they are too sharp. Where an inside offset folds back on itself around a tight curve, the loop is cut out. Points keep the `t` of the point they came from.
+
+### `inkEdge(gap, side?)`
+
+An `offsetPath` distance that keeps `gap` px clear of the ink's edge at every point, whatever the ink's width there. `side` is `1` for the left (the default) and `-1` for the right.
+
+```ts
+const guide = offsetPath(stroke.path, inkEdge(4, -1));
+```
+
+### `clearance(point, paths)`
+
+How far `point` is from the nearest ink edge of any of `paths`, in px. It is negative inside the ink, and `Infinity` when there are no paths. Use it to pick the clear side of a stroke, or to check that a label has room.
+
+### `unionBoxes(boxes)` / `expandBox(box, by)`
+
+`unionBoxes` returns the box covering all of `boxes`, skipping `null`s (and `null` when none are left). `expandBox` grows a box by `by` px on every side. Both are handy in `bounds`.
+
+### `seededRandom(seed, key)`
+
+A random number generator for `[0, 1)` that gives the same numbers for the same `seed` and `key`. Plugins get one already seeded, as `random(key)`.

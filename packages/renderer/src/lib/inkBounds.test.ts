@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { canvasBoxStyle } from '../core/render-elements.ts';
 import type { TegakiGlyphData } from '../types.ts';
-import { effectInkMargin, resolveEffects } from './effects.ts';
 import { glyphInkBounds, inkOverflow, NO_OVERFLOW } from './inkBounds.ts';
 
 const glyph = (s: TegakiGlyphData['s']): TegakiGlyphData => ({ w: 500, t: 1, s });
@@ -56,20 +55,5 @@ describe('canvasBoxStyle', () => {
     expect(style).toMatchObject({ left: '-0.2em', right: 'calc(-0.2em - 13px)', width: 'calc(100% + 0.4em + 13px)' });
     expect(style.top).toEndWith(' - 4px)');
     expect(style.height).toEndWith(' + 4px)');
-  });
-});
-
-describe('effectInkMargin', () => {
-  test('no effects paint past the strokes', () => {
-    expect(effectInkMargin(resolveEffects(undefined), 100, 0.1)).toBe(0);
-  });
-
-  test('a glow reaches its blur radius plus its offset', () => {
-    const effects = resolveEffects({ glow: { radius: '0.1em', offsetX: 50, offsetY: -20 } });
-    expect(effectInkMargin(effects, 100, 0.1)).toBeCloseTo(10 + 5);
-  });
-
-  test('a wobble adds its amplitude', () => {
-    expect(effectInkMargin(resolveEffects({ wobble: { amplitude: 20 } }), 100, 0.1)).toBeCloseTo(2);
   });
 });

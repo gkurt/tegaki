@@ -54,6 +54,7 @@ export class TegakiElement extends HTMLElement {
   private _effects: TegakiEngineOptions['effects'];
   private _timing: TegakiEngineOptions['timing'];
   private _quality: TegakiEngineOptions['quality'];
+  private _plugins: TegakiEngineOptions['plugins'];
   private _onComplete: (() => void) | undefined;
   private _onChangeTimeline: TegakiEngineOptions['onChangeTimeline'];
 
@@ -136,6 +137,16 @@ export class TegakiElement extends HTMLElement {
     this._engine?.update(this._buildOptions());
   }
 
+  /** Plugins that paint under or over the ink, or react to the frames drawn. */
+  get plugins(): TegakiEngineOptions['plugins'] {
+    return this._plugins;
+  }
+
+  set plugins(value: TegakiEngineOptions['plugins']) {
+    this._plugins = value;
+    this._engine?.update(this._buildOptions());
+  }
+
   /** Callback when animation completes. */
   get onComplete(): (() => void) | undefined {
     return this._onComplete;
@@ -210,6 +221,7 @@ export class TegakiElement extends HTMLElement {
       effects: this._effects,
       timing: this._timing,
       quality: this._resolveQuality(),
+      plugins: this._plugins,
       showOverlay: this.hasAttribute('show-overlay'),
       direction: directionAttr === 'rtl' || directionAttr === 'ltr' ? directionAttr : undefined,
       shaper: this.hasAttribute('no-shaper') ? false : undefined,

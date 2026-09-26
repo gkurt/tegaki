@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { subdivideStroke } from '../lib/strokeCache.ts';
+import { placementsToSvg, type SvgExportConfig } from '../lib/svgExport.ts';
 import type { TegakiGlyphData } from '../types.ts';
 import { drawGlyph } from './drawGlyph.ts';
-import { subdivideStroke } from './strokeCache.ts';
-import { placementsToSvg, type SvgExportConfig } from './svgExport.ts';
 
 // A 100-unit horizontal stroke with a nib stamp at its middle point, pointing up.
 const stroke: TegakiGlyphData['s'][number] = {

@@ -9,25 +9,25 @@ import {
   registerCssProperties,
 } from '../lib/css-properties.ts';
 import { drawFallbackGlyph, fallbackTextStyle } from '../lib/drawFallbackGlyph.ts';
-import { drawGlyph } from '../lib/drawGlyph.ts';
-import {
-  effectInkMargin,
-  findEffect,
-  getEffectDefinition,
-  globalGradientGeometry,
-  hasRenderHooks,
-  type RenderStageContext,
-  type ResolvedEffect,
-  resolveEffects,
-} from '../lib/effects.ts';
+import { findEffect, globalGradientGeometry, type ResolvedEffect, resolveEffects } from '../lib/effects.ts';
 import { fallbackRuns } from '../lib/fallbackRuns.ts';
 import { LETTER_SPACED_OFF_FEATURES, toCssFeatureSettings } from '../lib/features.ts';
 import { ensureFont, ensureFontFace, fontDataUri } from '../lib/font.ts';
 import { type CanvasOverflow, glyphInkBounds, inkOverflow, NO_OVERFLOW } from '../lib/inkBounds.ts';
+import { seededRandom } from '../lib/random.ts';
 import type { BundleShaper, ShapeOptions } from '../lib/shaper.ts';
 import { type SubdividedStroke, subdivideStroke } from '../lib/strokeCache.ts';
-import { glowPasses, strokeEffects, wobbledOutline } from '../lib/strokeEffects.ts';
-import { type StrokeInstance, sampleFrame, strokeInstances, type TegakiFrame } from '../lib/strokeTimeline.ts';
+import { flattenPath } from '../lib/strokeEffects.ts';
+import { type Box, unionBoxes } from '../lib/strokePath.ts';
+import {
+  type PlacedStroke,
+  placeStrokes,
+  type StrokeInstance,
+  sampleFrame,
+  strokeInkBounds,
+  strokeInstances,
+  type TegakiFrame,
+} from '../lib/strokeTimeline.ts';
 import {
   placementsToSvg,
   type SvgExportConfig,
@@ -43,12 +43,16 @@ import { computeTimeline } from '../lib/timeline.ts';
 import { cssFontFamily, drawsFallbackGlyphs, graphemes, lookupGlyphData } from '../lib/utils.ts';
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
+import { effectPlugins } from './effectPlugins.ts';
+import { outlineWith, paintWith, reshapeWith } from './plugins.ts';
 import { buildChildren, buildRootProps, canvasBoxStyle, domCreateElement } from './render-elements.ts';
 import { getShaperForBundle, registerShaper, settledShaperForBundle } from './shaper-registry.ts';
 import type {
   CreateElementFn,
   ReducedMotionProp,
   TegakiEngineOptions,
+  TegakiPaintContext,
+  TegakiPlugin,
   TegakiQuality,
   TegakiSvgOptions,
   TimeControlMode,
@@ -216,17 +220,19 @@ export class TegakiEngine {
   private _overlayEl: HTMLElement;
   private _canvasFallbackEl: HTMLSpanElement;
   private _maskCanvas: HTMLCanvasElement | null = null;
-  /** Scratch canvas recoloring the clipped ink for each glow pass. */
-  private _glowCanvas: HTMLCanvasElement | null = null;
+  /** A copy of the finished ink, for the plugins' `ink` hooks. */
+  private _inkCanvas: HTMLCanvasElement | null = null;
   /**
-   * Parsed glyph outlines for the clip mask, by path data (and glyph seed
-   * when wobbled), for the shaper and wobble (`key`) they were built with.
+   * Glyph outlines for the clip mask, by path data — and, when an `outline`
+   * hook reshapes them, by glyph seed and place — for the shaper, plugins and
+   * subdivision they were built with.
    */
-  private _maskPaths: { shaper: BundleShaper | null; key: string; paths: Map<string, Path2D> } = {
-    shaper: null,
-    key: '',
-    paths: new Map(),
-  };
+  private _maskPaths: {
+    shaper: BundleShaper | null;
+    plugins: readonly TegakiPlugin[] | null;
+    step: number;
+    paths: Map<string, Path2D>;
+  } = { shaper: null, plugins: null, step: 0, paths: new Map() };
 
   // --- Options ---
   private _text = '';
@@ -264,6 +270,20 @@ export class TegakiEngine {
   private _strokeCacheKey = '';
   /** `strokes`, memoized for the timeline and font it was computed from. */
   private _strokes: { timeline: Timeline; font: TegakiBundle; list: StrokeInstance[] } | null = null;
+  /** `_placedStrokes()`, memoized for what places them (see there). */
+  private _placed: { deps: unknown[]; list: PlacedStroke[] } | null = null;
+  private _plugins: readonly TegakiPlugin[] = [];
+  /** The built-in effects' plugins followed by the user's, memoized for the effects and plugins they came from. */
+  private _allPluginsCache: { effects: ResolvedEffect[]; user: readonly TegakiPlugin[]; list: readonly TegakiPlugin[] } | null = null;
+  /** What the ink and the plugins' `bounds` cover, memoized for the placed strokes and plugins it was computed from. */
+  private _pluginBoundsCache: { strokes: PlacedStroke[]; plugins: readonly TegakiPlugin[]; box: Box | null } | null = null;
+  /** The text box plugins paint against, memoized for the layout it was computed from. */
+  private _textBoxCache: { layout: TextLayout; fontSize: number; lineHeight: number; box: Box } | null = null;
+  /** The frame the plugins last saw: `onFrame`'s `prev`. */
+  private _prevFrame: TegakiFrame | null = null;
+  /** Plugin hooks that threw, reported once each rather than every frame. */
+  private _pluginErrors = new Set<string>();
+  private _underlayCanvas: HTMLCanvasElement | null = null;
 
   // --- Measured from DOM ---
   private _containerWidth = 0;
@@ -430,39 +450,17 @@ export class TegakiEngine {
 
   /**
    * Every stroke at timeline time `time` (default: the current time): its
-   * state and draw progress, and for a started stroke the pen at the end of
-   * its ink — position, direction and width, wobble and taper included — in
-   * CSS px from the top-left of the text box. A pure function of time, so
-   * it holds under controlled, uncontrolled and CSS time alike. Strokes of
-   * glyphs the layout hasn't placed yet are left out.
+   * state and draw progress, its `path` (the ink as the canvas draws it, in
+   * CSS px from the top-left of the text box), and for a started stroke the
+   * pen at the end of its ink, `path.pointAt(progress)`: position, direction
+   * and width, wobble and taper included. A pure function of time, so it
+   * holds under controlled, uncontrolled and CSS time alike. Paths are the
+   * same objects from frame to frame until the layout changes, so work
+   * derived from one can be cached against it. Strokes of glyphs the layout
+   * hasn't placed yet are left out.
    */
   frameAt(time: number = this.currentTime): TegakiFrame {
-    const font = this._font;
-    const layout = this._layout;
-    const fontSize = this._fontSize;
-    if (!font?.glyphData || !layout || !fontSize) return { time, strokes: [], active: [] };
-    const lineHeight = this._lineHeight;
-    const scale = fontSize / font.unitsPerEm;
-    const halfLeading = (lineHeight - ((font.ascender - font.descender) / font.unitsPerEm) * fontSize) / 2;
-    const graphemeToLine = new Map<number, number>();
-    layout.lines.forEach((line, li) => {
-      for (const charIdx of line) graphemeToLine.set(charIdx, li);
-    });
-    const entries = this._timeline.entries;
-    const clipText = this._quality?.clipText;
-    return sampleFrame(this.strokes, time, {
-      timing: this._timing,
-      effects: this._resolvedEffects,
-      getSubdivided: this._subdivider(font, scale),
-      strokeScale: typeof clipText === 'number' ? clipText : 1,
-      placeEntry: (ei) => {
-        const entry = entries[ei]!;
-        const lineIdx = graphemeToLine.get(entry.graphemeIndex);
-        if (lineIdx === undefined) return null;
-        const { x, glyphY } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
-        return { x, y: glyphY, scale, ascender: font.ascender, seed: this._seed + entry.graphemeIndex };
-      },
-    });
+    return sampleFrame(this._placedStrokes(), time, this._timing);
   }
 
   get isPlaying(): boolean {
@@ -586,7 +584,6 @@ export class TegakiEngine {
           y: padV + baseline + style.dy,
           direction: clip?.direction ?? layout.direction ?? 'ltr',
           fill: style.fill,
-          glows: style.glows,
           at: entry.offset + entry.duration,
           clip: clip ? [clip.left > -CLIP_REACH ? padH + clip.left : null, clip.right < CLIP_REACH ? padH + clip.right : null] : undefined,
           box: [padH + boxLeft, padV + y, padH + boxRight, padV + y + lineHeight],
@@ -828,6 +825,11 @@ export class TegakiEngine {
       dirtyRender = true;
     }
 
+    if ('plugins' in options && (options.plugins ?? []) !== this._plugins) {
+      this._plugins = options.plugins ?? [];
+      dirtyRender = true;
+    }
+
     if ('fallbackFont' in options && options.fallbackFont !== this._fallbackFont) {
       this._fallbackFont = options.fallbackFont;
       dirtyLayout = true;
@@ -880,7 +882,13 @@ export class TegakiEngine {
     this._strokeCache = new WeakMap();
     this._strokeCacheKey = '';
     this._maskCanvas = null;
-    this._glowCanvas = null;
+    this._inkCanvas = null;
+    this._underlayCanvas = null;
+    this._placed = null;
+    this._allPluginsCache = null;
+    this._pluginBoundsCache = null;
+    this._textBoxCache = null;
+    this._prevFrame = null;
   }
 
   // =========================================================================
@@ -1532,7 +1540,7 @@ export class TegakiEngine {
       const clipText = this._quality?.clipText;
       const strokeScale = typeof clipText === 'number' ? clipText : 1;
       // +1px for antialiasing at the ink's edge.
-      const margin = effectInkMargin(this._resolvedEffects, fontSize, scale) + 1;
+      const margin = 1;
       const graphemeToLine = new Map<number, number>();
       layout.lines.forEach((line, li) => {
         for (const charIdx of line) graphemeToLine.set(charIdx, li);
@@ -1551,6 +1559,15 @@ export class TegakiEngine {
         ink.maxX = Math.max(ink.maxX, x + bounds.maxX * scale + reach);
         ink.minY = Math.min(ink.minY, glyphY + (bounds.minY + font.ascender) * scale - reach);
         ink.maxY = Math.max(ink.maxY, glyphY + (bounds.maxY + font.ascender) * scale + reach);
+      }
+      // The ink as the plugins reshape it (a wobble moves it), and what they
+      // paint outside it (+1px for antialiasing).
+      const pluginBox = this._pluginBounds(fontSize, scale);
+      if (pluginBox) {
+        ink.minX = Math.min(ink.minX, pluginBox.minX - 1);
+        ink.minY = Math.min(ink.minY, pluginBox.minY - 1);
+        ink.maxX = Math.max(ink.maxX, pluginBox.maxX + 1);
+        ink.maxY = Math.max(ink.maxY, pluginBox.maxY + 1);
       }
       // Into the default canvas box's frame: offset by its padding, sized
       // as the current box less the overflow it already carries.
@@ -1604,25 +1621,51 @@ export class TegakiEngine {
   }
 
   /**
-   * A `Path2D` per outline, parsed once per shaper — wobbled as its glyph's
-   * strokes are (subdivided every `segmentLengthFU`) when a wobble is on.
+   * A `Path2D` per outline for the clip mask. Without an `outline` hook,
+   * each outline's own path data in font units, parsed once per shaper and
+   * filled under its glyph's transform (`placed: false`). With one, flattened
+   * as finely as the strokes are subdivided (`segmentLengthFU`), placed in
+   * text-box px and reshaped by the hooks.
    */
-  private _outlinePaths(outlines: SvgGlyphOutline[], segmentLengthFU: number): Path2D[] {
-    const effects = this._resolvedEffects;
-    const wobble = findEffect(effects, 'wobble');
-    const key = wobble ? `${JSON.stringify(wobble.config)}|${segmentLengthFU}` : '';
-    if (this._maskPaths.shaper !== this._shaper || this._maskPaths.key !== key) {
-      this._maskPaths = { shaper: this._shaper, key, paths: new Map() };
+  private _outlinePaths(
+    outlines: SvgGlyphOutline[],
+    segmentLengthFU: number,
+    ascender: number,
+    fontSize: number,
+  ): { path: Path2D; placed: boolean }[] {
+    const plugins = this._allPlugins();
+    const reshape = outlineWith(plugins, this._reportPluginError);
+    const step = reshape ? segmentLengthFU : 0;
+    const key = reshape ? plugins : null;
+    if (this._maskPaths.shaper !== this._shaper || this._maskPaths.plugins !== key || this._maskPaths.step !== step) {
+      this._maskPaths = { shaper: this._shaper, plugins: key, step, paths: new Map() };
     }
     const cache = this._maskPaths.paths;
     return outlines.map((g) => {
-      const id = wobble ? `${g.seed ?? 0}|${g.d}` : g.d;
+      if (!reshape) {
+        let path = cache.get(g.d);
+        if (!path) cache.set(g.d, (path = new Path2D(g.d)));
+        return { path, placed: false };
+      }
+      const seed = g.seed ?? 0;
+      const id = `${seed}|${g.x}|${g.y}|${g.scale}|${g.d}`;
       let path = cache.get(id);
       if (!path) {
-        path = new Path2D(wobble ? wobbledOutline(g.d, strokeEffects(effects, g.seed ?? 0, ''), segmentLengthFU) : g.d);
+        path = new Path2D();
+        const place = { x: g.x, y: g.y - ascender * g.scale, scale: g.scale, ascender };
+        for (const contour of flattenPath(g.d, segmentLengthFU)) {
+          const pts: { x: number; y: number }[] = [];
+          for (let i = 0; i < contour.length; i += 2) pts.push({ x: g.x + contour[i]! * g.scale, y: g.y - contour[i + 1]! * g.scale });
+          const out = reshape(pts, { place, seed, fontSize });
+          for (let i = 0; i < out.length; i++) {
+            if (i === 0) path.moveTo(out[i]!.x, out[i]!.y);
+            else path.lineTo(out[i]!.x, out[i]!.y);
+          }
+          path.closePath();
+        }
         cache.set(id, path);
       }
-      return path;
+      return { path, placed: true };
     });
   }
 
@@ -1639,9 +1682,189 @@ export class TegakiEngine {
       !!findEffect(effects, 'strokeGradient') ||
       !!findEffect(effects, 'taper') ||
       (!!pressure && Math.max(0, Math.min(pressure.config.strength ?? 1, 1)) > 0);
+    const pluginsNeedSubdivision = this._plugins.some((p) => p.geometry || p.paint);
     const smoothing = this._quality?.smoothing === true;
-    const resolvedSegmentSize = this._quality?.segmentSize ?? (effectsNeedSubdivision || smoothing ? 2 : undefined);
+    const resolvedSegmentSize =
+      this._quality?.segmentSize ?? (effectsNeedSubdivision || pluginsNeedSubdivision || smoothing ? 2 : undefined);
     return { maxSegLenFU: resolvedSegmentSize != null ? resolvedSegmentSize / scale : Infinity, smoothing };
+  }
+
+  /**
+   * Every stroke placed in the current layout (see `placeStrokes`) and
+   * reshaped by the plugins' `geometry` (the built-in effects' among them),
+   * memoized for everything that moves or reshapes the ink: the strokes, the
+   * layout, font size and line height, the plugins, quality (subdivision,
+   * clip-to-text width) and the seed.
+   */
+  private _placedStrokes(): PlacedStroke[] {
+    const font = this._font;
+    const layout = this._layout;
+    const fontSize = this._fontSize;
+    if (!font?.glyphData || !layout || !fontSize) return [];
+    const strokes = this.strokes;
+    const lineHeight = this._lineHeight;
+    const plugins = this._allPlugins();
+    const deps: unknown[] = [strokes, layout, fontSize, lineHeight, plugins, this._quality, this._seed];
+    const cached = this._placed;
+    if (cached?.deps.every((d, i) => d === deps[i])) return cached.list;
+
+    const scale = fontSize / font.unitsPerEm;
+    const halfLeading = (lineHeight - ((font.ascender - font.descender) / font.unitsPerEm) * fontSize) / 2;
+    const graphemeToLine = new Map<number, number>();
+    layout.lines.forEach((line, li) => {
+      for (const charIdx of line) graphemeToLine.set(charIdx, li);
+    });
+    const entries = this._timeline.entries;
+    const clipText = this._quality?.clipText;
+    const random = (key: string | number) => seededRandom(this._seed, key);
+    const list = placeStrokes(strokes, {
+      reshape: reshapeWith(plugins, { fontSize, random }, this._reportPluginError),
+      getSubdivided: this._subdivider(font, scale),
+      strokeScale: typeof clipText === 'number' ? clipText : 1,
+      placeEntry: (ei) => {
+        const entry = entries[ei]!;
+        const lineIdx = graphemeToLine.get(entry.graphemeIndex);
+        if (lineIdx === undefined) return null;
+        const { x, glyphY } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
+        return { x, y: glyphY, scale, ascender: font.ascender, seed: this._seed + entry.graphemeIndex };
+      },
+    });
+    this._placed = { deps, list };
+    return list;
+  }
+
+  /** The built-in effects' plugins, then the user's: every plugin the engine runs, in order. */
+  private _allPlugins(): readonly TegakiPlugin[] {
+    const cached = this._allPluginsCache;
+    if (cached?.effects === this._resolvedEffects && cached.user === this._plugins) return cached.list;
+    const list = [...effectPlugins(this._resolvedEffects), ...this._plugins];
+    this._allPluginsCache = { effects: this._resolvedEffects, user: this._plugins, list };
+    return list;
+  }
+
+  /** Report a plugin hook that threw — once per plugin and hook, not every frame. */
+  private _reportPluginError = (plugin: TegakiPlugin, hook: keyof TegakiPlugin, error: unknown): void => {
+    const key = `${plugin.name}:${hook}`;
+    if (this._pluginErrors.has(key)) return;
+    this._pluginErrors.add(key);
+    console.error(`[tegaki] plugin "${plugin.name}" threw in ${hook}:`, error);
+  };
+
+  /** Run a plugin hook. One that throws is reported once and doesn't stop the render. */
+  private _runHook(plugin: TegakiPlugin, hook: keyof TegakiPlugin, fn: () => void): void {
+    try {
+      fn();
+    } catch (error) {
+      this._reportPluginError(plugin, hook, error);
+    }
+  }
+
+  /**
+   * The box the ink covers once drawn, as the plugins reshape it, together
+   * with the plugins' `bounds`, in text-box px; null with no strokes.
+   */
+  private _pluginBounds(fontSize: number, scale: number): Box | null {
+    const plugins = this._allPlugins();
+    const strokes = this._placedStrokes();
+    const cached = this._pluginBoundsCache;
+    if (cached?.strokes === strokes && cached.plugins === plugins) return cached.box;
+    const boxes: (Box | null)[] = strokes.map(strokeInkBounds);
+    for (const plugin of plugins) {
+      if (plugin.bounds) this._runHook(plugin, 'bounds', () => boxes.push(plugin.bounds!({ strokes, fontSize, scale })));
+    }
+    const box = unionBoxes(boxes);
+    this._pluginBoundsCache = { strokes, plugins, box };
+    return box;
+  }
+
+  /** The box the text's lines fill, in text-box px — what `globalGradient` spans. */
+  private _textBox(layout: TextLayout, fontSize: number, lineHeight: number): Box {
+    const cached = this._textBoxCache;
+    if (cached?.layout === layout && cached.fontSize === fontSize && cached.lineHeight === lineHeight) return cached.box;
+    const b = computeLayoutBbox(layout, fontSize, lineHeight);
+    const box = { minX: b.x, minY: b.y, maxX: b.x + b.width, maxY: b.y + b.height };
+    this._textBoxCache = { layout, fontSize, lineHeight, box };
+    return box;
+  }
+
+  /** Hand the finished ink to every `ink` hook (a copy to read, the canvas to draw on). */
+  private _renderInk(
+    ctx: CanvasRenderingContext2D,
+    plugins: readonly TegakiPlugin[],
+    fontSize: number,
+    scale: number,
+    color: string,
+  ): void {
+    const canvas = this._canvasEl;
+    if (!this._inkCanvas) this._inkCanvas = document.createElement('canvas');
+    const ink = this._inkCanvas;
+    if (ink.width !== canvas.width || ink.height !== canvas.height) {
+      ink.width = canvas.width;
+      ink.height = canvas.height;
+    }
+    const inkCtx = ink.getContext('2d')!;
+    inkCtx.globalCompositeOperation = 'copy';
+    inkCtx.drawImage(canvas, 0, 0);
+    const context = { ctx, ink, fontSize, scale, color, random: (key: string | number) => seededRandom(this._seed, key) };
+    for (const plugin of plugins) {
+      if (!plugin.ink) continue;
+      ctx.save();
+      this._runHook(plugin, 'ink', () => plugin.ink!(context));
+      ctx.restore();
+    }
+  }
+
+  /**
+   * Paint the plugins' underlays (on a canvas of their own, laid under the
+   * finished ink, so clip-to-text doesn't cut them) and overlays, then hand
+   * the frame to every `onFrame`. `ctx` is in text-box px.
+   */
+  private _renderPlugins(
+    ctx: CanvasRenderingContext2D,
+    plugins: readonly TegakiPlugin[],
+    frame: TegakiFrame,
+    fontSize: number,
+    color: string,
+  ): void {
+    const paint: TegakiPaintContext = { ctx, frame, fontSize, color, random: (key) => seededRandom(this._seed, key) };
+
+    if (plugins.some((p) => p.underlay)) {
+      const canvas = this._canvasEl;
+      if (!this._underlayCanvas) this._underlayCanvas = document.createElement('canvas');
+      const under = this._underlayCanvas;
+      if (under.width !== canvas.width || under.height !== canvas.height) {
+        under.width = canvas.width;
+        under.height = canvas.height;
+      }
+      const uctx = under.getContext('2d')!;
+      uctx.setTransform(1, 0, 0, 1, 0, 0);
+      uctx.clearRect(0, 0, under.width, under.height);
+      uctx.setTransform(ctx.getTransform());
+      for (const plugin of plugins) {
+        if (!plugin.underlay) continue;
+        uctx.save();
+        this._runHook(plugin, 'underlay', () => plugin.underlay!({ ...paint, ctx: uctx }));
+        uctx.restore();
+      }
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'destination-over';
+      ctx.drawImage(under, 0, 0);
+      ctx.restore();
+    }
+
+    for (const plugin of plugins) {
+      if (!plugin.overlay) continue;
+      ctx.save();
+      this._runHook(plugin, 'overlay', () => plugin.overlay!(paint));
+      ctx.restore();
+    }
+
+    const prev = this._prevFrame;
+    for (const plugin of plugins) {
+      if (plugin.onFrame) this._runHook(plugin, 'onFrame', () => plugin.onFrame!(frame, prev));
+    }
+    this._prevFrame = frame;
   }
 
   /**
@@ -1716,41 +1939,14 @@ export class TegakiEngine {
     // --- Subdivision cache setup (see `_subdivider`) ---
     const scale = fontSize / font.unitsPerEm;
     const { maxSegLenFU } = this._subdivision(scale);
-    const getSubdivided = this._subdivider(font, scale);
 
     const clipText = this._quality?.clipText;
-    const strokeScale = typeof clipText === 'number' ? clipText : 1;
-    // Clipped ink is drawn without its glow and glowed once clipped (see the
-    // mask below) — the clip would cut away a glow drawn with the strokes.
-    const clipGlows = clipText ? glowPasses(this._resolvedEffects, color, fontSize, scale) : [];
-    const inkEffects = clipGlows.length > 0 ? this._resolvedEffects.filter((e) => e.effect !== 'glow') : this._resolvedEffects;
-
-    // --- Render-stage hooks (pre) ---
-    // Effects that span the whole layout (vs. per-stroke) can hook the
-    // render pipeline here. The stage context is only computed when at
-    // least one resolved effect declares a hook, so the common case pays
-    // nothing.
-    const runHooks = hasRenderHooks(this._resolvedEffects);
-    const stage: RenderStageContext | null = runHooks
-      ? {
-          ctx,
-          layout,
-          fontSize,
-          lineHeight,
-          unitsPerEm: font.unitsPerEm,
-          ascender: font.ascender,
-          descender: font.descender,
-          bbox: computeLayoutBbox(layout, fontSize, lineHeight),
-          baseColor: color,
-          seed: this._seed,
-        }
-      : null;
-
-    if (stage) {
-      for (const effect of this._resolvedEffects) {
-        getEffectDefinition(effect.effect)?.beforeRender?.(stage, effect.config);
-      }
-    }
+    const plugins = this._allPlugins();
+    const random = (key: string | number) => seededRandom(this._seed, key);
+    const frame = sampleFrame(this._placedStrokes(), currentTime, this._timing);
+    const strokes = frame.strokes;
+    const paint = paintWith(plugins, this._reportPluginError);
+    const textBox = this._textBox(layout, fontSize, lineHeight);
 
     // Map grapheme index -> line index so timeline entries (which reference
     // graphemes) can be placed without re-walking the lines array per entry.
@@ -1761,45 +1957,24 @@ export class TegakiEngine {
     }
     const fallbackClips = this._fallbackRunClips(layout, characters, graphemeToLine, fontSize);
 
+    // Entry by entry, so fallback text stacks with the strokes in text order.
+    let si = 0;
     for (let ei = 0; ei < this._timeline.entries.length; ei++) {
       const entry = this._timeline.entries[ei]!;
       if (entry.char === '\n') continue;
       const charIdx = entry.graphemeIndex;
       const lineIdx = graphemeToLine[charIdx] ?? -1;
       if (lineIdx < 0) continue;
-      const { x, y, glyphY } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
-      const glyph = (entry.glyphId !== undefined ? font.glyphDataById?.[entry.glyphId] : undefined) ?? lookupGlyphData(font, entry.char);
 
-      if (glyph && entry.hasGlyph) {
-        let localTime = Math.max(0, Math.min(currentTime - entry.offset, entry.duration));
-        const glyphEasing = this._timing?.glyphEasing;
-        if (glyphEasing && entry.duration > 0) {
-          localTime = glyphEasing(localTime / entry.duration) * entry.duration;
+      if (entry.hasGlyph) {
+        while (si < strokes.length && strokes[si]!.entryIndex < ei) si++;
+        for (; si < strokes.length && strokes[si]!.entryIndex === ei; si++) {
+          const stroke = strokes[si]!;
+          if (stroke.state === 'pending') continue;
+          paint({ ctx, stroke, style: color, lineCap: font.lineCap, color, fontSize, textBox, random });
         }
-        drawGlyph(
-          ctx,
-          glyph,
-          {
-            x,
-            y: glyphY,
-            fontSize,
-            unitsPerEm: font.unitsPerEm,
-            ascender: font.ascender,
-            descender: font.descender,
-          },
-          localTime,
-          font.lineCap,
-          color,
-          inkEffects,
-          this._seed + charIdx,
-          getSubdivided,
-          this._timing?.strokeEasing,
-          strokeScale,
-          stage?.strokeStyle,
-          entry.strokeDelays,
-          entry.strokeTimeScale,
-        );
-      } else if (!entry.hasGlyph && currentTime >= entry.offset + entry.duration) {
+      } else if (currentTime >= entry.offset + entry.duration) {
+        const { x, y } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
         const baseline = y + halfLeading + (font.ascender / font.unitsPerEm) * fontSize;
         // A character in a run is drawn as the whole run, shaped together,
         // clipped to its own box — see `_fallbackRunClips`.
@@ -1819,22 +1994,11 @@ export class TegakiEngine {
           fontSize,
           cssFontFamily(font, this._fallbackFont),
           color,
-          inkEffects,
+          this._resolvedEffects,
           clip?.seed ?? this._seed + charIdx,
           clip?.direction ?? layout.direction ?? 'ltr',
         );
         if (clip) ctx.restore();
-      }
-    }
-
-    // --- Render-stage hooks (post) ---
-    // Reverse order so save/restore-style pairs nest correctly with their
-    // `beforeRender` counterparts. Runs before the clipText mask so any
-    // post-processing still gets constrained to the text shape.
-    if (stage) {
-      for (let i = this._resolvedEffects.length - 1; i >= 0; i--) {
-        const effect = this._resolvedEffects[i]!;
-        getEffectDefinition(effect.effect)?.afterRender?.(stage, effect.config);
       }
     }
 
@@ -1862,13 +2026,18 @@ export class TegakiEngine {
       maskCtx.translate(padH, padV);
       const outlines = this._glyphOutlines(graphemeToLine);
       if (outlines) {
-        const paths = this._outlinePaths(outlines, maxSegLenFU);
+        const paths = this._outlinePaths(outlines, maxSegLenFU, font.ascender, fontSize);
         for (let i = 0; i < outlines.length; i++) {
           const g = outlines[i]!;
+          const { path, placed } = paths[i]!;
+          if (placed) {
+            maskCtx.fill(path);
+            continue;
+          }
           maskCtx.save();
           maskCtx.translate(g.x, g.y);
           maskCtx.scale(g.scale, -g.scale);
-          maskCtx.fill(paths[i]!);
+          maskCtx.fill(path);
           maskCtx.restore();
         }
       }
@@ -1904,40 +2073,11 @@ export class TegakiEngine {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'destination-in';
       ctx.drawImage(maskCanvas, 0, 0);
-
-      // --- Glow the clipped ink ---
-      // Each pass lays the clipped ink, recolored in the glow color, with its
-      // shadow under the ink — what `drawGlyph` draws per stroke unclipped.
-      // The spent mask canvas keeps a copy of the clipped ink to recolor.
-      if (clipGlows.length > 0) {
-        maskCtx.setTransform(1, 0, 0, 1, 0, 0);
-        maskCtx.globalCompositeOperation = 'copy';
-        maskCtx.drawImage(canvas, 0, 0);
-        maskCtx.globalCompositeOperation = 'source-over';
-        if (!this._glowCanvas) this._glowCanvas = document.createElement('canvas');
-        const glowCanvas = this._glowCanvas;
-        if (glowCanvas.width !== canvas.width || glowCanvas.height !== canvas.height) {
-          glowCanvas.width = canvas.width;
-          glowCanvas.height = canvas.height;
-        }
-        const glowCtx = glowCanvas.getContext('2d')!;
-        // Under the ink, so the last pass goes first to end up on top of the others.
-        ctx.globalCompositeOperation = 'destination-over';
-        for (let i = clipGlows.length - 1; i >= 0; i--) {
-          const glow = clipGlows[i]!;
-          glowCtx.globalCompositeOperation = 'copy';
-          glowCtx.drawImage(maskCanvas, 0, 0);
-          glowCtx.globalCompositeOperation = 'source-in';
-          glowCtx.fillStyle = glow.color;
-          glowCtx.fillRect(0, 0, glowCanvas.width, glowCanvas.height);
-          ctx.shadowBlur = glow.blur;
-          ctx.shadowColor = glow.color;
-          ctx.shadowOffsetX = glow.dx;
-          ctx.shadowOffsetY = glow.dy;
-          ctx.drawImage(glowCanvas, 0, 0);
-        }
-      }
       ctx.restore();
     }
+
+    // --- Plugins: the finished ink (the built-in glow), then underlays, overlays, onFrame ---
+    if (plugins.some((p) => p.ink)) this._renderInk(ctx, plugins, fontSize, scale, color);
+    if (plugins.some((p) => p.underlay || p.overlay || p.onFrame)) this._renderPlugins(ctx, plugins, frame, fontSize, color);
   }
 }

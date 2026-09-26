@@ -1,7 +1,7 @@
 <script setup lang="ts" generic="E extends TegakiEffects<E> = Record<string, never>">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { TegakiEngine } from '../core/engine.ts';
-import type { ReducedMotionProp, TegakiEngineOptions, TegakiQuality, TimeControlProp } from '../core/types.ts';
+import type { ReducedMotionProp, TegakiEngineOptions, TegakiPlugin, TegakiQuality, TimeControlProp } from '../core/types.ts';
 import type { TegakiBundle, TegakiEffects } from '../types.ts';
 import type { Timeline, TimelineConfig } from '../lib/timeline.ts';
 
@@ -13,6 +13,7 @@ const props = defineProps<{
   effects?: E;
   timing?: TimelineConfig;
   quality?: TegakiQuality;
+  plugins?: readonly TegakiPlugin[];
   showOverlay?: boolean;
   onComplete?: () => void;
   onChangeTimeline?: (timeline: Timeline) => void;
@@ -33,6 +34,7 @@ const engineOptions = computed<TegakiEngineOptions>(() => ({
   reducedMotion: props.reducedMotion,
   effects: props.effects as Record<string, any>,
   quality: props.quality,
+  plugins: props.plugins,
   timing: props.timing,
   showOverlay: props.showOverlay,
   direction: props.direction,
