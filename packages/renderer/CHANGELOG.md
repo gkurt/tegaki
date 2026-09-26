@@ -1,3 +1,110 @@
+## tegaki@0.23.0
+
+### Add a Simplified Chinese bundle: LXGW WenKai
+
+`tegaki/fonts/lxgw-wenkai` draws the 1000 most frequent simplified Chinese characters (about 89% of running text), full-width Chinese punctuation and Latin. Stroke order follows the mainland convention from Make Me a Hanzi. The bundle ships only the generated subset, about 5 MB with its stroke data, not the 25 MB full font. Characters outside the set render without animation in the page's fallback font.
+
+### Bundled fonts traced from the outline, with better stroke order
+
+Every bundled font was regenerated with a new generator pipeline. Strokes are now traced from the font's outline geometry instead of a rasterized skeleton, so they follow the letter shapes more closely and leave less ink unpainted. Points of a V, pointed stroke ends and serif tips use the new nib stamps. The glyph sets and the bundle format are unchanged, but the animations look different: stroke paths, stroke counts and timings all changed.
+
+Stroke order also improved:
+
+- **Klee One:** kana and kanji follow KanjiVG stroke order wherever the strokes match. Strokes turn corners only where a brush would: 口 is drawn as the left side, then the top and right side in one stroke, then the closing bottom bar, instead of one loop.
+- **Caveat, Italianno, Tangerine and Parisienne:** Latin letters follow Hershey reference order where they match.
+- **Nanum Pen Script:** Hangul syllables follow standard jamo order: initial, then vowel, then final. That includes syllables whose jamo the font writes as a single stroke.
+- **Amiri:** a stroke that stands on another is written after it, so ط and ظ draw the bowl before the stem.
+- **Suez One:** Hebrew letters start at their top, so ה begins at its top-left corner instead of the foot of its right leg.
+- **Shaped glyphs:** contextual alternates and other glyphs drawn through shaping keep the same stroke order as their plain copies.
+
+### Smooth strokes with flat and square caps
+
+With a `butt` or `square` line cap, strokes drawn with pressure width, taper or a stroke gradient came out fringed: those effects draw each short piece of a stroke separately, and every piece showed its own flat ends. The cap now applies only at the start and end of each stroke, and the pieces join round in between, the same as with round caps. SVG export gets the same fix.
+
+### Choose the font for characters a bundle doesn't cover
+
+The new `fallbackFont` option takes a CSS font-family list, such as `'"Noto Serif SC", serif'`. It sets the font for characters the bundle has no stroke data for, which appear without a handwriting animation. Every adapter accepts it, and on `<tegaki-renderer>` it is the `fallback-font` attribute.
+
+Bundles that ship their full font now actually use it for those characters. Before, only the Astro adapter with `loadFont` registered the full font, so other adapters drew those characters in the browser's default font. The full font now downloads only once the text contains a character outside the bundle's set, so text inside the set never fetches it.
+
+### Keep glow and wobble when strokes are clipped to the text
+
+Clip-to-text masked everything drawn, effects included. A glow, which spreads past the letters, was cut away. A wobble moved the strokes, but the mask's edges stayed on the letters' outlines, so it never showed. Now the clipped ink glows after the clip, and the mask's outlines wobble in step with the strokes inside them. The canvas and SVG export both work this way, so the CLI's `--effects` glow no longer needs `--no-clip`.
+
+### Draw a word's headline after its letters
+
+Devanagari and Bengali are written letter by letter, then the headline (shirorekha) is drawn across the whole word. The timeline now supports more than one deferred stroke tier: each negative `priority` (compact `r`) is its own phase after the word's body strokes, highest first. Priorities between -1 and 0 are connecting tiers, drawn glyph to glyph with no gap so the pieces read as one line. The bundled Tillana and Atma fonts tag headlines with `-0.5`, so a word draws its letters, then its headline, then marks such as the anusvara (`-1`). Marks keep `-1`, so existing bundles animate as before, and `deferDots: false` still turns all deferral off.
+
+### Lay out RTL and mixed-direction lines the way the browser does
+
+A line containing any right-to-left character was treated as right-to-left and its words reversed. A line that opens with a Latin word, such as "Hi السلام", which `dir="auto"` lays out left to right, came out with "Hi" reversed and misplaced. Each word is now placed where the browser put it, so word order follows the browser's bidi and only the glyphs within a word follow the shaper.
+
+The clip mask also always drew left to right from x = 0, which clipped away all but the leftmost word of a right-aligned RTL line. It now draws each word at its measured position, with the paragraph's direction and letter-spacing.
+
+### Render elliptic nib stamps
+
+Bundles can now describe ink that a round pen can't reach, such as the point of a V, a pointed stroke end or a serif tip. Each such spot is an elliptic stamp the pen leaves as it passes a point. A stroke lists its stamps in an optional `n` field, one `[pointIndex, dx, dy, major, minor, angle]` entry each (the `Nib` type). The canvas renderer and SVG export draw each stamp when the pen reaches its point. Stamps follow the stroke's wobble, taper, stroke scale and color. Strokes without stamps render exactly as before, and older renderers ignore the field, so existing bundles stay compatible in both directions.
+
+### Fewer stray strokes drawn at the end of a character
+
+Some ink runs past where the stroke-order reference ends a stroke, such as a stroke that starts just above the line it crosses. The bundled fonts used to draw that ink as a separate late stroke after the rest of the character. It is now drawn as part of its stroke. 79 Nanum Pen Script syllables changed, and many more now follow standard jamo order. Caveat's E and P and 14 Klee One characters also changed, along with a few Latin letters in Parisienne, Tangerine, Italianno, Suez One and Amiri.
+
+### Handwriting animates even with reduced motion turned on
+
+The renderer now animates by default when the visitor has turned on `prefers-reduced-motion`. Ink appearing in place isn't the kind of motion (parallax, zooming, sliding) that the setting guards against.
+
+The new `reducedMotion` option chooses the behaviour. `'never'` (the default) always animates, `'user'` follows the OS setting, and `'always'` never animates. When the animation is skipped, the text is drawn finished and `onComplete` still fires. Every adapter accepts the option, and on `<tegaki-renderer>` it is the `reduced-motion` attribute. It only affects uncontrolled time.
+
+This also fixes a bug: a page opened with reduced motion already on used to draw nothing, because the renderer stopped the animation at its first frame instead of showing the finished text.
+
+### Stop drawing digits as numerators next to Arabic text
+
+The fraction features `frac`, `numr` and `dnom` were enabled for the whole text like any other substitution feature, which turns every digit into a numerator. Amiri registers `numr` for Arabic, so the browser drew "123" beside Arabic as small numerators while the handwriting drew plain digits. These features are now left to the shaper, which applies them around a fraction slash on its own, as it already does for `init`, `medi` and `fina`.
+
+### The CLI shapes text and matches the renderer's quality
+
+`npx tegaki` now shapes text with harfbuzz, compiled to WASM and bundled into the CLI (nothing extra to install). Ligatures and contextual alternates, Arabic joining, Devanagari conjuncts and matras, and right-to-left and mixed-direction text are laid out the way the renderer lays them out. Before this, Hebrew and Arabic came out reversed and unjoined. `--no-shaping` restores the old advance-width layout.
+
+Quality defaults now follow the studio:
+
+- Strokes are clipped to the letter outlines, scaled ×1.2 first (`--clip <scale>`, `--no-clip`).
+- Loop mode keeps variable stroke width (`--pressure 1`).
+
+New flags:
+
+- `--stroke-easing` / `--glyph-easing`, which take the studio's easing names.
+- `--effects <json>` for glow, wobble, taper, and stroke and global gradients.
+- `--letter-spacing` and `--seed`.
+
+The CLI warns about characters the font has no strokes for, and `atma` (Bengali) is now available.
+
+In the library:
+
+- `textToSvg` takes `shaper`, `clipText`, `effects` and `seed`.
+- `tegaki/shaper-harfbuzz` exports `createHarfbuzzShaper(bundle, fonts?)`, which builds a shaper from font bytes you already hold (for example read from disk in Node) instead of fetching them.
+
+### Shape letter-spaced text the way the browser draws it
+
+With letter-spacing set, browsers stop applying optional ligatures, and Chrome also drops contextual alternates. The overlay and clip mask then drew base letters while the shaper still picked their alternates, so the strokes didn't fit the mask (Caveat's d and o). Letter-spaced text is now shaped with `liga`, `clig`, `dlig`, `hlig` and `calt` turned off, and the overlay turns them off explicitly so every browser agrees. `BundleShaper.shape` takes a `letterSpaced` option for this, and the timeline is recomputed when the spacing changes to or from zero.
+
+### Keep ink that reaches past a glyph inside the canvas
+
+The canvas was the text box plus a fixed 0.2em margin, so ink reaching past a glyph's advance was cut off at the edge. One example is Caveat's d under negative letter-spacing, whose stem runs past the shortened advance. The canvas now grows each edge to fit the strokes' ink, including stroke width, clip-to-text scaling, glow and wobble. It sizes itself from every glyph in the text, drawn yet or not, so it holds still while the text animates.
+
+### SVG export draws what the canvas draws
+
+`TegakiEngine.toSVG()` now reproduces the canvas render instead of an approximation of it:
+
+- **Timing** — the playback speed (new `speed` option, defaulting to the engine's uncontrolled `speed`), stroke and glyph easing, deferred dots and stagger's fixed durations. Each stroke's reveal follows its eased curve as cubic Bézier segments (SMIL `keySplines` / per-keyframe CSS timing functions); the default ease-out quad is one exact segment.
+- **Effects** — taper, wobble, glow (as drop-shadow filters), `strokeGradient` and `globalGradient`, alongside pressure width and nib stamps. Loop mode now keeps variable width too.
+- **Clip-to-text** — strokes are clipped to the text's glyph outlines, taken from the harfbuzz shaper (the new optional `BundleShaper.glyphPath`), so the font need not be embedded.
+- **Fallback characters** — drawn as `<text>` in the fallback font, appearing when the canvas draws them.
+- **Square and butt caps** draw dots square, as the canvas does.
+
+New options: `loopHold` (seconds the finished text holds before a loop repeats) and `crop` — the viewBox now crops to the ink in every mode, not only in loop mode; pass `crop: false` for the full canvas box. The new async `exportSVG()` embeds the fonts an SVG's text still needs (clip-to-text without a shaper, fallback characters) as data URIs.
+
+`textToSvg` and the CLI take `speed`, `loopHold` and `crop` (`--speed`, `--loop-hold`), follow the timing config's easings, and honour an explicit `pressure` in loop mode.
+
 ## tegaki@0.22.2
 
 ### Keep rendering when a bundle's font file fails to load
