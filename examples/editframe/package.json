@@ -15,20 +15,20 @@
     "@editframe/elements": "0.58.4",
     "@editframe/react": "0.58.4",
     "@editframe/vite-plugin": "0.58.4",
-    "@tailwindcss/vite": "^4.3.2",
-    "harfbuzzjs": "^1.4.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "tailwindcss": "^4.3.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "harfbuzzjs": "^1.6.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3",
     "tegaki": "workspace:*",
     "vite-plugin-singlefile": "^2.3.3"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.3",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "typescript": "^6.0.3",
-    "vite": "^8.1.4"
+    "vite": "^8.3.1"
   }
 }

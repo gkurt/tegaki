@@ -10,7 +10,7 @@
     "wc-cdn": "bun run check-wc-cdn.ts"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.63.0",
     "@types/pngjs": "^6.0.5",
     "pngjs": "^7.0.0"
   }
