@@ -1,11 +1,17 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import type { Point } from 'tegaki';
+import { initStraightSkeleton } from './face-straight-skeleton.ts';
 import { clampWidthsToBoundary, computeSegmentAxes, computeSegmentAxis } from './medial.ts';
 import { dist, signedArea } from './primitives.ts';
 import { type AxisPoint, DEFAULT_GEOMETRY_OPTIONS, type Face, resolveGeometryOptions } from './types.ts';
 
 const OPTIONS = resolveGeometryOptions(DEFAULT_GEOMETRY_OPTIONS, 1000);
 const OPTIONS_VORONOI = resolveGeometryOptions({ ...DEFAULT_GEOMETRY_OPTIONS, medialMethod: 'voronoi' }, 1000);
+
+// OPTIONS takes the default medial method, the straight skeleton (wasm).
+beforeAll(async () => {
+  await initStraightSkeleton();
+});
 
 /** Build a cut-free Face from a polygon, oriented region-on-left. */
 function blobFace(points: Point[]): Face {

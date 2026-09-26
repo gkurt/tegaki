@@ -29,7 +29,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `bun dev --port ${PORT} --host 127.0.0.1`,
+    // --ignore-lock keeps astro in the foreground: run by a coding agent, astro 7
+    // moves `astro dev` to the background, and Playwright takes the exit for a crash.
+    command: `bun dev --port ${PORT} --host 127.0.0.1 --ignore-lock`,
     url: `${BASE_URL}/tegaki/preview/`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
