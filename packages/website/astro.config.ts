@@ -1,4 +1,6 @@
 import { EventEmitter } from 'node:events';
+import { existsSync } from 'node:fs';
+import { rename, rm } from 'node:fs/promises';
 import react from '@astrojs/react';
 import sitemap from '@astrojs/sitemap';
 import solidJs from '@astrojs/solid-js';
@@ -6,6 +8,7 @@ import starlight from '@astrojs/starlight';
 import svelte from '@astrojs/svelte';
 import vue from '@astrojs/vue';
 import tailwindcss from '@tailwindcss/vite';
+import type { AstroIntegration } from 'astro';
 import { defineConfig, fontProviders } from 'astro/config';
 import starlightThemeNova from 'starlight-theme-nova';
 
@@ -18,19 +21,43 @@ const base = '/tegaki';
 // asks for (blank without it), and /generator is a redirect to /studio.
 const UNINDEXED_PAGES = ['/preview/', '/generator/'].map((path) => `${site}${base}${path}`);
 
+/**
+ * @astrojs/sitemap always writes an index (`sitemap-index.xml`) over numbered
+ * chunks, even when every page fits in `sitemap-0.xml`. This turns that one
+ * chunk into a plain `sitemap.xml` and drops the index. Must run after sitemap().
+ */
+const singleSitemap: AstroIntegration = {
+  name: 'single-sitemap',
+  hooks: {
+    'astro:build:done': async ({ dir, logger }) => {
+      if (existsSync(new URL('sitemap-1.xml', dir))) {
+        throw new Error('The sitemap outgrew one chunk; remove singleSitemap and point robots.txt at sitemap-index.xml');
+      }
+      await rename(new URL('sitemap-0.xml', dir), new URL('sitemap.xml', dir));
+      await rm(new URL('sitemap-index.xml', dir));
+      logger.info('`sitemap.xml` written in place of the sitemap index');
+    },
+  },
+};
+
 export default defineConfig({
   site,
   base,
   integrations: [
     // Starlight adds a plain sitemap only when none is configured; this one skips the pages above.
     sitemap({ filter: (page) => !UNINDEXED_PAGES.includes(page) }),
+    singleSitemap,
     starlight({
       title: 'Tegaki',
       description:
         'Animated handwriting from any font. Generate stroke data, render beautiful writing animations in React, Svelte, Vue, SolidJS, Astro, Web Components, or vanilla JS.',
       logo: { light: './src/assets/tegaki.svg', dark: './src/assets/tegaki-dark.svg', alt: 'Tegaki logo' },
-      // Social cards need an absolute image URL; a relative one is ignored.
-      head: [{ tag: 'meta', attrs: { property: 'og:image', content: `${site}${base}/tegaki-card.png` } }],
+      head: [
+        // Social cards need an absolute image URL; a relative one is ignored.
+        { tag: 'meta', attrs: { property: 'og:image', content: `${site}${base}/tegaki-card.png` } },
+        // Replaces Starlight's default link to sitemap-index.xml (see singleSitemap).
+        { tag: 'link', attrs: { rel: 'sitemap', href: `${base}/sitemap.xml` } },
+      ],
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/gkurt/tegaki' },
         { icon: 'twitter', label: 'Twitter', href: 'https://twitter.com/gkurttech' },
