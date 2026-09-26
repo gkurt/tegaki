@@ -1,10 +1,11 @@
 /**
- * Shared helpers for the brand artwork: every mark is composed from Tegaki's
- * own stroke data (the shipped bundles) and the fonts' real outlines, so the
- * logo is literally written by the package.
+ * Shared helpers for the logo and social card (scripts/generate-logo.ts,
+ * scripts/generate-card.ts): both are composed from Tegaki's own stroke data
+ * (the shipped bundles) and the fonts' real outlines, so the artwork is
+ * literally written by the package.
  */
 import { createRequire } from 'node:module';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import type opentype from 'opentype.js';
 
 // opentype.js is a generator dependency; resolve it from there.
@@ -57,14 +58,6 @@ export const PALETTE = {
   },
 } as const;
 export type Palette = (typeof PALETTE)[keyof typeof PALETTE];
-
-export const OUT_DIR = resolve(import.meta.dir, '../../media/brand');
-
-export async function write(name: string, content: string): Promise<string> {
-  const path = join(OUT_DIR, name);
-  await Bun.write(path, content);
-  return path;
-}
 
 export const f = (n: number) => (Math.round(n * 100) / 100).toString();
 
@@ -155,22 +148,6 @@ export interface BBox {
   y1: number;
 }
 
-export function strokesBBox(strokes: readonly BundleStroke[], pad = 0): BBox {
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-  for (const s of strokes)
-    for (const [x, y, w] of s.p) {
-      const r = w / 2 + pad;
-      x0 = Math.min(x0, x - r);
-      y0 = Math.min(y0, y - r);
-      x1 = Math.max(x1, x + r);
-      y1 = Math.max(y1, y + r);
-    }
-  return { x0, y0, x1, y1 };
-}
-
 /** Transform that fits `box` centered into a square/rect of (w, h) with `margin`. */
 export function fit(box: BBox, w: number, h: number, margin: number, cx = w / 2, cy = h / 2) {
   const k = Math.min((w - 2 * margin) / (box.x1 - box.x0), (h - 2 * margin) / (box.y1 - box.y0));
@@ -207,30 +184,6 @@ export function drawStrokes(strokes: readonly BundleStroke[], o: DrawOpts): stri
 }
 
 export const STROKE_GROUP = 'fill="none" stroke-linecap="round" stroke-linejoin="round"';
-
-/** Lay out a string with a bundle's advance widths (no shaping), strokes in font units. */
-export function layoutText(
-  bundle: BundleLike,
-  text: string,
-  tracking = 0,
-): { strokes: BundleStroke[]; advance: number; perChar: BundleStroke[][] } {
-  let x = 0;
-  const strokes: BundleStroke[] = [];
-  const perChar: BundleStroke[][] = [];
-  for (const ch of text) {
-    if (ch === ' ') {
-      x += bundle.unitsPerEm * 0.25 + tracking;
-      perChar.push([]);
-      continue;
-    }
-    const g = glyph(bundle, ch);
-    const moved = g.s.map((s) => ({ ...s, p: s.p.map(([px, py, pw]) => [px + x, py, pw] as Pt) }));
-    strokes.push(...moved);
-    perChar.push(moved);
-    x += g.w + tracking;
-  }
-  return { strokes, advance: x, perChar };
-}
 
 // ---------------------------------------------------------------- fonts
 
@@ -296,40 +249,11 @@ export function textWidth(font: opentype.Font, text: string, size: number, track
   const last = run.at(-1);
   return last ? last.x + ((last.glyph.advanceWidth ?? 0) * size) / font.unitsPerEm : 0;
 }
+
 /** A glyph's real outline from the font, in the bundle's coordinate space (baseline 0, y down, 1 unit = 1 font unit). */
 export function glyphOutline(font: opentype.Font, ch: string, k = 1, dx = 0, dy = 0): string {
   const upm = font.unitsPerEm;
   return pathData(font.charToGlyph(ch).getPath(dx, dy, upm * k));
-}
-
-// ---------------------------------------------------------------- textures
-
-/** Hanko ink: speckled, slightly uneven edge. `scale` is in user units. */
-export function stampFilter(id: string, scale = 1, seed = 4): string {
-  return `<filter id="${id}" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB">
-  <feTurbulence type="fractalNoise" baseFrequency="${f(0.55 / scale)}" numOctaves="3" seed="${seed}" result="n"/>
-  <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -4.2 0 0 0 3.05" result="speck"/>
-  <feComposite in="SourceGraphic" in2="speck" operator="in" result="tex"/>
-  <feTurbulence type="fractalNoise" baseFrequency="${f(0.035 / scale)}" numOctaves="2" seed="${seed + 3}" result="warp"/>
-  <feDisplacementMap in="tex" in2="warp" scale="${f(5 * scale)}" xChannelSelector="R" yChannelSelector="G"/>
-</filter>`;
-}
-
-/** Paper fibre grain laid over a whole card. */
-export function grainFilter(id: string, opacity = 0.09, dark = false): string {
-  const a = dark ? opacity * 0.7 : opacity;
-  return `<filter id="${id}" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
-  <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" seed="11" stitchTiles="stitch"/>
-  <feColorMatrix type="matrix" values="0 0 0 0 ${dark ? 1 : 0.22}  0 0 0 0 ${dark ? 0.95 : 0.16}  0 0 0 0 ${dark ? 0.88 : 0.08}  0 0 0 ${f(a * 9)} ${f(-a * 4)}"/>
-</filter>`;
-}
-
-/** Soft ink bleed for large display strokes. */
-export function bleedFilter(id: string, scale = 1): string {
-  return `<filter id="${id}" x="-5%" y="-5%" width="110%" height="110%">
-  <feTurbulence type="fractalNoise" baseFrequency="${f(0.06 / scale)}" numOctaves="2" seed="2" result="w"/>
-  <feDisplacementMap in="SourceGraphic" in2="w" scale="${f(2.2 * scale)}" xChannelSelector="R" yChannelSelector="G"/>
-</filter>`;
 }
 
 export function svg(w: number, h: number, body: string, extra = ''): string {

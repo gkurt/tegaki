@@ -1,11 +1,10 @@
 /**
- * Text written by a bundle *at a moment of its animation*: strokes clipped to
- * the font's outlines, drawn up to time `t`, the current stroke's pen tip
- * marked. Stacking a few moments of one word (onion skin) is how the static
- * cards show motion.
+ * Text written by a bundle, laid out on its own timeline: each stroke with its
+ * start and duration, and the font's outlines to clip to. Drawing a few
+ * moments of it over one another is how the static card shows motion.
  */
 import type opentype from 'opentype.js';
-import { type BundleLike, type BundleStroke, drawStrokes, f, glyph, glyphOutline, penWidth, pointAt, STROKE_GROUP } from './lib.ts';
+import { type BundleLike, type BundleStroke, glyph, glyphOutline } from './lib.ts';
 
 export interface Timed {
   stroke: BundleStroke;
@@ -57,67 +56,6 @@ export function layoutWriting(
   return { strokes, outline, width: (pen - tracking) * k, duration: clock - GLYPH_GAP, k, dx: x, dy: y };
 }
 
-export interface MomentOpts {
-  id: string;
-  /** Seconds, or a fraction of the duration when `fraction` is set. */
-  t: number;
-  fraction?: boolean;
-  ink: string;
-  /** Colour of the stroke being written (the pen's). */
-  accent?: string;
-  ghost?: { color: string; opacity: number };
-  nib?: boolean;
-  weight?: number;
-  opacity?: number;
-  /** Translate the whole moment (onion-skin drift). */
-  shift?: [number, number];
-}
-
 export function progressAt(w: Written, t: number): number[] {
   return w.strokes.map((s) => Math.max(0, Math.min(1, (t - s.start) / s.dur)));
-}
-
-/** One moment of the writing. */
-export function moment(w: Written, o: MomentOpts): string {
-  const t = o.fraction ? o.t * w.duration : o.t;
-  const prog = progressAt(w, t);
-  const current = prog.findIndex((p) => p > 0 && p < 1);
-  let out = `<clipPath id="${o.id}-c"><path d="${w.outline}"/></clipPath>`;
-  if (o.ghost) out += `<path d="${w.outline}" fill="${o.ghost.color}" opacity="${o.ghost.opacity}"/>`;
-  out += `<g clip-path="url(#${o.id}-c)" ${STROKE_GROUP}>${drawStrokes(
-    w.strokes.map((s) => s.stroke),
-    {
-      k: w.k,
-      dx: w.dx,
-      dy: w.dy,
-      color: o.ink,
-      weight: o.weight ?? 1.6,
-      progress: (i) => prog[i]!,
-      strokeColor: (i) => (i === current && o.accent ? o.accent : undefined),
-    },
-  )}</g>`;
-  if (o.nib && current >= 0) {
-    const s = w.strokes[current]!.stroke;
-    const [px, py] = pointAt(s.p, prog[current]!);
-    const r = penWidth(s) * w.k * 0.55;
-    const cx = px * w.k + w.dx;
-    const cy = py * w.k + w.dy;
-    out += `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r * 3.2)}" fill="${o.accent ?? o.ink}" opacity="0.12"/><circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}" fill="${o.accent ?? o.ink}"/>`;
-  }
-  const attrs = [
-    o.opacity != null && o.opacity < 1 ? `opacity="${f(o.opacity)}"` : '',
-    o.shift ? `transform="translate(${f(o.shift[0])} ${f(o.shift[1])})"` : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-  return attrs ? `<g ${attrs}>${out}</g>` : out;
-}
-
-/** Where the pen is at time t (canvas px), if it's mid-stroke. */
-export function penAt(w: Written, t: number): [number, number] | null {
-  const prog = progressAt(w, t);
-  const i = prog.findIndex((p) => p > 0 && p < 1);
-  if (i < 0) return null;
-  const [px, py] = pointAt(w.strokes[i]!.stroke.p, prog[i]!);
-  return [px * w.k + w.dx, py * w.k + w.dy];
 }

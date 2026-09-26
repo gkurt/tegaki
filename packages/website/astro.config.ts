@@ -18,7 +18,7 @@ export default defineConfig({
       title: 'Tegaki',
       description:
         'Animated handwriting from any font. Generate stroke data, render beautiful writing animations in React, Svelte, Vue, SolidJS, Astro, Web Components, or vanilla JS.',
-      logo: { src: './src/assets/tegaki.svg', alt: 'Tegaki logo' },
+      logo: { light: './src/assets/tegaki.svg', dark: './src/assets/tegaki-dark.svg', alt: 'Tegaki logo' },
       head: [{ tag: 'meta', attrs: { property: 'og:image', content: '/tegaki/tegaki-card.png' } }],
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/gkurt/tegaki' },
