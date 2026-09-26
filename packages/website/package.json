@@ -27,6 +27,7 @@
     "@anthropic-ai/bedrock-sdk": "^0.33.8",
     "@astrojs/check": "^0.9.10",
     "@astrojs/react": "^7.0.0",
+    "@astrojs/sitemap": "^3.7.4",
     "@astrojs/solid-js": "^7.0.2",
     "@astrojs/starlight": "^0.42.4",
     "@astrojs/starlight-tailwind": "^5.0.0",

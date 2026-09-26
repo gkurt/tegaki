@@ -9,6 +9,7 @@ const target = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/studio/`;
     <meta charset="utf-8" />
     <meta http-equiv="refresh" content={`0; url=${target}`} />
     <link rel="canonical" href={target} />
+    <meta name="robots" content="noindex" />
     <title>Redirecting to Studio - Tegaki</title>
     <script is:inline define:vars={{ target }}>
       window.location.replace(target);

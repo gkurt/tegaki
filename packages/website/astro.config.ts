@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import react from '@astrojs/react';
+import sitemap from '@astrojs/sitemap';
 import solidJs from '@astrojs/solid-js';
 import starlight from '@astrojs/starlight';
 import svelte from '@astrojs/svelte';
@@ -10,16 +11,26 @@ import starlightThemeNova from 'starlight-theme-nova';
 
 EventEmitter.defaultMaxListeners = 12;
 
+const site = 'https://gkurt.com';
+const base = '/tegaki';
+
+// Pages kept out of search results: /preview renders only what its URL state
+// asks for (blank without it), and /generator is a redirect to /studio.
+const UNINDEXED_PAGES = ['/preview/', '/generator/'].map((path) => `${site}${base}${path}`);
+
 export default defineConfig({
-  site: 'https://gkurt.com',
-  base: '/tegaki',
+  site,
+  base,
   integrations: [
+    // Starlight adds a plain sitemap only when none is configured; this one skips the pages above.
+    sitemap({ filter: (page) => !UNINDEXED_PAGES.includes(page) }),
     starlight({
       title: 'Tegaki',
       description:
         'Animated handwriting from any font. Generate stroke data, render beautiful writing animations in React, Svelte, Vue, SolidJS, Astro, Web Components, or vanilla JS.',
       logo: { light: './src/assets/tegaki.svg', dark: './src/assets/tegaki-dark.svg', alt: 'Tegaki logo' },
-      head: [{ tag: 'meta', attrs: { property: 'og:image', content: '/tegaki/tegaki-card.png' } }],
+      // Social cards need an absolute image URL; a relative one is ignored.
+      head: [{ tag: 'meta', attrs: { property: 'og:image', content: `${site}${base}/tegaki-card.png` } }],
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/gkurt/tegaki' },
         { icon: 'twitter', label: 'Twitter', href: 'https://twitter.com/gkurttech' },

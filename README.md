@@ -5,6 +5,8 @@
 Tegaki (手書き) turns any font into animated handwriting.
 No manual path authoring. No native dependencies. Just pick a font.
 
+**[Website & docs](https://gkurt.com/tegaki/)** · **[Try it in the studio](https://gkurt.com/tegaki/studio/)**
+
 [![npm](https://img.shields.io/npm/v/tegaki)](https://www.npmjs.com/package/tegaki)
 [![license](https://img.shields.io/npm/l/tegaki)](https://github.com/gkurt/tegaki/blob/main/LICENSE)
 
