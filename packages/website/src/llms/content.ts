@@ -58,7 +58,7 @@ function keyFacts(): string[] {
     `- Any other font: generate a bundle in Tegaki Studio (${STUDIO_URL}) and import its \`bundle.ts\`.`,
     '- Rendering: a canvas draws the strokes over real DOM text, so the text stays selectable, copyable and readable by screen readers.',
     "- Time: uncontrolled (plays on its own, `speed`, `loop`, `catchUp` for streaming text), controlled (seconds or `'50%'`), or `'css'` (reads the `--tegaki-progress` custom property, e.g. from a scroll timeline).",
-    '- Effects: glow, wobble, pressure width, taper, per-stroke and whole-text gradients; custom `TegakiPlugin`s can reshape and paint strokes.',
+    '- Effects: glow, wobble, pressure width, taper, per-stroke and whole-text gradients; custom `TegakiPlugin`s can reshape and paint strokes, and `createPlugin` gives one typed options and presets.',
   ];
 }
 

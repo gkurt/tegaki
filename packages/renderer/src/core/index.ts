@@ -55,6 +55,23 @@ export type { TegakiEffectConfigs, TegakiEffects } from '../types.ts';
 export { BUNDLE_VERSION, COMPATIBLE_BUNDLE_VERSIONS } from '../types.ts';
 export { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
 export { createBundle } from './createBundle.ts';
+export {
+  changedPluginOptions,
+  createPlugin,
+  pluginDefaults,
+  resolveParam,
+  resolvePluginOptions,
+  selectValues,
+  type TegakiBooleanParam,
+  type TegakiColorParam,
+  type TegakiNumberParam,
+  type TegakiPluginDefinition,
+  type TegakiPluginFactory,
+  type TegakiPluginOptions,
+  type TegakiPluginParam,
+  type TegakiPluginParams,
+  type TegakiSelectParam,
+} from './createPlugin.ts';
 export { drawGlyph } from './drawGlyph.ts';
 export { effectPlugins } from './effectPlugins.ts';
 export { TegakiEngine } from './engine.ts';

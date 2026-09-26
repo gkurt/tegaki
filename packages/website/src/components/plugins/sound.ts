@@ -1,4 +1,4 @@
-import type { TegakiFrame, TegakiPlugin } from 'tegaki/core';
+import { createPlugin, type TegakiFrame } from 'tegaki/core';
 
 /** Timeline seconds between two frames beyond which the second is a jump (a seek, a loop), not playback. */
 const MAX_STEP = 0.25;
@@ -79,34 +79,56 @@ function hold(param: AudioParam, at: number) {
  * when frames stop coming, so pausing or switching the plugin off goes quiet.
  * Browsers start audio only after a click or key press on the page.
  */
-export function soundPlugin(): TegakiPlugin {
-  // Speed that counts as loud, learnt from the text being written.
-  let peak = 0;
-  return {
-    name: 'sound',
-    onFrame(frame, prev) {
-      const motion = penMotion(frame, prev);
-      if (!motion) return;
-      const v = voice();
-      if (!v) return;
-      if (v.audio.state === 'suspended') void v.audio.resume().catch(() => {});
-      const now = v.audio.currentTime;
-      const speed = motion.distance / motion.dt;
-      peak = Math.max(peak * 0.995, speed);
-      const level = peak > 0 ? speed / peak : 0;
-
-      hold(v.scratch.gain, now);
-      v.scratch.gain.setTargetAtTime(0.16 * level ** 0.7 * (0.8 + 0.4 * Math.random()), now, 0.015);
-      // Until the next frame says otherwise, fade out.
-      v.scratch.gain.setTargetAtTime(0, now + 0.08, 0.04);
-      hold(v.band.frequency, now);
-      v.band.frequency.setTargetAtTime(1800 + 2600 * level, now, 0.03);
-
-      if (motion.touches > 0) {
-        hold(v.tap.gain, now);
-        v.tap.gain.setValueAtTime(0.5, now);
-        v.tap.gain.setTargetAtTime(0, now, 0.018);
-      }
+export const soundPlugin = createPlugin({
+  name: 'sound',
+  label: 'Sound',
+  description: 'A pencil scratch that follows the pen, and a tap as each stroke starts. onFrame.',
+  params: {
+    volume: { type: 'number', label: 'Volume', default: 0.5, min: 0, max: 1, step: 0.05 },
+    pitch: {
+      type: 'number',
+      label: 'Pitch',
+      description: 'Higher sounds finer, like a pen; lower, like chalk.',
+      default: 1,
+      min: 0.4,
+      max: 2,
+      step: 0.05,
     },
-  };
-}
+    taps: { type: 'boolean', label: 'Taps', default: true },
+  },
+  presets: {
+    Chalk: { pitch: 0.5, volume: 0.7 },
+    'Fine pen': { pitch: 1.7, volume: 0.35, taps: false },
+  },
+  setup: ({ volume, pitch, taps }) => {
+    // Speed that counts as loud, learnt from the text being written.
+    let peak = 0;
+    const gain = volume * 2;
+    return {
+      onFrame(frame, prev) {
+        const motion = penMotion(frame, prev);
+        if (!motion) return;
+        const v = voice();
+        if (!v) return;
+        if (v.audio.state === 'suspended') void v.audio.resume().catch(() => {});
+        const now = v.audio.currentTime;
+        const speed = motion.distance / motion.dt;
+        peak = Math.max(peak * 0.995, speed);
+        const level = peak > 0 ? speed / peak : 0;
+
+        hold(v.scratch.gain, now);
+        v.scratch.gain.setTargetAtTime(0.16 * gain * level ** 0.7 * (0.8 + 0.4 * Math.random()), now, 0.015);
+        // Until the next frame says otherwise, fade out.
+        v.scratch.gain.setTargetAtTime(0, now + 0.08, 0.04);
+        hold(v.band.frequency, now);
+        v.band.frequency.setTargetAtTime((1800 + 2600 * level) * pitch, now, 0.03);
+
+        if (taps && motion.touches > 0) {
+          hold(v.tap.gain, now);
+          v.tap.gain.setValueAtTime(0.5 * gain, now);
+          v.tap.gain.setTargetAtTime(0, now, 0.018);
+        }
+      },
+    };
+  },
+});

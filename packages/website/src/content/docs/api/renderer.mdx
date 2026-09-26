@@ -290,6 +290,61 @@ const strokeOrder: TegakiPlugin = {
 };
 ```
 
+### Plugins with options: `createPlugin(definition)`
+
+`createPlugin` turns a plugin into a factory that takes options. List what the plugin can be set to in `params`, and write the hooks in `setup`, which gets every option filled in:
+
+```ts
+import { createPlugin } from 'tegaki/core';
+
+export const shadow = createPlugin({
+  name: 'shadow',
+  label: 'Shadow',
+  description: 'A tinted copy of each stroke, offset down and to the right.',
+  params: {
+    offset: { type: 'number', label: 'Offset', default: 4, min: 0, max: 20, step: 1 },
+    color: { type: 'color', label: 'Color', default: '#2850c8' },
+    under: { type: 'boolean', label: 'Under the ink', default: true },
+    cap: { type: 'select', default: 'round', options: ['round', { value: 'butt', label: 'Flat' }] },
+  },
+  presets: {
+    Deep: { offset: 12 },
+  },
+  setup: ({ offset, color, under, cap }) => ({
+    paint(s, next) {
+      const path = s.stroke.path.map((p) => ({ ...p, x: p.x + offset, y: p.y + offset }));
+      const copy = { ...s, style: color, lineCap: cap, stroke: { ...s.stroke, path } };
+      if (under) next(copy);
+      next(s);
+      if (!under) next(copy);
+    },
+  }),
+});
+
+<TegakiRenderer font={caveat} plugins={[shadow({ offset: 8 })]}>Hello</TegakiRenderer>;
+```
+
+Each call makes a new plugin with the options you pass on top of the defaults. `setup` runs once per plugin made, so a cache or other state in its closure belongs to that plugin alone. The options are typed from `params`: `offset` is a `number`, and `cap` is `'round' | 'butt'`.
+
+A param is one of four types, and each has a `default` plus an optional `label` and `description`:
+
+| `type` | Value | Also takes |
+|--------|-------|------------|
+| `'number'` | a number, kept within `min`–`max` | `min`, `max`, `step` |
+| `'boolean'` | `true` or `false` | |
+| `'select'` | one of `options` | `options`: strings, or `{ value, label }` |
+| `'color'` | a CSS color | |
+
+`presets` are named settings worth trying. Each one lists only the options it changes, and the rest keep their defaults.
+
+The factory also describes the plugin, so a UI can build its controls. The studio's Plugins tab does this for its demos:
+
+- `name`, `label`, `description`, `params`, `presets`: as defined.
+- `defaults`: every option at its default.
+- `resolve(input)`: every option set from `input`, which can be anything (JSON from a URL, say). Values that are missing, of the wrong type, or not among a select's options get their defaults, numbers are kept in range, and unknown keys are dropped. The factory resolves the options it's called with the same way.
+
+`changedPluginOptions(params, options)` returns just the options that differ from their defaults, the part worth saving. `TegakiPluginFactory` with no type argument is the type of any factory, for a list of several.
+
 ## Helper functions
 
 ### `computeTimeline(text, font, timing?, shaper?)`

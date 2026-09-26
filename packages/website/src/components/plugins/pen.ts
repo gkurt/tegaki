@@ -1,4 +1,4 @@
-import { expandBox, type StrokeFrame, type TegakiFrame, type TegakiPlugin, unionBoxes } from 'tegaki/core';
+import { createPlugin, expandBox, type StrokeFrame, type TegakiFrame, unionBoxes } from 'tegaki/core';
 
 /** Where a pen is: its tip, the way the ink under it runs, and how far off the paper it's lifted (0 on it, 1 fully up). */
 export interface PenPose {
@@ -43,30 +43,64 @@ export function penPoses(frame: TegakiFrame): PenPose[] {
   return [];
 }
 
+/** Barrel shades, light side to dark, per finish. */
+const BARRELS = {
+  blue: ['#5a79d6', '#2b4bb0', '#14286b'],
+  black: ['#5c5c66', '#26262c', '#0d0d10'],
+  burgundy: ['#b0506a', '#7a1f3a', '#420d1f'],
+  green: ['#4f9c7a', '#1f6b4c', '#0c3a27'],
+} as const;
+
+export type PenBarrel = keyof typeof BARRELS;
+
+/** How the pen looks: its length in ems, its finish, and how high it lifts between strokes, in ems. */
+export interface PenStyle {
+  size: number;
+  barrel: PenBarrel;
+  lift: number;
+}
+
 /**
  * A fountain pen writing the text: its nib on the head of each stroke being
  * drawn, held at a slant that sways a little with the direction of the ink,
  * and lifted between strokes. An `overlay`, so clip-to-text doesn't cut it;
  * `bounds` makes room for its length above the ink.
  */
-export function penPlugin(): TegakiPlugin {
-  return {
-    name: 'pen',
-    bounds: ({ strokes, fontSize }) => expandBox(unionBoxes(strokes.map((s) => s.path.bounds())), fontSize * 1.2),
-    overlay: ({ ctx, frame, fontSize }) => {
-      for (const pose of penPoses(frame)) drawPen(ctx, pose, fontSize);
+export const penPlugin = createPlugin({
+  name: 'pen',
+  label: 'Pen',
+  description: 'A fountain pen writes the text, lifting between strokes. overlay + bounds.',
+  params: {
+    size: { type: 'number', label: 'Size', default: 1, min: 0.5, max: 2, step: 0.1 },
+    barrel: {
+      type: 'select',
+      label: 'Barrel',
+      default: 'blue',
+      options: [
+        { value: 'blue', label: 'Blue' },
+        { value: 'black', label: 'Black' },
+        { value: 'burgundy', label: 'Burgundy' },
+        { value: 'green', label: 'Green' },
+      ],
     },
-  };
-}
+    lift: { type: 'number', label: 'Lift', default: 0.16, min: 0, max: 0.5, step: 0.02 },
+  },
+  setup: (style) => ({
+    bounds: ({ strokes, fontSize }) =>
+      expandBox(unionBoxes(strokes.map((s) => s.path.bounds())), fontSize * (0.2 + style.size + style.lift)),
+    overlay: ({ ctx, frame, fontSize }) => {
+      for (const pose of penPoses(frame)) drawPen(ctx, pose, fontSize, style);
+    },
+  }),
+});
 
-/** How far the tip rises off the paper when fully lifted, in ems. */
-const LIFT_EM = 0.16;
 /** The pen's slant: its body runs up and to the right of the tip. */
 const SLANT = -1.02;
 
-function drawPen(ctx: CanvasRenderingContext2D, pose: PenPose, fontSize: number) {
-  const L = fontSize;
-  const rise = pose.lift * LIFT_EM * fontSize;
+function drawPen(ctx: CanvasRenderingContext2D, pose: PenPose, fontSize: number, style: PenStyle) {
+  const L = fontSize * style.size;
+  const [light, mid, dark] = BARRELS[style.barrel];
+  const rise = pose.lift * style.lift * fontSize;
   const angle = SLANT + 0.12 * Math.sin(pose.angle);
 
   ctx.save();
@@ -83,16 +117,16 @@ function drawPen(ctx: CanvasRenderingContext2D, pose: PenPose, fontSize: number)
   ctx.shadowBlur = (0.03 + 0.05 * pose.lift) * L * px;
   ctx.shadowOffsetX = (0.02 * L + rise * 0.7) * px;
   ctx.shadowOffsetY = (0.03 * L + rise) * px;
-  ctx.fillStyle = '#14286b';
+  ctx.fillStyle = dark;
   penOutline(ctx, L);
   ctx.fill();
   ctx.restore();
 
   // Barrel and cap end, shaded like a cylinder (light on its upper side).
   const barrel = ctx.createLinearGradient(0, -0.055 * L, 0, 0.055 * L);
-  barrel.addColorStop(0, '#5a79d6');
-  barrel.addColorStop(0.35, '#2b4bb0');
-  barrel.addColorStop(1, '#14286b');
+  barrel.addColorStop(0, light);
+  barrel.addColorStop(0.35, mid);
+  barrel.addColorStop(1, dark);
   ctx.fillStyle = barrel;
   ctx.beginPath();
   ctx.moveTo(0.33 * L, -0.052 * L);

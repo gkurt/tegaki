@@ -1,13 +1,13 @@
 import {
   type Box,
   clearance,
+  createPlugin,
   expandBox,
   inkEdge,
   offsetPath,
   paintStroke,
   type StrokeFrame,
   type StrokePath,
-  type TegakiPlugin,
   unionBoxes,
 } from 'tegaki/core';
 
@@ -22,8 +22,6 @@ const GAP = 0.06;
 const BADGE = 0.05;
 const ARROW_LENGTH = 0.45;
 const MIN_ARROW_STROKE = 0.22;
-
-const ACCENT = '#e5484d';
 
 /**
  * Lay out one glyph's stroke-order guides: for each stroke, an arrow running
@@ -88,68 +86,93 @@ export function layoutGuides(
 /**
  * Stroke order, the way a writing worksheet shows it: every stroke numbered
  * where it starts over a faint tracing of the text, an arrow beside the
- * stroke being drawn in the direction it goes (red, like its number), and a
- * faint one beside the stroke that comes next.
+ * stroke being drawn in the direction it goes (in the accent, like its
+ * number), and a faint one beside the stroke that comes next.
  */
-export function strokeOrderPlugin(): TegakiPlugin {
-  const guides = new WeakMap<StrokePath, StrokeGuide>();
-  const guideFor = (stroke: StrokeFrame, all: readonly StrokeFrame[], fontSize: number) => {
-    let guide = guides.get(stroke.path);
-    if (!guide) {
-      const glyph = all.filter((s) => s.entryIndex === stroke.entryIndex).sort((a, b) => a.strokeIndex - b.strokeIndex);
-      const near = expandBox(unionBoxes(glyph.map((s) => s.path.bounds())), fontSize * 0.5);
-      const neighbours = all.filter((s) => s.entryIndex !== stroke.entryIndex && overlaps(s.path.bounds(), near)).map((s) => s.path);
-      const laid = layoutGuides(glyph, fontSize, neighbours);
-      for (let i = 0; i < glyph.length; i++) guides.set(glyph[i]!.path, laid[i]!);
-      guide = guides.get(stroke.path)!;
-    }
-    return guide;
-  };
-
-  return {
-    name: 'stroke-order',
-    bounds: ({ strokes, fontSize }) => expandBox(unionBoxes(strokes.map((s) => s.path.bounds())), fontSize * 0.3),
-    underlay: ({ ctx, frame, color }) => {
-      ctx.globalAlpha = 0.13;
-      for (const s of frame.strokes) paintStroke({ ctx, stroke: { ...s, state: 'done', progress: 1 }, style: color, lineCap: 'round' });
+export const strokeOrderPlugin = createPlugin({
+  name: 'stroke-order',
+  label: 'Stroke order',
+  description: 'Numbers and arrows beside each stroke, kept clear of the ink, over a faint tracing of the text. underlay + overlay.',
+  params: {
+    accent: { type: 'color', label: 'Accent', default: '#e5484d' },
+    numbers: { type: 'boolean', label: 'Numbers', default: true },
+    arrows: { type: 'boolean', label: 'Arrows', default: true },
+    tracing: {
+      type: 'number',
+      label: 'Tracing',
+      description: 'How strongly the text to come shows under the ink.',
+      default: 0.13,
+      min: 0,
+      max: 0.5,
+      step: 0.01,
     },
-    overlay: ({ ctx, frame, fontSize, color }) => {
-      const badge = BADGE * fontSize;
-      const line = Math.max(1, 0.014 * fontSize);
-      let next: StrokeFrame | undefined;
-      for (const s of frame.strokes) if (s.state === 'pending' && (!next || s.start < next.start)) next = s;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (const s of frame.strokes) {
-        const { number, arrow } = guideFor(s, frame.strokes, fontSize);
-        const drawing = s.state === 'drawing';
-        if (arrow && (drawing || s === next)) {
-          ctx.globalAlpha = drawing ? 1 : 0.35;
-          drawArrow(ctx, arrow, drawing ? ACCENT : color, line, badge);
-        }
-        ctx.beginPath();
-        ctx.arc(number.x, number.y, badge, 0, Math.PI * 2);
-        if (s.state === 'pending') {
-          ctx.globalAlpha = 0.4;
-          ctx.lineWidth = line;
-          ctx.strokeStyle = color;
-          ctx.stroke();
-        } else {
-          ctx.globalAlpha = drawing ? 1 : 0.5;
-          ctx.fillStyle = drawing ? ACCENT : color;
-          ctx.fill();
-        }
-        const label = String(s.strokeIndex + 1);
-        ctx.globalAlpha = s.state === 'pending' ? 0.6 : 1;
-        ctx.fillStyle = s.state === 'pending' ? color : '#fff';
-        ctx.font = `600 ${badge * (label.length > 1 ? 1.05 : 1.3)}px system-ui, sans-serif`;
-        ctx.fillText(label, number.x, number.y + badge * 0.06);
+  },
+  presets: {
+    'Numbers only': { arrows: false, tracing: 0 },
+    'Tracing only': { numbers: false, arrows: false, tracing: 0.25 },
+  },
+  setup: ({ accent, numbers, arrows, tracing }) => {
+    const guides = new WeakMap<StrokePath, StrokeGuide>();
+    const guideFor = (stroke: StrokeFrame, all: readonly StrokeFrame[], fontSize: number) => {
+      let guide = guides.get(stroke.path);
+      if (!guide) {
+        const glyph = all.filter((s) => s.entryIndex === stroke.entryIndex).sort((a, b) => a.strokeIndex - b.strokeIndex);
+        const near = expandBox(unionBoxes(glyph.map((s) => s.path.bounds())), fontSize * 0.5);
+        const neighbours = all.filter((s) => s.entryIndex !== stroke.entryIndex && overlaps(s.path.bounds(), near)).map((s) => s.path);
+        const laid = layoutGuides(glyph, fontSize, neighbours);
+        for (let i = 0; i < glyph.length; i++) guides.set(glyph[i]!.path, laid[i]!);
+        guide = guides.get(stroke.path)!;
       }
-    },
-  };
-}
+      return guide;
+    };
+
+    return {
+      bounds: ({ strokes, fontSize }) => expandBox(unionBoxes(strokes.map((s) => s.path.bounds())), fontSize * 0.3),
+      underlay: ({ ctx, frame, color }) => {
+        if (tracing <= 0) return;
+        ctx.globalAlpha = tracing;
+        for (const s of frame.strokes) paintStroke({ ctx, stroke: { ...s, state: 'done', progress: 1 }, style: color, lineCap: 'round' });
+      },
+      overlay: ({ ctx, frame, fontSize, color }) => {
+        if (!numbers && !arrows) return;
+        const badge = BADGE * fontSize;
+        const line = Math.max(1, 0.014 * fontSize);
+        let next: StrokeFrame | undefined;
+        for (const s of frame.strokes) if (s.state === 'pending' && (!next || s.start < next.start)) next = s;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const s of frame.strokes) {
+          const { number, arrow } = guideFor(s, frame.strokes, fontSize);
+          const drawing = s.state === 'drawing';
+          if (arrows && arrow && (drawing || s === next)) {
+            ctx.globalAlpha = drawing ? 1 : 0.35;
+            drawArrow(ctx, arrow, drawing ? accent : color, line, badge);
+          }
+          if (!numbers) continue;
+          ctx.beginPath();
+          ctx.arc(number.x, number.y, badge, 0, Math.PI * 2);
+          if (s.state === 'pending') {
+            ctx.globalAlpha = 0.4;
+            ctx.lineWidth = line;
+            ctx.strokeStyle = color;
+            ctx.stroke();
+          } else {
+            ctx.globalAlpha = drawing ? 1 : 0.5;
+            ctx.fillStyle = drawing ? accent : color;
+            ctx.fill();
+          }
+          const label = String(s.strokeIndex + 1);
+          ctx.globalAlpha = s.state === 'pending' ? 0.6 : 1;
+          ctx.fillStyle = s.state === 'pending' ? color : '#fff';
+          ctx.font = `600 ${badge * (label.length > 1 ? 1.05 : 1.3)}px system-ui, sans-serif`;
+          ctx.fillText(label, number.x, number.y + badge * 0.06);
+        }
+      },
+    };
+  },
+});
 
 function overlaps(a: Box | null, b: Box | null): boolean {
   return !!a && !!b && a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY;

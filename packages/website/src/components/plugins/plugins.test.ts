@@ -2,7 +2,8 @@
 import { describe, expect, test } from 'bun:test';
 import { clearance, type StrokeFrame, StrokePath, type TegakiFrame } from 'tegaki/core';
 import { bristles } from './brush.ts';
-import { lagged } from './echo.ts';
+import { echoPasses, echoPlugin, lagged } from './echo.ts';
+import { createShowcasePlugins, normalizePluginOptions, SHOWCASE_PLUGINS } from './index.ts';
 import { penPoses } from './pen.ts';
 import { penMotion } from './sound.ts';
 import { layoutGuides } from './stroke-order.ts';
@@ -96,6 +97,15 @@ describe('brush', () => {
     const dry = hairs.find((h) => h.reach < 1)!;
     expect(dry.path.pointAt(1).x).toBeLessThan(200);
   });
+
+  test('with no dryness every hair lasts the whole stroke; the drier, the sooner they give out', () => {
+    const reach = (dryness: number) => bristles(line(0, 200, 0, 20), 9, () => 0.5, dryness).map((h) => h.reach);
+    expect(reach(0).every((r) => r === 1)).toBe(true);
+    const wet = reach(0.3);
+    const dry = reach(0.9);
+    for (let i = 0; i < wet.length; i++) expect(dry[i]!).toBeLessThanOrEqual(wet[i]!);
+    expect(dry.some((r, i) => r < wet[i]!)).toBe(true);
+  });
 });
 
 describe('echo', () => {
@@ -104,6 +114,42 @@ describe('echo', () => {
     expect(lagged(0.65, 0.3)).toBeCloseTo(0.5);
     expect(lagged(1, 0.3)).toBe(1);
     expect(lagged(0.4, 0)).toBe(0.4);
+  });
+
+  test('the defaults lay a lead and a follow, the follow narrower and halfway behind the lead to the ink', () => {
+    const [lead, follow] = echoPasses(echoPlugin.defaults);
+    expect(lead).toEqual({ color: '#ffd166', width: 2.6, lag: 0 });
+    expect(follow!.color).toBe('#ef476f');
+    expect(follow!.width).toBeGreaterThan(1);
+    expect(follow!.width).toBeLessThan(lead!.width);
+    expect(follow!.lag).toBeCloseTo(0.18);
+  });
+
+  test('the highlighter preset is one wide pass that keeps pace with the ink', () => {
+    const passes = echoPasses(echoPlugin.resolve(echoPlugin.presets.Highlighter));
+    expect(passes).toEqual([{ color: '#fff176', width: 4, lag: 0 }]);
+  });
+});
+
+describe('showcase', () => {
+  test('every demo is a factory with a label and a description, and presets its params take as given', () => {
+    for (const { factory } of SHOWCASE_PLUGINS) {
+      expect(factory.label.length).toBeGreaterThan(0);
+      expect(factory.description?.length).toBeGreaterThan(0);
+      for (const preset of Object.values(factory.presets)) expect(factory.resolve(preset)).toMatchObject(preset);
+    }
+  });
+
+  test('options state keeps known plugins with something changed, as their params take it', () => {
+    expect(normalizePluginOptions({ brush: { bristles: 100, core: 0.45 }, echo: { lag: 0.36 }, nope: { x: 1 } })).toEqual({
+      brush: { bristles: 24 },
+    });
+    expect(normalizePluginOptions('brush')).toEqual({});
+  });
+
+  test('plugins are made in the order they run, each with its options', () => {
+    const plugins = createShowcasePlugins(['sound', 'pen'], { pen: { size: 2 } });
+    expect(plugins.map((p) => p.name)).toEqual(['pen', 'sound']);
   });
 });
 

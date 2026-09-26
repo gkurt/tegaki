@@ -203,4 +203,21 @@ describe('demo plugins', () => {
     expect(buildUrlParams(URL_DEFAULTS).has('pg')).toBe(false);
     expect(buildUrlParams(parseUrlState('?pg=pen,order')).get('pg')).toBe('pen,order');
   });
+
+  test('po reads each plugin’s options as its params take them, dropping unknown plugins, keys and defaults', () => {
+    const po = JSON.stringify({ echo: { spread: 9, lag: 0.36, bogus: 1 }, pen: { barrel: 'plaid' }, nope: { a: 1 } });
+    expect(parseUrlState(`?pg=echo,pen&po=${encodeURIComponent(po)}`).pluginOptions).toEqual({ echo: { spread: 5 } });
+  });
+
+  test('po that isn’t JSON is ignored', () => {
+    expect(parseUrlState('?po=%7Bnot-json').pluginOptions).toEqual({});
+  });
+
+  test('only the options of plugins switched on are written back', () => {
+    const state = { ...URL_DEFAULTS, plugins: ['echo'], pluginOptions: { echo: { lag: 0.2 }, brush: { bristles: 12 } } };
+    const params = buildUrlParams(state);
+    expect(JSON.parse(params.get('po')!)).toEqual({ echo: { lag: 0.2 } });
+    expect(parseUrlState(`?${params}`).pluginOptions).toEqual({ echo: { lag: 0.2 } });
+    expect(buildUrlParams({ ...state, plugins: [] }).has('po')).toBe(false);
+  });
 });

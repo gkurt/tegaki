@@ -66,7 +66,7 @@ export function StandaloneTextPreview() {
   }, [state.fontFamily]);
 
   const effects = useMemo(() => buildEffects(state.effectsState, state.customEffects), [state.effectsState, state.customEffects]);
-  const plugins = useMemo(() => createShowcasePlugins(state.plugins), [state.plugins]);
+  const plugins = useMemo(() => createShowcasePlugins(state.plugins, state.pluginOptions), [state.plugins, state.pluginOptions]);
 
   const { strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration } = state;
   const timingConfig = useMemo(

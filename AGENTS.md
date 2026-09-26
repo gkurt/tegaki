@@ -45,6 +45,7 @@ packages/renderer/src/
   core/                       # Framework-agnostic engine
     engine.ts                 # TegakiEngine — timeline, playback, time control, bundle loading, frameAt(), and the render: every stroke through the plugins (types in core/types.ts)
     plugins.ts                # Runs a plugin list's hooks as one: geometry in sequence, paint as a chain of next() ending in paintStroke
+    createPlugin.ts           # createPlugin() — a plugin factory that takes options: typed params (number / boolean / select / color) and presets a UI can build controls from, resolve() for untrusted input
     effectPlugins.ts          # The built-in effects as plugins (pressureWidth/taper/wobble = geometry, gradients = paint, glow = paint per stroke, or ink with clip-to-text — only over the ink's box, downsampled); run ahead of the user's
     drawGlyph.ts              # drawGlyph() — one glyph through the same plugins, for use outside the engine
     createBundle.ts           # Builds a TegakiBundle from parts
@@ -180,7 +181,7 @@ Text mode draws a dashed frame around the rendered text: drag its right edge (Sh
 
 "Ask an agent" (next to Export; in the ⋯ menu on phones) copies a Markdown prompt for a coding agent — goal (generate / optimize / fix), the font, charset, non-default settings as CLI flags, the inspected glyph's warnings, and studio + `/preview` links to iterate on. It's built by the pure `buildAgentPrompt` in [agent-prompt.ts](packages/website/src/components/studio/agent-prompt.ts); keep its iteration tips in step with this file.
 
-The inspector's **Plugins** tab (Text mode) switches on demo plugins that show off the renderer's `TegakiPlugin` API, written the way a user of `tegaki` would: a fountain pen at the pen head (overlay), stroke-order numbers and arrows kept clear of the ink (underlay + overlay), a bristly brush (paint), echo passes over each stroke (paint), and a pencil scratch sound (onFrame). They live in [components/plugins/](packages/website/src/components/plugins) and are only for showing: the `pg` param carries them to `/preview`, but Export and Ask an agent leave them out.
+The inspector's **Plugins** tab (Text mode) switches on demo plugins that show off the renderer's `TegakiPlugin` API, written the way a user of `tegaki` would: a fountain pen at the pen head (overlay), stroke-order numbers and arrows kept clear of the ink (underlay + overlay), a bristly brush (paint), echo passes over each stroke (paint), and a pencil scratch sound (onFrame). Each is made with `createPlugin` ([createPlugin.ts](packages/renderer/src/core/createPlugin.ts)), and the tab builds its controls — preset chips, then a DialKit control per param — from the factory's `params` / `presets`, so a new param or preset shows up in the UI with no panel code. They live in [components/plugins/](packages/website/src/components/plugins) and are only for showing: the `pg` param (which are on) and `po` (their changed options) carry them to `/preview`, but Export and Ask an agent leave them out.
 - `/tegaki/preview/` — a chrome-free standalone text renderer (`StandaloneTextPreview`) that reads the same URL state and renders only the text. Use this for screenshots / snapshots — no UI to crop out, and `window.__tegakiPreviewReady` / `body[data-tegaki-ready]` are set once the bundle is built so tooling can wait deterministically.
 
 The studio's Text mode has an "open in new tab" icon button next to the text field that opens the current state in `/preview` (just swaps `/studio` → `/preview` in the URL).
@@ -212,6 +213,7 @@ Common keys (non-exhaustive — `url-state.ts` is the source of truth):
 | `ghl` | Han stroke-order convention: `ja` (default, KanjiVG) or `zh` (Make Me a Hanzi) | `ghl=zh`     |
 | `fx` | Effects state as JSON                                          | `fx=%7B...%7D`       |
 | `pg` | Demo plugins switched on, comma-separated (`pen`, `order`, `brush`, `echo`, `sound`) | `pg=pen,order` |
+| `po` | Demo plugins' options as JSON, by plugin id — only non-defaults, only for plugins in `pg`; resolved through each factory's params (numbers clamped, unknown keys dropped) | `po=%7B%22echo%22%3A%7B%22lag%22%3A0.2%7D%7D` |
 | `se` / `ge` | Stroke / glyph easing preset                            | `se=ease-out-cubic`  |
 | `pr` / `ss` | Render quality — pixel ratio / stroke segment size      | `pr=2&ss=1`          |
 

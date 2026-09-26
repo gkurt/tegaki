@@ -92,7 +92,10 @@ export function TextWorkspace({
 
   playbackRef.current = { pause: () => setPlaying(false) };
 
-  const plugins = useMemo(() => createShowcasePlugins(settings.plugins), [settings.plugins]);
+  const plugins = useMemo(
+    () => createShowcasePlugins(settings.plugins, settings.pluginOptions),
+    [settings.plugins, settings.pluginOptions],
+  );
   const effects = useMemo(
     () => buildEffects(settings.effectsState, settings.customEffects),
     [settings.effectsState, settings.customEffects],
