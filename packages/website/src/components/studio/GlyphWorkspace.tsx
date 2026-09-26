@@ -698,6 +698,7 @@ function FinalStage({
             effects={effects}
             timing={timing}
             quality={settings.quality}
+            seed={settings.seed}
             fontSizePx={FINAL_FONT_SIZE}
             lineHeightRatio={1.15}
             resultsCache={resultsCache}

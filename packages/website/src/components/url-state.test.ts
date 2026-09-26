@@ -194,6 +194,19 @@ describe('all-in-font charset in the URL', () => {
   });
 });
 
+describe('seed', () => {
+  test('the default seed writes no rs, and any other is written and read back', () => {
+    expect(buildUrlParams(URL_DEFAULTS).has('rs')).toBe(false);
+    const params = buildUrlParams({ ...URL_DEFAULTS, seed: 417 });
+    expect(params.get('rs')).toBe('417');
+    expect(parseUrlState(`?${params}`).seed).toBe(417);
+  });
+
+  test('an rs that is not a number keeps the default', () => {
+    expect(parseUrlState('?rs=abc').seed).toBe(0);
+  });
+});
+
 describe('demo plugins', () => {
   test('pg keeps the known plugins, once each, in the order they run', () => {
     expect(parseUrlState('?pg=sound,bogus,pen,pen').plugins).toEqual(['pen', 'sound']);

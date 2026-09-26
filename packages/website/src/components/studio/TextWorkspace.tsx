@@ -278,6 +278,7 @@ export function TextWorkspace({
                     timing={timingConfig}
                     quality={settings.quality}
                     plugins={plugins}
+                    seed={settings.seed}
                     showOverlay={settings.showOverlay}
                     fontSizePx={settings.fontSizePx}
                     lineHeightRatio={settings.lineHeightRatio}

@@ -17,6 +17,7 @@ import type { TegakiBundle } from '../types.ts';
  * - `pixel-ratio`: supersampling factor on top of devicePixelRatio (quality knob, default `1`)
  * - `segment-size`: segment size for rendering (quality knob)
  * - `smoothing`: smooth strokes with a centripetal Catmull-Rom spline (quality knob)
+ * - `seed`: the number random choices come from (wobble, gradients, plugins) — a number, or `"random"` for a new look each time (default `0`); the element's `engine.seed` reads the one drawn with
  * - `show-overlay`: show debug overlay
  * - `direction`: text direction (`"ltr"` or `"rtl"`)
  * - `no-shaper`: disable text shaping for this instance (use the char-keyed grapheme path)
@@ -39,6 +40,7 @@ const OBSERVED_ATTRS = [
   'pixel-ratio',
   'segment-size',
   'smoothing',
+  'seed',
   'show-overlay',
   'direction',
   'no-shaper',
@@ -222,6 +224,7 @@ export class TegakiElement extends HTMLElement {
       timing: this._timing,
       quality: this._resolveQuality(),
       plugins: this._plugins,
+      seed: this._resolveSeed(),
       showOverlay: this.hasAttribute('show-overlay'),
       direction: directionAttr === 'rtl' || directionAttr === 'ltr' ? directionAttr : undefined,
       shaper: this.hasAttribute('no-shaper') ? false : undefined,
@@ -247,6 +250,12 @@ export class TegakiElement extends HTMLElement {
       ...(segmentSizeAttr != null ? { segmentSize: segmentSizeAttr } : {}),
       ...(smoothingAttr ? { smoothing: true } : {}),
     };
+  }
+
+  /** The `seed` attribute: `"random"`, or a number (anything else is the default). */
+  private _resolveSeed(): TegakiEngineOptions['seed'] {
+    if (this.getAttribute('seed') === 'random') return 'random';
+    return this._getNumberAttr('seed');
   }
 
   private _resolveTime(): TimeControlProp {

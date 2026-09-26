@@ -300,6 +300,17 @@ export interface TegakiEngineOptions {
    * built-in effects. Not part of `toSVG`.
    */
   plugins?: readonly TegakiPlugin[];
+  /**
+   * The number the renderer's random choices come from: the wobble's phase,
+   * a gradient's hue, what plugins draw with `random(key)` or reshape by a
+   * glyph's `seed`. The same seed draws the same every time — on every load,
+   * in every tab or process rendering a video. Each character adds its index
+   * to it, so repeated letters still differ. `'random'` picks one when the
+   * engine is created, for text that looks a little different every time;
+   * read it back from {@link TegakiEngine.seed} to keep a result you like.
+   * Default: `0`.
+   */
+  seed?: number | 'random';
   showOverlay?: boolean;
   onComplete?: () => void;
   /**

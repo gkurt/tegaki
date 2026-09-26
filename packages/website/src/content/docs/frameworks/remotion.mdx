@@ -112,6 +112,10 @@ const drawFrames = 120; // 2s to draw
 const progress = Math.max(0, Math.min(1, (frame - delayFrames) / drawFrames));
 ```
 
+## Effects, plugins and the seed
+
+Wobble, gradients and plugins such as `variationPlugin` draw their randomness from the renderer's [`seed`](/tegaki/api/renderer/#seed). It defaults to `0`, so every frame matches, including frames rendered in parallel tabs. To give a video a different look, pass another fixed number (`seed={7}`). Never pass `seed="random"` in a composition, because each rendering tab would pick its own seed and the handwriting would jump between frames.
+
 ## Natural pacing
 
 `unit: 'progress'` stretches or squeezes the writing to fit the composition. To keep Tegaki's own pace (its per-stroke timing, as on a web page), pass the time in **seconds** and size the composition from the timeline with `calculateMetadata`:

@@ -1,7 +1,8 @@
 import 'dialkit/styles.css';
-import { ColorControl, Toggle } from 'dialkit';
+import { ColorControl, Slider, Toggle } from 'dialkit';
 import { createContext, type ReactNode, useContext } from 'react';
-import { MinusIcon, PlusIcon } from '../icons.tsx';
+import { DiceIcon, MinusIcon, PlusIcon } from '../icons.tsx';
+import { MAX_SEED, rollSeed } from '../seed.ts';
 import { cx } from '../ui.tsx';
 
 export const DialThemeContext = createContext<'light' | 'dark'>('light');
@@ -110,5 +111,23 @@ export function AddRowButton({ onClick, children }: { onClick: () => void; child
       <PlusIcon size={12} />
       {children}
     </button>
+  );
+}
+
+/**
+ * The renderer's seed: a slider to scrub through versions of the text, and a
+ * die for a new one. What it changes is whatever draws with randomness — the
+ * wobble, a gradient's hue, the variation plugin.
+ */
+export function SeedControl({ value, onChange }: { value: number; onChange: (seed: number) => void }) {
+  return (
+    <div className="flex items-center gap-1">
+      <div className="min-w-0 flex-1">
+        <Slider label="Seed" value={value} min={0} max={Math.max(MAX_SEED, value)} step={1} onChange={onChange} />
+      </div>
+      <SmallIconButton label="New seed" onClick={() => onChange(rollSeed(value))}>
+        <DiceIcon size={14} />
+      </SmallIconButton>
+    </div>
   );
 }

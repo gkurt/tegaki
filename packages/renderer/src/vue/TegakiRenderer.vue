@@ -14,6 +14,7 @@ const props = defineProps<{
   timing?: TimelineConfig;
   quality?: TegakiQuality;
   plugins?: readonly TegakiPlugin[];
+  seed?: number | 'random';
   showOverlay?: boolean;
   onComplete?: () => void;
   onChangeTimeline?: (timeline: Timeline) => void;
@@ -35,6 +36,7 @@ const engineOptions = computed<TegakiEngineOptions>(() => ({
   effects: props.effects as Record<string, any>,
   quality: props.quality,
   plugins: props.plugins,
+  seed: props.seed,
   timing: props.timing,
   showOverlay: props.showOverlay,
   direction: props.direction,

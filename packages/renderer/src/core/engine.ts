@@ -143,6 +143,29 @@ interface FallbackClip {
 /** Far enough past any canvas edge to leave a clip rectangle's side open (canvas rects take no Infinity). */
 const CLIP_REACH = 1e6;
 
+/**
+ * The number a `seed` option draws with: a finite number as given (anything
+ * else is `0`), or for `'random'` a fresh whole number — short enough to
+ * write down and pass back.
+ */
+export function resolveSeed(option: number | 'random' | undefined): number {
+  if (option === 'random') return Math.floor(Math.random() * 1_000_000);
+  return typeof option === 'number' && Number.isFinite(option) ? option : 0;
+}
+
+/**
+ * The seed after the `seed` option is set to `option`, from what it was: the
+ * same option keeps its number — so `'random'`, set again on every render of
+ * a component, doesn't pick a new one each time — and a new one resolves.
+ */
+export function nextSeed(
+  option: number | 'random' | undefined,
+  current: { option: number | 'random'; seed: number },
+): { option: number | 'random'; seed: number } {
+  const given = option ?? 0;
+  return given === current.option ? current : { option: given, seed: resolveSeed(given) };
+}
+
 /** Whether the `reducedMotion` setting skips the animation, given the OS `prefers-reduced-motion` setting. */
 export function isMotionReduced(setting: ReducedMotionProp | undefined, prefersReducedMotion: boolean): boolean {
   return setting === 'always' || (setting === 'user' && prefersReducedMotion);
@@ -251,7 +274,9 @@ export class TegakiEngine {
 
   // --- Derived / cached ---
   private _resolvedEffects: ResolvedEffect[] = resolveEffects(undefined);
-  private _seed: number;
+  private _seed = 0;
+  /** The `seed` option as given — `'random'` keeps the number it picked until the option changes. */
+  private _seedOption: number | 'random' = 0;
   private _timeline: Timeline = { entries: [] as TimelineEntry[], totalDuration: 0 };
   private _layout: TextLayout | null = null;
   /** Where the layout last wrapped `text` inside a word — the timeline shapes each side on its own. */
@@ -341,7 +366,6 @@ export class TegakiEngine {
 
   constructor(container: HTMLElement, options?: TegakiEngineOptions & { adopt?: boolean }) {
     registerCssProperties();
-    this._seed = Math.random() * 1000;
 
     // --- Resolve DOM elements ---
     // The container itself is the root element. In adopt mode, the adapter has
@@ -415,6 +439,11 @@ export class TegakiEngine {
 
   get duration(): number {
     return this._timeline.totalDuration;
+  }
+
+  /** The seed the renderer draws with — the `seed` option, or the number it picked for `'random'`. Pass it back as `seed` to draw the same again. */
+  get seed(): number {
+    return this._seed;
   }
 
   /**
@@ -838,6 +867,15 @@ export class TegakiEngine {
     if ('plugins' in options && (options.plugins ?? []) !== this._plugins) {
       this._plugins = options.plugins ?? [];
       dirtyRender = true;
+    }
+
+    if ('seed' in options) {
+      const next = nextSeed(options.seed, { option: this._seedOption, seed: this._seed });
+      this._seedOption = next.option;
+      if (next.seed !== this._seed) {
+        this._seed = next.seed;
+        dirtyRender = true;
+      }
     }
 
     if ('fallbackFont' in options && options.fallbackFont !== this._fallbackFont) {

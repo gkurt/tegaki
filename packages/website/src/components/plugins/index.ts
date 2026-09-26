@@ -9,6 +9,7 @@ import {
   type TegakiPluginFactory,
   type TegakiPluginOptions,
   type TegakiPluginParams,
+  variationPlugin,
 } from 'tegaki/core';
 import { brushPlugin } from './brush.ts';
 import { echoPlugin } from './echo.ts';
@@ -24,6 +25,8 @@ export interface ShowcasePlugin {
 }
 
 export const SHOWCASE_PLUGINS: readonly ShowcasePlugin[] = [
+  // Shipped in tegaki/core, not a demo: listed first so it reshapes the strokes the others paint.
+  { id: 'vary', factory: variationPlugin },
   { id: 'pen', factory: penPlugin },
   { id: 'order', factory: strokeOrderPlugin },
   { id: 'brush', factory: brushPlugin },

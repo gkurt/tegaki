@@ -128,6 +128,7 @@ export function StandaloneTextPreview() {
         timing={timingConfig}
         quality={state.quality}
         plugins={plugins}
+        seed={state.seed}
         showOverlay={state.showOverlay}
         fontSizePx={state.fontSizePx}
         lineHeightRatio={state.lineHeightRatio}

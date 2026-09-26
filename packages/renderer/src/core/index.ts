@@ -50,6 +50,7 @@ export {
   type TimelineEntry,
   type TimelineStaggerConfig,
 } from '../lib/timeline.ts';
+export { type VariationOptions, variationField, variationPlugin, variationWidth } from '../plugins/variation.ts';
 export type * from '../types.ts';
 export type { TegakiEffectConfigs, TegakiEffects } from '../types.ts';
 export { BUNDLE_VERSION, COMPATIBLE_BUNDLE_VERSIONS } from '../types.ts';

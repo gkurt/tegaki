@@ -292,6 +292,7 @@ registerTegakiElement('my-handwriting');
 | `reduced-motion` | `"never" \| "user" \| "always"` | Whether to honour reduced motion by showing the text finished (default `"never"`; see [`reducedMotion`](/tegaki/api/renderer/#reducedmotion)). |
 | `pixel-ratio` | `number` | Supersampling factor on top of devicePixelRatio (shortcut for `quality.pixelRatio`). |
 | `segment-size` | `number` | Max drawn segment length in CSS pixels (shortcut for `quality.segmentSize`). |
+| `seed` | `number \| "random"` | What random choices come from: wobble, gradients, plugins (default `0`; see [`seed`](/tegaki/api/renderer/#seed)). The element's `engine.seed` is the number it drew with. |
 | `show-overlay` | _boolean attribute_ | Show debug text overlay. |
 | `fallback-font` | `string` | CSS font-family list for characters the bundle has no stroke data for (see [`fallbackFont`](/tegaki/api/renderer/#fallbackfont)). |
 

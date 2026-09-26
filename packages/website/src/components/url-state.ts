@@ -108,6 +108,8 @@ export interface UrlState {
   plugins: string[];
   /** The demo plugins' options that differ from their defaults, by plugin id. Only those of plugins switched on reach the URL. */
   pluginOptions: PluginOptionsState;
+  /** The renderer's `seed` — the wobble's phase, a gradient's hue, the variation plugin's strays. */
+  seed: number;
 }
 
 /**
@@ -155,6 +157,7 @@ export const URL_DEFAULTS: UrlState = {
   staggerDuration: 'auto',
   plugins: [],
   pluginOptions: {},
+  seed: 0,
 };
 
 // Short keys for compact URLs — only non-default values are written
@@ -353,6 +356,10 @@ export function parseUrlState(search: string | URLSearchParams = window.location
   if (p.has('sa')) state.staggerAdvance = p.get('sa')!;
   if (p.has('sd')) state.staggerDuration = p.get('sd')!;
   if (p.has('pg')) state.plugins = normalizePluginIds(p.get('pg')!.split(','));
+  if (p.has('rs')) {
+    const v = Number(p.get('rs'));
+    if (Number.isFinite(v)) state.seed = v;
+  }
   if (p.has('po')) {
     try {
       state.pluginOptions = normalizePluginOptions(JSON.parse(p.get('po')!));
@@ -460,6 +467,7 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
   if (state.staggerAdvance !== URL_DEFAULTS.staggerAdvance) p.set('sa', state.staggerAdvance);
   if (state.staggerDuration !== URL_DEFAULTS.staggerDuration) p.set('sd', state.staggerDuration);
   if (state.plugins.length > 0) p.set('pg', state.plugins.join(','));
+  if (state.seed !== URL_DEFAULTS.seed) p.set('rs', String(state.seed));
   const pluginOptions = pluginOptionsFor(state.plugins, state.pluginOptions);
   if (Object.keys(pluginOptions).length > 0) p.set('po', JSON.stringify(pluginOptions));
   if (state.pipeline !== URL_DEFAULTS.pipeline) p.set('pl', state.pipeline);

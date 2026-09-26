@@ -90,6 +90,22 @@ The effects are [plugins](#plugins) built into the renderer, run ahead of your o
 
 Code that reshapes or paints the ink, paints under or over it, or runs on every frame drawn: a brush, a pen at the tip, stroke-order arrows, sound. They run after the built-in [effects](#effects). See [Plugins](#plugins). In React, keep the array stable (define it outside the component or memoize it), since a new array redraws the canvas. Plugins are functions, so the Astro component doesn't take them, and `toSVG` leaves them out.
 
+### `seed`
+
+**Type:** `number | 'random'` · **Default:** `0`
+
+The number the renderer's random choices come from: the wobble's phase, a gradient's hue, the [variation plugin](#variation-variationplugin), and whatever plugins draw with `random(key)`. Each character adds its place in the text to the seed, so repeated letters still differ from each other.
+
+The same seed draws the same text every time: on every page load, in every tab, and in every process that renders a video. That's why the default is a fixed number. Change it to get another version of the text, and keep a version you like by keeping its seed.
+
+`'random'` picks a new seed each time a renderer is created, so the text looks a little different on every load. Read the number it picked from `engine.seed` (in React, `ref.current.engine.seed`) and pass it back as `seed` to draw that version again. Don't use `'random'` in a video: each frame could get a different seed.
+
+```tsx
+const plugins = [variationPlugin()]; // outside the component, so it stays the same array
+
+<TegakiRenderer font={caveat} plugins={plugins} seed="random">Signed, Ada</TegakiRenderer>;
+```
+
 ### `style`
 
 Style object or string applied to the container. Use `fontSize` to control the text size.
@@ -190,7 +206,7 @@ A plugin is an object with a `name` and any of these hooks:
 
 The built-in [effects](#effects) are plugins too, and run first, so each hook of yours sees what they made: `geometry` gets the path after pressure width, taper and wobble, and `paint` gets the gradient as its `style`.
 
-`ctx` is the canvas context, set up so one unit is one CSS px from the top-left of the text box. The engine saves and restores it around every hook. Underlays go on a layer of their own under the finished ink, so clip-to-text doesn't cut them. `color` is the text's color. `random(key)` returns a random number generator seeded per renderer, so the same key gives the same numbers on every frame. `prev` is the frame `onFrame` saw last, or `null` the first time.
+`ctx` is the canvas context, set up so one unit is one CSS px from the top-left of the text box. The engine saves and restores it around every hook. Underlays go on a layer of their own under the finished ink, so clip-to-text doesn't cut them. `color` is the text's color. `random(key)` returns a random number generator seeded by the renderer's [`seed`](#seed), so the same key gives the same numbers on every frame and, at the same seed, on every load. `prev` is the frame `onFrame` saw last, or `null` the first time.
 
 `ink` gets a copy of the finished ink (`ink`, a canvas in device px) and `bounds`, the box the ink drawn so far covers in the same px as `ctx` (`ctx.getTransform()` maps it to device px). Work inside `bounds`: outside it the canvas is empty, and a filter or blur costs what it covers.
 
@@ -344,6 +360,32 @@ The factory also describes the plugin, so a UI can build its controls. The studi
 - `resolve(input)`: every option set from `input`, which can be anything (JSON from a URL, say). Values that are missing, of the wrong type, or not among a select's options get their defaults, numbers are kept in range, and unknown keys are dropped. The factory resolves the options it's called with the same way.
 
 `changedPluginOptions(params, options)` returns just the options that differ from their defaults, the part worth saving. `TegakiPluginFactory` with no type argument is the type of any factory, for a list of several.
+
+### Variation: `variationPlugin`
+
+Handwriting is never quite the same twice. `variationPlugin` makes each glyph a little different while keeping its shape: it grows or shrinks, leans, turns, drifts off its place and bends slightly, and each stroke runs a little thinner or thicker.
+
+```tsx
+import { variationPlugin } from 'tegaki/core';
+
+const plugins = [variationPlugin()]; // or variationPlugin({ amount: 1.6 }) for looser writing
+
+<TegakiRenderer font={caveat} plugins={plugins}>Hello Hello</TegakiRenderer>;
+```
+
+How each glyph strays comes from its seed, the renderer's [`seed`](#seed) plus the glyph's place in the text. So the two `Hello`s above differ from each other, the same seed draws the same text every time, and `seed="random"` draws a new version on each load. The glyph's outline moves with its strokes, so clip-to-text follows the ink.
+
+| Option | Default | What it changes |
+|--------|---------|-----------------|
+| `amount` | `1` | Scales all of the below: `0` draws the font as it is, `2` twice as loose. |
+| `size` | `0.05` | How much a glyph grows or shrinks, as a share of its size. |
+| `slant` | `4` | Lean, in degrees either way. |
+| `rotation` | `2` | Turn, in degrees either way. |
+| `drift` | `0.02` | Shift off the glyph's place, in ems. |
+| `warp` | `0.015` | A slow bend through the glyph, in ems. |
+| `width` | `0.12` | Ink width, as a share of the stroke's. |
+
+It comes with three presets: `Subtle`, `Loose` and `Signature`. Like any plugin, it isn't part of `toSVG`.
 
 ## Helper functions
 

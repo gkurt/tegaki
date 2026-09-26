@@ -97,6 +97,8 @@ export interface TegakiTextPreviewProps {
   quality?: TegakiQuality;
   /** Plugins for the renderer — keep the array the same between renders unless it changes: a new one re-lays the text. */
   plugins?: readonly TegakiPlugin[];
+  /** The renderer's seed — what the wobble, gradients and plugins draw their randomness from. */
+  seed?: number;
   showOverlay?: boolean;
   fontSizePx?: number;
   /** Multiple of the font size; null = `normal` (the font's own line spacing). */
@@ -137,6 +139,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     time,
     effects,
     plugins,
+    seed,
     timing,
     quality,
     showOverlay,
@@ -505,6 +508,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       effects={effects}
       quality={quality}
       plugins={plugins}
+      seed={seed}
       timing={timing}
       shaper={useShaper}
       onChangeTimeline={handleTimelineChange}

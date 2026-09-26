@@ -5,7 +5,7 @@ import type { UrlState } from '../../url-state.ts';
 import { ResetIcon } from '../icons.tsx';
 import type { SetSetting } from '../state.ts';
 import { Chip, Hint, Section } from '../ui.tsx';
-import { DialScope, SmallIconButton, ToggleGroup } from './dial.tsx';
+import { DialScope, SeedControl, SmallIconButton, ToggleGroup } from './dial.tsx';
 
 const DOCS = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api/renderer/#plugins`;
 
@@ -45,6 +45,10 @@ export function PluginsPanel({ settings, set }: { settings: UrlState; set: SetSe
         can do, so Export and Ask an agent leave them out.
       </Hint>
       <DialScope className="mt-2 flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <SeedControl value={settings.seed} onChange={(v) => set('seed', v)} />
+          <Hint>What Variation strays by, and Brush lays its hairs by — the same seed draws the same every time.</Hint>
+        </div>
         {SHOWCASE_PLUGINS.map((p) => (
           <PluginControls
             key={p.id}

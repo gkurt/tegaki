@@ -13,7 +13,7 @@ import {
 import { CheckIcon, CopyIcon, MinusIcon, PlusIcon } from '../icons.tsx';
 import type { SetSetting } from '../state.ts';
 import { IconButton, Section } from '../ui.tsx';
-import { ColorStops, DialScope, SmallIconButton, ToggleGroup } from './dial.tsx';
+import { ColorStops, DialScope, SeedControl, SmallIconButton, ToggleGroup } from './dial.tsx';
 
 /** Where the line-height slider starts when switched on from the font's `normal`. */
 const CUSTOM_LINE_HEIGHT = 1.2;
@@ -49,7 +49,7 @@ export function StylePanel({ settings, set }: { settings: UrlState; set: SetSett
     settings.fontSizePx !== URL_DEFAULTS.fontSizePx ||
     settings.lineHeightRatio !== URL_DEFAULTS.lineHeightRatio ||
     settings.letterSpacingPx !== URL_DEFAULTS.letterSpacingPx;
-  const effectsModified = !same(fx, DEFAULT_EFFECTS_STATE) || customEffects.length > 0;
+  const effectsModified = !same(fx, DEFAULT_EFFECTS_STATE) || customEffects.length > 0 || settings.seed !== URL_DEFAULTS.seed;
   const renderingModified =
     quality.pixelRatio !== URL_DEFAULTS.quality.pixelRatio ||
     quality.segmentSize !== URL_DEFAULTS.quality.segmentSize ||
@@ -104,6 +104,7 @@ export function StylePanel({ settings, set }: { settings: UrlState; set: SetSett
         onReset={() => {
           set('effectsState', DEFAULT_EFFECTS_STATE);
           set('customEffects', []);
+          set('seed', URL_DEFAULTS.seed);
         }}
         actions={
           <IconButton label={copied ? 'Copied' : 'Copy effects prop as JSON'} onClick={copyEffects} className="size-7">
@@ -112,6 +113,7 @@ export function StylePanel({ settings, set }: { settings: UrlState; set: SetSett
         }
       >
         <DialScope className="flex flex-col gap-1.5">
+          <SeedControl value={settings.seed} onChange={(v) => set('seed', v)} />
           <ToggleGroup
             label="Glow"
             checked={fx.glow.enabled}
