@@ -66,6 +66,7 @@ export interface SvgGlyphOutline {
 /** A character the bundle has no strokes for, drawn as text in the fallback font. */
 export interface SvgFallbackText extends SvgTextRun {
   fill: string;
+  glows: GlowPass[];
   /** Timeline seconds at which it appears. */
   at: number;
   /** Horizontal clip in px — one character cut from a run drawn whole; `null` leaves that side open. */
@@ -137,12 +138,12 @@ const LOOP_GAP = 0.7;
 const REGION = '\u0000REGION\u0000';
 
 /**
- * The glow of the finished ink, as the canvas draws it: each pass is the ink
- * (clipped to the text, if that's on) recolored in the glow color with its
- * drop shadow, stacked under the ink in order — so strokes don't glow over
- * each other, and a clip doesn't cut the glow away.
+ * The glow of clipped ink: each pass is the clipped ink recolored in the glow
+ * color with its drop shadow, stacked under the ink in order — what each
+ * stroke draws when nothing is clipped, taken after the clip so the clip
+ * doesn't cut the glow away.
  */
-function inkGlowFilter(id: string, glows: GlowPass[]): string {
+function clipGlowFilter(id: string, glows: GlowPass[]): string {
   const passes = glows.map(
     (g, i) =>
       `<feFlood flood-color="${g.color}" /><feComposite in2="SourceAlpha" operator="in" result="tk-t${i}" />` +
@@ -501,7 +502,23 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
 
   const body: string[] = [];
   const defs: string[] = [];
+  const filters = new Map<string, string>();
   let maskId = 0;
+
+  // Glow passes become drop-shadow filters, one per distinct shadow.
+  const filterFor = (g: GlowPass): string => {
+    const key = `${g.color}|${g.blur}|${g.dx}|${g.dy}`;
+    let id = filters.get(key);
+    if (!id) {
+      id = `tk-glow${filters.size}`;
+      filters.set(key, id);
+      defs.push(
+        `<filter id="${id}" filterUnits="userSpaceOnUse" ${REGION}>` +
+          `<feDropShadow dx="${fmt(g.dx)}" dy="${fmt(g.dy)}" stdDeviation="${fmt(g.blur / 2)}" flood-color="${g.color}" /></filter>`,
+      );
+    }
+    return ` filter="url(#${id})"`;
+  };
 
   // Ink bounds (px), so the viewBox can crop to what is drawn.
   let minX = Infinity;
@@ -520,6 +537,8 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
     const px = (fx: number) => ox + fx * scale;
     const py = (fy: number) => oy + (fy + ascender) * scale;
     const fx = strokeEffects(effects, item.seed ?? 0, cfg.color);
+    // Clipped ink glows as a whole, past the clip — see `clipGlowFilter`.
+    const glows = cfg.clipText ? [] : glowPasses(effects, cfg.color, fontSize, scale);
     const needsPerSegment = pressure > 0 || fx.hasTaper;
     const segmented = needsPerSegment || fx.hasStrokeGradient;
 
@@ -552,6 +571,11 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
                 reveal,
               );
         grow(cx, cy, w / 2);
+        for (const g of glows) {
+          const filter = filterFor(g);
+          body.push(dot(g.color, filter));
+          for (const s of stamps) body.push(ellipse(s, g.color, filter, reveal));
+        }
         const fill = fx.hasStrokeGradient ? fx.colorAt(0) : paint;
         body.push(dot(fill, ''));
         for (const s of stamps) {
@@ -606,7 +630,7 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
       }
       for (let i = 0; i < xs.length; i++) grow(xs[i]!, ys[i]!, maxW / 2);
 
-      // Reveal: one dash animation shared by the stroke and its mask.
+      // Reveal: one dash animation shared by the stroke, its glow copies and its mask.
       const coverW = maxW + 4;
       let reveal = NO_ANIM;
       if (anim.mode !== 'static') {
@@ -619,6 +643,15 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
         const t = firstTime(clock, (p) => p > 0 && p * totalLen >= s.passed);
         return t === null ? null : anim.appear(t);
       };
+
+      for (const g of glows) {
+        const filter = filterFor(g);
+        body.push(el('path', `${pathAttrs(g.color, base, cfg.lineCap)}${filter}`, reveal));
+        for (const s of stamps) {
+          const r = stampReveal(s);
+          if (r) body.push(ellipse(s, g.color, filter, r));
+        }
+      }
 
       if (!segmented) {
         body.push(el('path', pathAttrs(paint, base, cfg.lineCap), reveal));
@@ -660,8 +693,9 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
       const [l, top, r, bottom] = t.box;
       grow(l, top, 0);
       grow(r, bottom, 0);
+      const glowParts = (cfg.clipText ? [] : t.glows).map((g) => textEl(t, font, g.color, filterFor(g), reveal));
       const main = textEl(t, font, t.fill, '', reveal);
-      body.push(clip ? `<g${clip}>${main}</g>` : main);
+      body.push(clip ? `<g${clip}>${glowParts.join('')}${main}</g>` : [...glowParts, main].join('\n'));
     }
   }
 
@@ -709,11 +743,11 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
     if (font) shapes.push(...words.map((w) => textEl(w, font, '#fff', '', NO_ANIM)));
     defs.push(`<mask id="tk-clip" maskUnits="userSpaceOnUse" ${REGION}><g fill="#fff">${shapes.join('')}</g></mask>`);
     content = `<g mask="url(#tk-clip)">\n${content}\n</g>`;
-  }
-  const glows = glowPasses(effects, cfg.color, fontSize, items[0]?.scale ?? 1);
-  if (glows.length > 0) {
-    defs.push(inkGlowFilter('tk-glow', glows));
-    content = `<g filter="url(#tk-glow)">\n${content}\n</g>`;
+    const glows = glowPasses(effects, cfg.color, fontSize, items[0]?.scale ?? 1);
+    if (glows.length > 0) {
+      defs.push(clipGlowFilter('tk-clip-glow', glows));
+      content = `<g filter="url(#tk-clip-glow)">\n${content}\n</g>`;
+    }
   }
 
   const css: string[] = [];

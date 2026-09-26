@@ -197,6 +197,8 @@ export interface TegakiOutlineContext {
 export interface TegakiStrokePaintContext extends StrokePaint, TegakiPluginContext {
   /** The box the text's lines fill, in the same px as the stroke's path. */
   textBox: Box;
+  /** px per font unit. */
+  scale: number;
 }
 
 /** What an `ink` hook post-processes. */
@@ -205,6 +207,13 @@ export interface TegakiInkContext extends TegakiPluginContext {
   ctx: CanvasRenderingContext2D;
   /** A copy of the finished ink (strokes and fallback text, clipped to the text if that's on), in device pixels, the size of the canvas. */
   ink: HTMLCanvasElement;
+  /**
+   * The box the ink drawn so far covers, in text-box px (`ctx.getTransform()`
+   * maps it to device pixels); `null` before anything is drawn. Work inside
+   * it: the rest of `ink` is empty, and a blur over the whole canvas costs
+   * what the canvas measures, not what the ink does.
+   */
+  bounds: Box | null;
   /** px per font unit. */
   scale: number;
 }

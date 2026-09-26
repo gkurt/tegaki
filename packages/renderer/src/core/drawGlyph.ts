@@ -104,6 +104,7 @@ export function drawGlyph(
       lineCap,
       color,
       fontSize: pos.fontSize,
+      scale,
       textBox,
       random,
     });

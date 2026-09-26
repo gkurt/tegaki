@@ -117,12 +117,13 @@ describe('placementsToSvg effects', () => {
     expect(colors.size).toBeGreaterThan(5);
   });
 
-  test('glow is one filter over the whole ink, not a copy of each stroke', () => {
+  test('glow draws a drop-shadowed copy under the stroke', () => {
     const svg = svgOf({ animated: false, effects: resolveEffects({ glow: { radius: 8, color: '#f0f' } }) });
-    expect(svg).not.toContain('stroke="#f0f"');
-    expect(svg).toContain('<filter id="tk-glow"');
-    expect(svg).toContain('<feDropShadow in="tk-t0" dx="0" dy="0" stdDeviation="4" flood-color="#f0f" result="tk-g0" />');
-    expect(svg.indexOf('<g filter="url(#tk-glow)">')).toBeLessThan(svg.indexOf('stroke="#123"'));
+    expect(svg).toContain('<feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#f0f" />');
+    const glowAt = svg.indexOf('stroke="#f0f"');
+    const mainAt = svg.indexOf('stroke="#123"');
+    expect(glowAt).toBeGreaterThan(0);
+    expect(glowAt).toBeLessThan(mainAt);
   });
 
   test('wobble displaces the stroke', () => {
@@ -173,9 +174,12 @@ describe('placementsToSvg text', () => {
       effects: resolveEffects({ glow: { radius: 8, color: '#f0f' } }),
       clipText: { glyphs: [{ d: 'M0,0L100,0L100,700Z', x: 10, y: 80, scale: 0.1 }] },
     });
-    // The glow filter wraps the masked group, so the mask doesn't cut it away.
+    // No per-stroke glow copies for the mask to cut away…
+    expect(svg).not.toContain('stroke="#f0f"');
+    // …but one filter wrapping the masked group.
+    expect(svg).toContain('<filter id="tk-clip-glow"');
     expect(svg).toContain('<feDropShadow in="tk-t0"');
-    expect(svg.indexOf('<g filter="url(#tk-glow)">')).toBeLessThan(svg.indexOf('<g mask="url(#tk-clip)">'));
+    expect(svg.indexOf('<g filter="url(#tk-clip-glow)">')).toBeLessThan(svg.indexOf('<g mask="url(#tk-clip)">'));
   });
 
   test('a wobble moves the clip outlines with the strokes', () => {
@@ -205,7 +209,7 @@ describe('placementsToSvg text', () => {
     const svg = svgOf({
       fallback: {
         font,
-        texts: [{ text: '€', x: 120, y: 80, direction: 'ltr', fill: '#123', at: 1.5, box: [120, 0, 170, 100] }],
+        texts: [{ text: '€', x: 120, y: 80, direction: 'ltr', fill: '#123', glows: [], at: 1.5, box: [120, 0, 170, 100] }],
       },
     });
     expect(svg).toMatch(/<text [^>]*opacity="0">€<set attributeName="opacity" to="1" begin="1.5s" fill="freeze" \/><\/text>/);

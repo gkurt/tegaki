@@ -45,7 +45,7 @@ packages/renderer/src/
   core/                       # Framework-agnostic engine
     engine.ts                 # TegakiEngine — timeline, playback, time control, bundle loading, frameAt(), and the render: every stroke through the plugins (types in core/types.ts)
     plugins.ts                # Runs a plugin list's hooks as one: geometry in sequence, paint as a chain of next() ending in paintStroke
-    effectPlugins.ts          # The built-in effects as plugins (pressureWidth/taper/wobble = geometry, gradients = paint, glow = ink); run ahead of the user's
+    effectPlugins.ts          # The built-in effects as plugins (pressureWidth/taper/wobble = geometry, gradients = paint, glow = paint per stroke, or ink with clip-to-text — only over the ink's box, downsampled); run ahead of the user's
     drawGlyph.ts              # drawGlyph() — one glyph through the same plugins, for use outside the engine
     createBundle.ts           # Builds a TegakiBundle from parts
     bundle-registry.ts        # Global bundle registry (register/lookup by family name)

@@ -1,14 +1,16 @@
 import { findEffect, type ResolvedEffect } from './effects.ts';
+import { type GlowPass, glowPasses } from './strokeEffects.ts';
 
-/** Where and how fallback text is painted: its wobble offset and fill. (Its glow is the ink's, drawn over the whole canvas.) */
+/** Where and how fallback text is painted: its wobble offset, fill and glow passes. */
 export interface FallbackTextStyle {
   dx: number;
   dy: number;
   fill: string;
+  glows: GlowPass[];
 }
 
 /**
- * The effects that apply to fallback text itself (strokeGradient, wobble) at
+ * The effects that apply to fallback text (glow, strokeGradient, wobble) at
  * left edge `x` and `baseline`, both in the canvas's content space.
  */
 export function fallbackTextStyle(
@@ -46,11 +48,12 @@ export function fallbackTextStyle(
     }
   }
 
-  return { dx, dy, fill };
+  // Glow offsets are px here, not font units.
+  return { dx, dy, fill, glows: glowPasses(effects, color, fontSize, 1) };
 }
 
 /**
- * Draw a fallback glyph (plain text) with the effects that apply to it (strokeGradient, wobble).
+ * Draw a fallback glyph (plain text) with applicable effects (glow, strokeGradient, wobble).
  * `text` may be a run of characters, drawn in `direction` from its left edge `x`.
  */
 export function drawFallbackGlyph(
@@ -65,7 +68,7 @@ export function drawFallbackGlyph(
   seed = 0,
   direction: CanvasDirection = 'ltr',
 ) {
-  const { dx, dy, fill } = fallbackTextStyle(x, baseline, fontSize, color, effects, seed);
+  const { dx, dy, fill, glows } = fallbackTextStyle(x, baseline, fontSize, color, effects, seed);
   const drawX = x + dx;
   const drawY = baseline + dy;
 
@@ -76,6 +79,18 @@ export function drawFallbackGlyph(
   // as the right edge on a canvas inheriting an RTL paragraph's direction.
   ctx.textAlign = 'left';
   ctx.direction = direction;
+
+  // Glow passes
+  for (const glow of glows) {
+    ctx.save();
+    ctx.shadowBlur = glow.blur;
+    ctx.shadowColor = glow.color;
+    ctx.shadowOffsetX = glow.dx;
+    ctx.shadowOffsetY = glow.dy;
+    ctx.fillStyle = glow.color;
+    ctx.fillText(text, drawX, drawY);
+    ctx.restore();
+  }
 
   // Main text
   ctx.fillStyle = fill;

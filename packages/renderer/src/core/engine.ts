@@ -18,7 +18,7 @@ import { seededRandom } from '../lib/random.ts';
 import type { BundleShaper, ShapeOptions } from '../lib/shaper.ts';
 import { type SubdividedStroke, subdivideStroke } from '../lib/strokeCache.ts';
 import { flattenPath } from '../lib/strokeEffects.ts';
-import { type Box, unionBoxes } from '../lib/strokePath.ts';
+import { type Box, expandBox, type StrokePath, unionBoxes } from '../lib/strokePath.ts';
 import {
   type PlacedStroke,
   placeStrokes,
@@ -220,6 +220,8 @@ export class TegakiEngine {
   private _overlayEl: HTMLElement;
   private _canvasFallbackEl: HTMLSpanElement;
   private _maskCanvas: HTMLCanvasElement | null = null;
+  /** What `_maskCanvas` was last drawn from (see `_render`). */
+  private _maskKey: unknown[] | null = null;
   /** A copy of the finished ink, for the plugins' `ink` hooks. */
   private _inkCanvas: HTMLCanvasElement | null = null;
   /**
@@ -274,7 +276,14 @@ export class TegakiEngine {
   private _placed: { deps: unknown[]; list: PlacedStroke[] } | null = null;
   private _plugins: readonly TegakiPlugin[] = [];
   /** The built-in effects' plugins followed by the user's, memoized for the effects and plugins they came from. */
-  private _allPluginsCache: { effects: ResolvedEffect[]; user: readonly TegakiPlugin[]; list: readonly TegakiPlugin[] } | null = null;
+  private _allPluginsCache: {
+    effects: ResolvedEffect[];
+    user: readonly TegakiPlugin[];
+    clipText: boolean;
+    list: readonly TegakiPlugin[];
+  } | null = null;
+  /** Each placed stroke's ink box (see `strokeInkBounds`), by its path — what the frame's ink covers is their union. */
+  private _inkBoxes = new WeakMap<StrokePath, Box | null>();
   /** What the ink and the plugins' `bounds` cover, memoized for the placed strokes and plugins it was computed from. */
   private _pluginBoundsCache: { strokes: PlacedStroke[]; plugins: readonly TegakiPlugin[]; box: Box | null } | null = null;
   /** The text box plugins paint against, memoized for the layout it was computed from. */
@@ -584,6 +593,7 @@ export class TegakiEngine {
           y: padV + baseline + style.dy,
           direction: clip?.direction ?? layout.direction ?? 'ltr',
           fill: style.fill,
+          glows: style.glows,
           at: entry.offset + entry.duration,
           clip: clip ? [clip.left > -CLIP_REACH ? padH + clip.left : null, clip.right < CLIP_REACH ? padH + clip.right : null] : undefined,
           box: [padH + boxLeft, padV + y, padH + boxRight, padV + y + lineHeight],
@@ -882,6 +892,7 @@ export class TegakiEngine {
     this._strokeCache = new WeakMap();
     this._strokeCacheKey = '';
     this._maskCanvas = null;
+    this._maskKey = null;
     this._inkCanvas = null;
     this._underlayCanvas = null;
     this._placed = null;
@@ -1736,10 +1747,18 @@ export class TegakiEngine {
   /** The built-in effects' plugins, then the user's: every plugin the engine runs, in order. */
   private _allPlugins(): readonly TegakiPlugin[] {
     const cached = this._allPluginsCache;
-    if (cached?.effects === this._resolvedEffects && cached.user === this._plugins) return cached.list;
-    const list = [...effectPlugins(this._resolvedEffects), ...this._plugins];
-    this._allPluginsCache = { effects: this._resolvedEffects, user: this._plugins, list };
+    const clipText = !!this._quality?.clipText;
+    if (cached?.effects === this._resolvedEffects && cached.user === this._plugins && cached.clipText === clipText) return cached.list;
+    const list = [...effectPlugins(this._resolvedEffects, { clipText }), ...this._plugins];
+    this._allPluginsCache = { effects: this._resolvedEffects, user: this._plugins, clipText, list };
     return list;
+  }
+
+  /** The box a placed stroke's ink covers, worked out once per placement. */
+  private _inkBox(stroke: PlacedStroke): Box | null {
+    let box = this._inkBoxes.get(stroke.path);
+    if (box === undefined) this._inkBoxes.set(stroke.path, (box = strokeInkBounds(stroke)));
+    return box;
   }
 
   /** Report a plugin hook that threw — once per plugin and hook, not every frame. */
@@ -1794,6 +1813,7 @@ export class TegakiEngine {
     fontSize: number,
     scale: number,
     color: string,
+    bounds: Box | null,
   ): void {
     const canvas = this._canvasEl;
     if (!this._inkCanvas) this._inkCanvas = document.createElement('canvas');
@@ -1805,7 +1825,7 @@ export class TegakiEngine {
     const inkCtx = ink.getContext('2d')!;
     inkCtx.globalCompositeOperation = 'copy';
     inkCtx.drawImage(canvas, 0, 0);
-    const context = { ctx, ink, fontSize, scale, color, random: (key: string | number) => seededRandom(this._seed, key) };
+    const context = { ctx, ink, bounds, fontSize, scale, color, random: (key: string | number) => seededRandom(this._seed, key) };
     for (const plugin of plugins) {
       if (!plugin.ink) continue;
       ctx.save();
@@ -1947,6 +1967,10 @@ export class TegakiEngine {
     const strokes = frame.strokes;
     const paint = paintWith(plugins, this._reportPluginError);
     const textBox = this._textBox(layout, fontSize, lineHeight);
+    // Clipped ink glows as a whole (the glow plugin's `ink`), fallback text with it.
+    const fallbackEffects = clipText ? this._resolvedEffects.filter((e) => e.effect !== 'glow') : this._resolvedEffects;
+    // What the ink drawn so far covers, for the `ink` hooks.
+    const inkBoxes: (Box | null)[] = [];
 
     // Map grapheme index -> line index so timeline entries (which reference
     // graphemes) can be placed without re-walking the lines array per entry.
@@ -1971,7 +1995,8 @@ export class TegakiEngine {
         for (; si < strokes.length && strokes[si]!.entryIndex === ei; si++) {
           const stroke = strokes[si]!;
           if (stroke.state === 'pending') continue;
-          paint({ ctx, stroke, style: color, lineCap: font.lineCap, color, fontSize, textBox, random });
+          paint({ ctx, stroke, style: color, lineCap: font.lineCap, color, fontSize, scale, textBox, random });
+          inkBoxes.push(this._inkBox(stroke));
         }
       } else if (currentTime >= entry.offset + entry.duration) {
         const { x, y } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
@@ -1994,11 +2019,12 @@ export class TegakiEngine {
           fontSize,
           cssFontFamily(font, this._fallbackFont),
           color,
-          this._resolvedEffects,
+          fallbackEffects,
           clip?.seed ?? this._seed + charIdx,
           clip?.direction ?? layout.direction ?? 'ltr',
         );
         if (clip) ctx.restore();
+        inkBoxes.push(textBox);
       }
     }
 
@@ -2013,71 +2039,116 @@ export class TegakiEngine {
     // close, but the canvas can shape it otherwise — Chrome caches a shaped
     // `(` per canvas regardless of the script it was shaped in, so after
     // `(ا` a lone `(` next to Latin comes out as Amiri's wide Arabic paren.
+    const drawn = unionBoxes(inkBoxes);
     if (clipText) {
       if (!this._maskCanvas) this._maskCanvas = document.createElement('canvas');
       const maskCanvas = this._maskCanvas;
-      if (maskCanvas.width !== canvas.width || maskCanvas.height !== canvas.height) {
-        maskCanvas.width = canvas.width;
-        maskCanvas.height = canvas.height;
-      }
-      const maskCtx = maskCanvas.getContext('2d')!;
-      maskCtx.setTransform(effectiveDpr, 0, 0, effectiveDpr, 0, 0);
-      maskCtx.clearRect(0, 0, w, h);
-      maskCtx.translate(padH, padV);
-      const outlines = this._glyphOutlines(graphemeToLine);
-      if (outlines) {
-        const paths = this._outlinePaths(outlines, maxSegLenFU, font.ascender, fontSize);
-        for (let i = 0; i < outlines.length; i++) {
-          const g = outlines[i]!;
-          const { path, placed } = paths[i]!;
-          if (placed) {
+      // The mask follows the layout, not the time: it's drawn again only when
+      // something it's drawn from changes, not every frame.
+      const maskKey: unknown[] = [
+        canvas.width,
+        canvas.height,
+        effectiveDpr,
+        padH,
+        padV,
+        layout,
+        this._timeline,
+        font,
+        fontSize,
+        lineHeight,
+        this._letterSpacing,
+        this._fallbackFont,
+        this._shaper,
+        plugins,
+        maxSegLenFU,
+        document.fonts?.status,
+      ];
+      const lastKey = this._maskKey;
+      if (!lastKey || lastKey.length !== maskKey.length || maskKey.some((v, i) => v !== lastKey[i])) {
+        this._maskKey = maskKey;
+        if (maskCanvas.width !== canvas.width || maskCanvas.height !== canvas.height) {
+          maskCanvas.width = canvas.width;
+          maskCanvas.height = canvas.height;
+        }
+        const maskCtx = maskCanvas.getContext('2d')!;
+        maskCtx.setTransform(effectiveDpr, 0, 0, effectiveDpr, 0, 0);
+        maskCtx.clearRect(0, 0, w, h);
+        maskCtx.translate(padH, padV);
+        const outlines = this._glyphOutlines(graphemeToLine);
+        if (outlines) {
+          const paths = this._outlinePaths(outlines, maxSegLenFU, font.ascender, fontSize);
+          for (let i = 0; i < outlines.length; i++) {
+            const g = outlines[i]!;
+            const { path, placed } = paths[i]!;
+            if (placed) {
+              maskCtx.fill(path);
+              continue;
+            }
+            maskCtx.save();
+            maskCtx.translate(g.x, g.y);
+            maskCtx.scale(g.scale, -g.scale);
             maskCtx.fill(path);
-            continue;
+            maskCtx.restore();
           }
-          maskCtx.save();
-          maskCtx.translate(g.x, g.y);
-          maskCtx.scale(g.scale, -g.scale);
-          maskCtx.fill(path);
-          maskCtx.restore();
         }
-      }
-      maskCtx.font = `${fontSize}px ${cssFontFamily(font, this._fallbackFont)}`;
-      maskCtx.textBaseline = 'alphabetic';
-      // Draw each word where the DOM put it, as a single string so the
-      // browser's shaper sees the whole word — per-character fillText would
-      // drop ligatures, kerning, and script-specific contextual forms (Arabic
-      // init/medi/fina, Indic conjuncts, etc.). A contextual form reaching
-      // across a space (Caveat's calt) is lost, but this path only runs when
-      // the text draws characters the shaper has no outline for. Anchoring words rather
-      // than lines keeps the mask aligned where the canvas shapes a word
-      // differently from the DOM, and needs no bidi reordering across words:
-      // the anchors carry the DOM's order (a word switching direction is
-      // drawn as one piece per direction, each where bidi put it). Each
-      // piece's `direction` is the one the shaper shaped it in, which places
-      // neutral characters at its ends and mirrors brackets as the strokes
-      // do; textAlign 'left' pins its left edge — 'start' would follow the
-      // direction.
-      maskCtx.textAlign = 'left';
-      if ('letterSpacing' in maskCtx) maskCtx.letterSpacing = `${this._letterSpacing}px`;
-      let clipY = 0;
-      for (let li = 0; !outlines && li < layout.lines.length; li++) {
-        const baseline = clipY + halfLeading + (font.ascender / font.unitsPerEm) * fontSize;
-        for (const word of lineWords(layout, characters, li)) {
-          maskCtx.direction = word.direction;
-          maskCtx.fillText(word.text, word.leftEm * fontSize, baseline);
+        maskCtx.font = `${fontSize}px ${cssFontFamily(font, this._fallbackFont)}`;
+        maskCtx.textBaseline = 'alphabetic';
+        // Draw each word where the DOM put it, as a single string so the
+        // browser's shaper sees the whole word — per-character fillText would
+        // drop ligatures, kerning, and script-specific contextual forms (Arabic
+        // init/medi/fina, Indic conjuncts, etc.). A contextual form reaching
+        // across a space (Caveat's calt) is lost, but this path only runs when
+        // the text draws characters the shaper has no outline for. Anchoring words rather
+        // than lines keeps the mask aligned where the canvas shapes a word
+        // differently from the DOM, and needs no bidi reordering across words:
+        // the anchors carry the DOM's order (a word switching direction is
+        // drawn as one piece per direction, each where bidi put it). Each
+        // piece's `direction` is the one the shaper shaped it in, which places
+        // neutral characters at its ends and mirrors brackets as the strokes
+        // do; textAlign 'left' pins its left edge — 'start' would follow the
+        // direction.
+        maskCtx.textAlign = 'left';
+        if ('letterSpacing' in maskCtx) maskCtx.letterSpacing = `${this._letterSpacing}px`;
+        let clipY = 0;
+        for (let li = 0; !outlines && li < layout.lines.length; li++) {
+          const baseline = clipY + halfLeading + (font.ascender / font.unitsPerEm) * fontSize;
+          for (const word of lineWords(layout, characters, li)) {
+            maskCtx.direction = word.direction;
+            maskCtx.fillText(word.text, word.leftEm * fontSize, baseline);
+          }
+          clipY += lineHeight;
         }
-        clipY += lineHeight;
       }
 
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalCompositeOperation = 'destination-in';
-      ctx.drawImage(maskCanvas, 0, 0);
-      ctx.restore();
+      // Masked only where ink was drawn — the rest of the canvas is empty, and
+      // the composite costs what it covers. (Grown a little: a square cap
+      // reaches past its half-width box.) A plugin's `paint` may draw past its
+      // stroke's ink, so with one the whole canvas is masked.
+      const region = this._plugins.some((p) => p.paint)
+        ? { minX: -padH, minY: -padV, maxX: w - padH, maxY: h - padV }
+        : expandBox(drawn, 0.05 * fontSize);
+      if (region) {
+        const m = ctx.getTransform();
+        const x0 = Math.max(0, Math.floor(m.a * region.minX + m.e) - 1);
+        const y0 = Math.max(0, Math.floor(m.d * region.minY + m.f) - 1);
+        const x1 = Math.min(canvas.width, Math.ceil(m.a * region.maxX + m.e) + 1);
+        const y1 = Math.min(canvas.height, Math.ceil(m.d * region.maxY + m.f) + 1);
+        if (x1 > x0 && y1 > y0) {
+          ctx.save();
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          // destination-in clears whatever it isn't drawn over; the clip keeps it to the region.
+          ctx.beginPath();
+          ctx.rect(x0, y0, x1 - x0, y1 - y0);
+          ctx.clip();
+          ctx.globalCompositeOperation = 'destination-in';
+          ctx.drawImage(maskCanvas, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
+          ctx.restore();
+        }
+      }
     }
 
     // --- Plugins: the finished ink (the built-in glow), then underlays, overlays, onFrame ---
-    if (plugins.some((p) => p.ink)) this._renderInk(ctx, plugins, fontSize, scale, color);
+    if (plugins.some((p) => p.ink)) this._renderInk(ctx, plugins, fontSize, scale, color, drawn);
     if (plugins.some((p) => p.underlay || p.overlay || p.onFrame)) this._renderPlugins(ctx, plugins, frame, fontSize, color);
   }
 }

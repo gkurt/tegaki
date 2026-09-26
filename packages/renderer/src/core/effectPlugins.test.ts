@@ -141,6 +141,7 @@ describe('paint plugins', () => {
       lineCap: 'round',
       color: '#123',
       fontSize: 100,
+      scale: 1,
       textBox: { minX: 0, minY: 0, maxX: 100, maxY: 20 },
       random: (k) => seededRandom(0, k),
     });
@@ -209,5 +210,45 @@ describe('glow', () => {
     const ink = strokeInkBounds(strokes[0]!)!;
     expect(box.minX).toBeCloseTo(ink.minX - 20, 6);
     expect(box.maxY).toBeCloseTo(ink.maxY + 20, 6);
+  });
+});
+
+describe('glow per stroke', () => {
+  const effects = resolveEffects({ glow: { radius: 8, color: '#f0f' } });
+
+  test('each stroke gets one blurred copy at its mean width, under the stroke', () => {
+    const calls: string[] = [];
+    const state: Record<string, unknown> = {};
+    const ctx = new Proxy(state, {
+      get(target, key) {
+        if (key === 'stroke') return () => calls.push(`copy w=${target.lineWidth} blur=${target.shadowBlur}`);
+        if (key in target) return target[key as string];
+        return () => {};
+      },
+      set(target, key, value) {
+        target[key as string] = value;
+        return true;
+      },
+    }) as unknown as CanvasRenderingContext2D;
+    const frame = sampleFrame(placed(effects), 1).strokes[0]!;
+    const paint = paintWith(effectPlugins(effects), noError, () => calls.push('ink'));
+    paint({
+      ctx,
+      stroke: frame,
+      style: '#123',
+      lineCap: 'round',
+      color: '#123',
+      fontSize: 100,
+      scale: 1,
+      textBox: { minX: 0, minY: 0, maxX: 100, maxY: 20 },
+      random: (k) => seededRandom(0, k),
+    });
+    expect(calls).toEqual(['copy w=10 blur=8', 'ink']);
+  });
+
+  test('with clip-to-text the glow lights the clipped ink instead', () => {
+    const [unclipped, clipped] = [false, true].map((clipText) => effectPlugins(effects, { clipText }).find((p) => p.name === 'glow')!);
+    expect([!!unclipped!.paint, !!unclipped!.ink]).toEqual([true, false]);
+    expect([!!clipped!.paint, !!clipped!.ink]).toEqual([false, true]);
   });
 });

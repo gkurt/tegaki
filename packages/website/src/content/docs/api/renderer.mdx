@@ -79,7 +79,7 @@ Effects configuration:
 }
 ```
 
-The effects are [plugins](#plugins) built into the renderer, run ahead of your own: pressure width, taper and wobble reshape each stroke (`geometry`), the gradients choose its paint (`paint`), and glow lights up the finished ink as a whole (`ink`), so strokes don't glow over one another.
+The effects are [plugins](#plugins) built into the renderer, run ahead of your own: pressure width, taper and wobble reshape each stroke (`geometry`), the gradients choose its paint (`paint`), and glow draws a blurred copy under each stroke (`paint`) — or, with clip-to-text on, lights up the clipped ink as a whole (`ink`), since the clip would cut the copies away.
 
 ### `plugins`
 
@@ -178,7 +178,7 @@ A plugin is an object with a `name` and any of these hooks:
 |------|--------|------------|
 | `geometry(path, ctx)` | once per stroke, when the layout changes | moving the ink's points, changing its widths |
 | `paint(stroke, next)` | every frame, for each stroke drawn | a brush, a texture, a paint of your own |
-| `ink({ ctx, ink, scale, … })` | every frame, after the strokes | glows, shadows, filters over the finished ink |
+| `ink({ ctx, ink, bounds, scale, … })` | every frame, after the strokes | glows, shadows, filters over the finished ink |
 | `underlay({ ctx, frame, fontSize, color, random })` | every frame, before the ink | guides, stroke-order arrows, paper texture |
 | `overlay({ ctx, frame, fontSize, color, random })` | every frame, after the ink | a pen at the tip, highlights |
 | `onFrame(frame, prev)` | after every frame is painted | sound, events, syncing other UI |
@@ -188,6 +188,8 @@ A plugin is an object with a `name` and any of these hooks:
 The built-in [effects](#effects) are plugins too, and run first, so each hook of yours sees what they made: `geometry` gets the path after pressure width, taper and wobble, and `paint` gets the gradient as its `style`.
 
 `ctx` is the canvas context, set up so one unit is one CSS px from the top-left of the text box. The engine saves and restores it around every hook. Underlays go on a layer of their own under the finished ink, so clip-to-text doesn't cut them. `color` is the text's color. `random(key)` returns a random number generator seeded per renderer, so the same key gives the same numbers on every frame. `prev` is the frame `onFrame` saw last, or `null` the first time.
+
+`ink` gets a copy of the finished ink (`ink`, a canvas in device px) and `bounds`, the box the ink drawn so far covers in the same px as `ctx` (`ctx.getTransform()` maps it to device px). Work inside `bounds`: outside it the canvas is empty, and a filter or blur costs what it covers.
 
 The canvas only reaches a little past the ink, so anything painted further out is cut off. Return a box (`{ minX, minY, maxX, maxY }`, in the same px) from `bounds` and the canvas grows to hold it. A hook that throws is logged once and skipped, and the rest of the render carries on.
 
@@ -204,7 +206,7 @@ const swell: TegakiPlugin = {
 
 ### Painting strokes
 
-`paint` gets each stroke as it's drawn (`stroke.stroke`, a stroke of [the frame](#engineframeattime) with its `path` and `progress`) and `next`, which paints it the way the rest of the chain would: the plugins after yours, then the default painter. Change what you pass to `next` (`style`, the stroke's `path`), call it more than once, draw around it, or skip it. `style` is a CSS color, a canvas gradient or pattern, or a function giving the color at each draw progress. `textBox` is the box the text's lines fill.
+`paint` gets each stroke as it's drawn (`stroke.stroke`, a stroke of [the frame](#engineframeattime) with its `path` and `progress`) and `next`, which paints it the way the rest of the chain would: the plugins after yours, then the default painter. Change what you pass to `next` (`style`, the stroke's `path`), call it more than once, draw around it, or skip it. `style` is a CSS color, a canvas gradient or pattern, or a function giving the color at each draw progress. `textBox` is the box the text's lines fill, and `scale` is px per font unit.
 
 ```ts
 const shadow: TegakiPlugin = {
