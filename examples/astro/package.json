@@ -1,0 +1,20 @@
+{
+  "name": "@tegaki/example-astro",
+  "version": "0.22.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "astro check"
+  },
+  "dependencies": {
+    "astro": "^7.3.5",
+    "tegaki": "workspace:*"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "typescript": "^6.0.3"
+  }
+}

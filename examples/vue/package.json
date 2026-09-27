@@ -1,0 +1,23 @@
+{
+  "name": "@tegaki/example-vue",
+  "version": "0.22.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "harfbuzzjs": "^1.6.2",
+    "tegaki": "workspace:*",
+    "vue": "^3.5.43"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.9",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.1",
+    "vue-tsc": "^3.3.11"
+  }
+}

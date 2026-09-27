@@ -73,7 +73,7 @@ jobs:
       # web examples, then smoke-test that each actually renders handwriting.
       - name: Build examples
         run: bun run build:examples
-      - name: Smoke-test web examples (vite, next, nuxt)
+      - name: Smoke-test web examples (vite, next, nuxt, svelte, vue, solid, astro, vanilla)
         run: bun --filter @tegaki/example-e2e test
       - name: Render-test Remotion still
         run: bun --filter @tegaki/example-e2e remotion-still

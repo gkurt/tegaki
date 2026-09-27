@@ -114,6 +114,7 @@ The renderer is structured so adapters are thin wrappers over the shared engine 
 2. Add a subpath export in `packages/renderer/package.json` (follow the pattern of `./react`, `./svelte`, etc.).
 3. Add a working example under `packages/website/src/components/<framework>/` and link it from the relevant doc page.
 4. Add tests covering the adapter's lifecycle (mount, update, unmount).
+5. Add a minimal consumer app under `examples/<framework>/` (see `examples/svelte` or `examples/vue`) and wire it into the example smoke tests: an entry in `EXAMPLES` and `webServer` in `e2e/examples/playwright.config.ts`, its build in the root `build:examples` script, and its name in `WEB_EXAMPLES` in `scripts/test-published-examples.ts` (which re-runs the smoke tests against the published npm package).
 
 ## Adding or updating a bundled font
 

@@ -1,0 +1,53 @@
+---
+import TegakiRenderer from 'tegaki/astro';
+import bundle from 'tegaki/fonts/caveat';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tegaki × Astro</title>
+    <style is:global>
+      .page {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.5;
+      }
+      .page section {
+        margin: 2rem 0;
+        padding: 1.5rem;
+        border: 1px solid #e5e5e5;
+        border-radius: 8px;
+      }
+      .page h2 {
+        margin-top: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <h1>Tegaki × Astro</h1>
+      <p>Static Astro page using the <code>tegaki/astro</code> component: rendered on the server, hydrated on the client.</p>
+
+      <section id="looping">
+        <h2>Looping</h2>
+        <TegakiRenderer
+          font={bundle}
+          text="Hello, Astro!"
+          time={{ mode: 'uncontrolled', speed: 1, loop: true, loopGap: 1 }}
+          loadFont
+          style="font-size: 64px"
+        />
+      </section>
+
+      <section id="finished">
+        <h2>By family name</h2>
+        <p>The bundle registered above, looked up by its family name and shown finished.</p>
+        <TegakiRenderer font={bundle.family} text="Server-rendered" time="100%" style="font-size: 48px" />
+      </section>
+    </main>
+  </body>
+</html>

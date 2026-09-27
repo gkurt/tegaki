@@ -1,0 +1,19 @@
+{
+  "name": "@tegaki/example-vanilla",
+  "version": "0.22.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "tegaki": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vite": "^8.3.1"
+  }
+}

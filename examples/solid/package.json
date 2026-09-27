@@ -1,0 +1,21 @@
+{
+  "name": "@tegaki/example-solid",
+  "version": "0.22.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.15",
+    "tegaki": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vite": "^8.3.1",
+    "vite-plugin-solid": "^2.11.14"
+  }
+}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tegaki × Vanilla</title>
+  </head>
+  <body>
+    <main class="page">
+      <h1>Tegaki × Vanilla</h1>
+      <p>No framework: the <code>tegaki/wc</code> web component and the <code>tegaki/core</code> engine on one page.</p>
+
+      <section>
+        <h2>Web Component</h2>
+        <p>A <code>&lt;tegaki-renderer&gt;</code> in the markup, its bundle assigned to the <code>.font</code> property.</p>
+        <tegaki-renderer id="wc" text="Web Component!" loop loop-gap="1" style="font-size: 56px"></tegaki-renderer>
+      </section>
+
+      <section>
+        <h2>TegakiEngine</h2>
+        <p>A <code>TegakiEngine</code> mounted into a plain <code>&lt;div&gt;</code>.</p>
+        <div id="core" style="font-size: 56px"></div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

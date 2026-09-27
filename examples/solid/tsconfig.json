@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "customConditions": ["tegaki@dev"],
+    "types": ["vite/client"]
+  },
+  "include": ["src", "vite.config.ts"]
+}

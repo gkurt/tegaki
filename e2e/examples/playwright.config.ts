@@ -11,14 +11,67 @@ const CI = !!process.env.CI;
 const here = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES_DIR = process.env.TEGAKI_EXAMPLES_DIR ? resolve(process.env.TEGAKI_EXAMPLES_DIR) : resolve(here, '../../examples');
 
+export interface Example {
+  name: string;
+  port: number;
+  /**
+   * A selector per renderer on the page that must draw ink: each is checked on
+   * its own, its canvas found inside the matched element, open shadow roots
+   * included (the web component draws into its shadow root). Without it, any
+   * renderer drawing anywhere on the page passes.
+   */
+  renderers?: readonly string[];
+  /**
+   * Console errors from a known, tracked bug that the smoke test tolerates for
+   * this example only (every other console error still fails it). Remove the
+   * entry once the bug is fixed.
+   */
+  knownErrors?: readonly RegExp[];
+}
+
 // Each web example is built ahead of time (see `bun run build:examples`) and
 // served here from its production output on a dedicated port. The smoke tests
 // then load each one in a real browser and assert the renderer actually drew.
-export const EXAMPLES = [
+export const EXAMPLES: readonly Example[] = [
   { name: 'vite', port: 4310 },
   { name: 'next', port: 4311 },
   { name: 'nuxt', port: 4312 },
-] as const;
+  { name: 'svelte', port: 4313, renderers: ['#looping', '#scrubbable'] },
+  { name: 'vue', port: 4314, renderers: ['#looping', '#scrubbable', '#arabic'] },
+  { name: 'solid', port: 4315, renderers: ['#looping', '#scrubbable'] },
+  {
+    name: 'astro',
+    port: 4316,
+    renderers: ['#looping', '#finished'],
+    // Known bug: `tegaki/astro` serializes the bundle as the server evaluated it,
+    // and a font bundle's `fontUrl` / `fullFontUrl` are `new URL('./x.ttf',
+    // import.meta.url)` — a `file://` path on the build machine once prerendered.
+    // The browser refuses to load it, so the page falls back to an unloaded font
+    // (the strokes still draw from the glyph data).
+    knownErrors: [/Not allowed to load local resource: file:\/\/.*\.ttf/],
+  },
+  { name: 'vanilla', port: 4317, renderers: ['#wc', '#core'] },
+];
+
+function portOf(name: string): number {
+  const example = EXAMPLES.find((e) => e.name === name);
+  if (!example) throw new Error(`Unknown example: ${name}`);
+  return example.port;
+}
+
+/** The Vite-built examples (and Astro, whose preview takes the same flags) serve their `dist/` with `<bundler> preview`. */
+function previewServer(name: string, extraFlags = '') {
+  const port = portOf(name);
+  return {
+    command: `bun run preview --port ${port} --host 127.0.0.1${extraFlags}`,
+    cwd: resolve(EXAMPLES_DIR, name),
+    url: `http://127.0.0.1:${port}/`,
+    reuseExistingServer: !CI,
+    timeout: 120_000,
+    stdout: 'ignore' as const,
+    stderr: 'pipe' as const,
+  };
+}
 
 export default defineConfig({
   testDir: '.',
@@ -32,15 +85,7 @@ export default defineConfig({
   use: { trace: 'on-first-retry' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
-    {
-      command: 'bun run preview --port 4310 --host 127.0.0.1',
-      cwd: resolve(EXAMPLES_DIR, 'vite'),
-      url: 'http://127.0.0.1:4310/',
-      reuseExistingServer: !CI,
-      timeout: 120_000,
-      stdout: 'ignore',
-      stderr: 'pipe',
-    },
+    previewServer('vite'),
     {
       command: 'bun run start --port 4311 --hostname 127.0.0.1',
       cwd: resolve(EXAMPLES_DIR, 'next'),
@@ -60,5 +105,13 @@ export default defineConfig({
       stdout: 'ignore',
       stderr: 'pipe',
     },
+    previewServer('svelte'),
+    previewServer('vue'),
+    previewServer('solid'),
+    // Under a coding agent `astro preview` detaches into a background server and
+    // exits, which Playwright reads as the server dying; `--ignore-lock` keeps
+    // it in the foreground (and skips the lock file) wherever it runs.
+    previewServer('astro', ' --ignore-lock'),
+    previewServer('vanilla'),
   ],
 });

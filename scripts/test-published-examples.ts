@@ -31,7 +31,8 @@ const root = resolve(import.meta.dirname, '..');
 
 // Examples that consume the `tegaki` npm package. `build` examples produce a
 // servable/typecheckable artifact; remotion is rendered via the still check.
-const WEB_EXAMPLES = ['vite', 'next', 'nuxt'] as const;
+// Keep in step with EXAMPLES in e2e/examples/playwright.config.ts.
+const WEB_EXAMPLES = ['vite', 'next', 'nuxt', 'svelte', 'vue', 'solid', 'astro', 'vanilla'] as const;
 const ALL_EXAMPLES = [...WEB_EXAMPLES, 'remotion'] as const;
 
 const args = process.argv.slice(2);
@@ -71,15 +72,23 @@ function resolveVersion(spec: string): string {
   }
 }
 
-/** Remove the `tegaki@dev` member from any (custom)conditions array and tidy up. */
+/**
+ * Remove the `tegaki@dev` member from any (custom / external) conditions array
+ * — tsconfig `customConditions`, Vite's `resolve.conditions` and Astro's
+ * `vite.ssr.resolve.{conditions,externalConditions}` — and drop the arrays it
+ * leaves empty.
+ */
 function stripDevCondition(text: string): string {
   return text
     .replace(/(['"])tegaki@dev\1\s*,\s*/g, '')
     .replace(/\s*,\s*(['"])tegaki@dev\1/g, '')
     .replace(/(['"])tegaki@dev\1/g, '')
     .replace(/^\s*["']?customConditions["']?\s*:\s*\[\s*\],?\s*\n/gm, '')
-    .replace(/^\s*conditions\s*:\s*\[\s*\],?\s*\n/gm, '');
+    .replace(/^\s*(?:external)?[cC]onditions\s*:\s*\[\s*\],?\s*\n/gm, '');
 }
+
+// The configs that may carry the `tegaki@dev` condition, across the examples' bundlers.
+const DEV_CONDITION_CONFIGS = ['tsconfig.json', 'vite.config.ts', 'astro.config.ts'];
 
 const version = resolveVersion(versionArg);
 console.log(`\n=== Testing published tegaki@${version} against examples ===\n`);
@@ -88,7 +97,7 @@ const staging = stagingArg ? resolve(stagingArg) : mkdtempSync(join(tmpdir(), 't
 if (staging.startsWith(root)) throw new Error(`Staging dir must be outside the workspace, got: ${staging}`);
 console.log(`Staging in ${staging}\n`);
 
-const SKIP_COPY = new Set(['node_modules', 'dist', '.next', '.nuxt', '.output', 'out']);
+const SKIP_COPY = new Set(['node_modules', 'dist', '.next', '.nuxt', '.output', '.astro', 'out']);
 
 for (const name of ALL_EXAMPLES) {
   const dest = join(staging, name);
@@ -103,7 +112,7 @@ for (const name of ALL_EXAMPLES) {
   pkg.dependencies.tegaki = version;
   writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
-  for (const cfg of ['tsconfig.json', 'vite.config.ts']) {
+  for (const cfg of DEV_CONDITION_CONFIGS) {
     const p = join(dest, cfg);
     try {
       writeFileSync(p, stripDevCondition(readFileSync(p, 'utf-8')));
