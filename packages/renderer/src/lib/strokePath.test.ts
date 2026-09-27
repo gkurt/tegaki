@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { seededRandom } from './random.ts';
-import { clearance, expandBox, inkEdge, offsetPath, type PathPoint, StrokePath, unionBoxes } from './strokePath.ts';
+import { clearance, expandBox, inkEdge, mixData, offsetPath, type PathPoint, StrokePath, unionBoxes } from './strokePath.ts';
 
 /** A path through `xy` pairs, `t` spread by arc length, every point `width` wide. */
 function path(xy: [number, number][], width = 4): StrokePath {
@@ -48,6 +48,49 @@ describe('StrokePath', () => {
   test('bounds pad every point by half its width', () => {
     expect(line.bounds()).toEqual({ minX: -2, minY: -2, maxX: 102, maxY: 102 });
     expect(new StrokePath([]).bounds()).toBeNull();
+  });
+});
+
+describe('point data', () => {
+  /** A straight line along x whose points carry `z` rising 0 → 10. */
+  const rising = path([
+    [0, 0],
+    [50, 0],
+    [100, 0],
+  ]).map((p) => ({ ...p, data: { z: p.x / 10 } }));
+
+  test('pointAt interpolates data between points, like width', () => {
+    expect(rising.pointAt(0.25).data).toEqual({ z: 2.5 });
+    expect(rising.pointAt(1).data).toEqual({ z: 10 });
+  });
+
+  test('a geometry hook that spreads the point keeps its data, and samples between points see it too', () => {
+    const moved = rising.map((p) => ({ ...p, y: p.y + 5 }));
+    expect(moved.points.map((p) => p.data?.z)).toEqual([0, 5, 10]);
+    expect(moved.pointAt(0.75)).toMatchObject({ y: 5, data: { z: 7.5 } });
+  });
+
+  test('a slice carries data, cut ends interpolated', () => {
+    expect(rising.slice(0.25, 0.75).points.map((p) => p.data?.z)).toEqual([2.5, 5, 7.5]);
+  });
+
+  test('an offset keeps each point’s data', () => {
+    expect(offsetPath(rising, 4).points.map((p) => p.data?.z)).toEqual([0, 5, 10]);
+  });
+
+  test('a path without data samples without a data key', () => {
+    expect(
+      'data' in
+        path([
+          [0, 0],
+          [10, 0],
+        ]).pointAt(0.5),
+    ).toBe(false);
+  });
+
+  test('a key only one side has is held, not blended with 0', () => {
+    expect(mixData({ z: 2 }, { z: 4, wet: 1 }, 0.5)).toEqual({ z: 3, wet: 1 });
+    expect(mixData(undefined, { z: 4 }, 0.5)).toEqual({ z: 4 });
   });
 });
 

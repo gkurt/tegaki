@@ -607,8 +607,10 @@ const starts = strokeInstances(computeTimeline('Hello', bundle), bundle).map((s)
 
 A polyline of points, each with `x`, `y`, `width` (the ink width there) and `t` (the draw progress at that point, 0–1). The paths in a frame are in CSS px. `new StrokePath(points)` makes one.
 
+A point can also carry `data`: numbers by key that a `geometry` hook attaches for the hooks after it, such as a depth for a painter that draws the ink in 3D. A hook that spreads the point (`{ ...p, x }`) keeps them. `pointAt`, `slice` and `offsetPath` carry them too, interpolated between points the way `width` is. Prefix the keys with your plugin's name so two plugins don't collide.
+
 - `length`: the arc length in px.
-- `pointAt(t)`: the point at draw progress `t`, as `{ x, y, angle, width }`.
+- `pointAt(t)`: the point at draw progress `t`, as `{ x, y, angle, width }` (and `data`, when the points carry some).
 - `slice(from, to)`: the part between two progress values, as a path of its own with `t` running from 0 to 1 again.
 - `bounds()`: the box the ink covers, with each point padded by half its width, or `null` for an empty path.
 - `map(fn)`: a path of the points `fn` makes from these. Between points it maps the exact pen position here, so the pen stays on the new ink (see [Reshaping the ink](#reshaping-the-ink)).

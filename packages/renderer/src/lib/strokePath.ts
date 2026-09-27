@@ -14,7 +14,19 @@ export interface PathPoint {
    * own 0–1; an offset keeps its source's.
    */
   t: number;
+  /**
+   * Numbers a plugin attaches to the point for the hooks after it — a depth,
+   * a pressure, how wet the ink is — by key (prefix keys with the plugin's
+   * name). A `geometry` hook that spreads the point (`{ ...p, x }`) keeps
+   * them; {@link StrokePath.pointAt}, {@link StrokePath.slice} and
+   * {@link offsetPath} carry them too, interpolated between points like
+   * `width`. A key a point doesn't have is missing, not `0`.
+   */
+  data?: PointData;
 }
+
+/** Numbers attached to a {@link PathPoint}, by key. */
+export type PointData = Readonly<Record<string, number>>;
 
 /** An axis-aligned box, in px. */
 export interface Box {
@@ -31,6 +43,8 @@ export interface PathSample {
   /** Direction of travel, in radians (y down: `π/2` points down). `0` on a single-point path. */
   angle: number;
   width: number;
+  /** The points' {@link PathPoint.data} here, interpolated between them. */
+  data?: PointData;
 }
 
 /**
@@ -39,7 +53,7 @@ export interface PathSample {
  * wobble displaces where it is), which a straight line between two wobbled
  * vertices only approximates.
  */
-type ExactSampler = (t: number) => { x: number; y: number; width: number };
+type ExactSampler = (t: number) => { x: number; y: number; width: number; data?: PointData };
 
 /** A polyline with per-point width and draw progress. */
 export class StrokePath {
@@ -81,7 +95,7 @@ export class StrokePath {
   map(fn: (point: PathPoint) => PathPoint): StrokePath {
     const exact: ExactSampler = (t) => {
       const s = this.pointAt(t);
-      return fn({ x: s.x, y: s.y, width: s.width, t });
+      return fn(withData({ x: s.x, y: s.y, width: s.width, t }, s.data));
     };
     return new StrokePath(this.points.map(fn), exact);
   }
@@ -90,7 +104,7 @@ export class StrokePath {
   pointAt(t: number): PathSample {
     const pts = this.points;
     if (pts.length === 0) return { x: 0, y: 0, angle: 0, width: 0 };
-    if (pts.length === 1) return { x: pts[0]!.x, y: pts[0]!.y, angle: 0, width: pts[0]!.width };
+    if (pts.length === 1) return withData({ x: pts[0]!.x, y: pts[0]!.y, angle: 0, width: pts[0]!.width }, pts[0]!.data);
     const k = lastAtOrBefore(pts, t);
     const a = pts[k]!;
     const b = pts[k + 1];
@@ -101,11 +115,14 @@ export class StrokePath {
     const angle = Math.atan2(pts[s0 + 1]!.y - pts[s0]!.y, pts[s0 + 1]!.x - pts[s0]!.x);
     if (this._exact) {
       const e = this._exact(Math.max(pts[0]!.t, Math.min(t, pts[pts.length - 1]!.t)));
-      return { x: e.x, y: e.y, angle, width: e.width };
+      return withData({ x: e.x, y: e.y, angle, width: e.width }, e.data);
     }
-    if (!inside) return { x: a.x, y: a.y, angle, width: a.width };
+    if (!inside) return withData({ x: a.x, y: a.y, angle, width: a.width }, a.data);
     const f = (t - a.t) / (b.t - a.t);
-    return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, angle, width: a.width + (b.width - a.width) * f };
+    return withData(
+      { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, angle, width: a.width + (b.width - a.width) * f },
+      mixData(a.data, b.data, f),
+    );
   }
 
   /** The part between draw progress `from` and `to`, re-timed to its own 0–1. */
@@ -120,7 +137,7 @@ export class StrokePath {
     const retime = (t: number) => (span > 0 ? (t - lo) / span : 0);
     const at = (t: number): PathPoint => {
       const p = this.pointAt(t);
-      return { x: p.x, y: p.y, width: p.width, t: retime(t) };
+      return withData({ x: p.x, y: p.y, width: p.width, t: retime(t) }, p.data);
     };
     const out: PathPoint[] = [at(lo)];
     for (const p of pts) if (p.t > lo && p.t < hi) out.push({ ...p, t: retime(p.t) });
@@ -146,6 +163,22 @@ export class StrokePath {
     this._bounds = box;
     return box;
   }
+}
+
+/** `point` with `data`, when there is any (a point without data has no `data` key). */
+function withData<P extends object>(point: P, data: PointData | undefined): P & { data?: PointData } {
+  return data ? { ...point, data } : point;
+}
+
+/** The data a fraction `f` of the way from `a`'s to `b`'s: each key both have interpolated, a key only one has held. */
+export function mixData(a: PointData | undefined, b: PointData | undefined, f: number): PointData | undefined {
+  if (!a || !b || a === b) return a ?? b;
+  const out: Record<string, number> = { ...b, ...a };
+  for (const key in b) {
+    const from = a[key];
+    if (from !== undefined) out[key] = from + (b[key]! - from) * f;
+  }
+  return out;
 }
 
 /** Index of the last point with `t` at or before `t` (0 when `t` precedes them all). */
@@ -208,7 +241,7 @@ export function offsetPath(path: StrokePath, distance: OffsetDistance): StrokePa
   const travel: [number, number][] = [];
   const push = (p: PathPoint, [nx, ny]: [number, number], dist: number, dir: [number, number]) => {
     if (out.length > 0) travel.push(dir);
-    out.push({ x: p.x + nx * dist, y: p.y + ny * dist, width: p.width, t: p.t });
+    out.push(withData({ x: p.x + nx * dist, y: p.y + ny * dist, width: p.width, t: p.t }, p.data));
   };
 
   for (let i = 0; i < src.length; i++) {
@@ -261,12 +294,15 @@ function cutLoops(pts: PathPoint[], travel: [number, number][]): PathPoint[] {
       if (!reversed) continue;
       const a = pts[i]!;
       const b = pts[i + 1]!;
-      const cut: PathPoint = {
-        x: a.x + (b.x - a.x) * hit,
-        y: a.y + (b.y - a.y) * hit,
-        width: a.width + (b.width - a.width) * hit,
-        t: a.t + (b.t - a.t) * hit,
-      };
+      const cut: PathPoint = withData(
+        {
+          x: a.x + (b.x - a.x) * hit,
+          y: a.y + (b.y - a.y) * hit,
+          width: a.width + (b.width - a.width) * hit,
+          t: a.t + (b.t - a.t) * hit,
+        },
+        mixData(a.data, b.data, hit),
+      );
       pts.splice(i + 1, j - i, cut);
       travel.splice(i + 1, j - i, travel[j]!);
       // The shortened segment may cross further on: look again from it.

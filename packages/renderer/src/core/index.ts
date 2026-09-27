@@ -14,6 +14,7 @@ export {
   offsetPath,
   type PathPoint,
   type PathSample,
+  type PointData,
   StrokePath,
   unionBoxes,
 } from '../lib/strokePath.ts';

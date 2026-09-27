@@ -344,7 +344,8 @@ export interface TegakiPlugin {
    * per layout per stroke with the path the plugins before it made (the
    * first gets the stroke as the bundle has it), not per frame. Return a new
    * path; {@link StrokePath.map} keeps where the pen is exact. A dot is a
-   * path of one point.
+   * path of one point. Numbers the hooks after it should see — a depth, say,
+   * for a painter drawing the ink in 3D — go on the points' `data`.
    */
   geometry?(path: StrokePath, ctx: TegakiGeometryContext): StrokePath;
   /**

@@ -256,3 +256,18 @@ describe('glow per stroke', () => {
     expect([!!clipped!.paint, !!clipped!.ink]).toEqual([false, true]);
   });
 });
+
+describe('point data through the plugins', () => {
+  test('data a geometry hook attaches reaches the frame — through wobble, taper and pressure — and the pen head', () => {
+    const depth: TegakiPlugin = { name: 'depth', geometry: (path) => path.map((p) => ({ ...p, data: { z: p.t * 10 } })) };
+    const reshape = reshapeWith(
+      [depth, ...effectPlugins(resolveEffects({ wobble: true, taper: true }))],
+      { fontSize: 100, random: (k) => seededRandom(0, k), textBox: { minX: 0, minY: 0, maxX: 0, maxY: 0 } },
+      noError,
+    );
+    const [stroke] = placeStrokes(instances, { placeEntry: () => ({ x: 0, y: 0, scale: 1, ascender: 0, seed: 0 }), reshape });
+    expect(stroke!.path.points.map((p) => p.data?.z)).toEqual(stroke!.path.points.map((p) => p.t * 10));
+    const [drawing] = sampleFrame([stroke!], 0.5).active;
+    expect(drawing!.head.data?.z).toBeCloseTo(drawing!.progress * 10, 6);
+  });
+});
