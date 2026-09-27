@@ -6,32 +6,46 @@ import { EXAMPLES } from './playwright.config.ts';
 // (uncaught exceptions, hydration mismatches) which are always fatal.
 const BENIGN = [/favicon/i, /Failed to load resource.*404/i];
 
+interface InkSample {
+  /** Renderer canvases found (`[data-tegaki="canvas"]`, web components' shadow roots included). */
+  canvases: number;
+  /** Non-transparent pixels across all of them. */
+  ink: number;
+  /** A canvas `getImageData` refused to read (tainted) — the message, so the failure says why. */
+  unreadable: string | null;
+}
+
 /**
- * Does a `<canvas>` inside `selector`'s element (the whole document when
- * omitted) have at least one non-transparent pixel? Walks open shadow roots,
- * so a `<tegaki-renderer>`'s shadow-root canvas counts too.
+ * Count the ink the renderers inside `selector`'s element (the whole document
+ * when null) drew. Runs in the page. Only the renderer's own canvases count
+ * (not an effect's scratch canvas), and a web component's live in its shadow
+ * root, so every open shadow root is searched too. A canvas `getImageData`
+ * can't read — tainted, which WebKit and Firefox enforce more strictly than
+ * Chromium — is reported rather than thrown, so the poll's failure names it.
  */
-function hasInk(selector: string | null): boolean {
-  const root = selector ? document.querySelector(selector) : document;
-  if (!root) return false;
+function sampleInk(selector: string | null): InkSample {
   const canvases: HTMLCanvasElement[] = [];
-  const walk = (node: ParentNode) => {
-    for (const el of node.querySelectorAll('*')) {
-      if (el instanceof HTMLCanvasElement) canvases.push(el);
-      if (el.shadowRoot) walk(el.shadowRoot);
-    }
+  const visit = (root: Document | Element | ShadowRoot) => {
+    canvases.push(...root.querySelectorAll<HTMLCanvasElement>('canvas[data-tegaki="canvas"]'));
+    for (const el of root.querySelectorAll('*')) if (el.shadowRoot) visit(el.shadowRoot);
   };
-  if (root instanceof Element && root.shadowRoot) walk(root.shadowRoot);
-  walk(root);
+  const root = selector ? document.querySelector(selector) : document;
+  if (root instanceof Element && root.shadowRoot) visit(root.shadowRoot);
+  if (root) visit(root);
+  let ink = 0;
+  let unreadable: string | null = null;
   for (const c of canvases) {
+    if (!c.width || !c.height) continue;
     const ctx = c.getContext('2d');
-    if (!ctx || !c.width || !c.height) continue;
-    const { data } = ctx.getImageData(0, 0, c.width, c.height);
-    for (let i = 3; i < data.length; i += 4) {
-      if (data[i] !== 0) return true;
+    if (!ctx) continue;
+    try {
+      const { data } = ctx.getImageData(0, 0, c.width, c.height);
+      for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) ink++;
+    } catch (e) {
+      unreadable = (e as Error).message;
     }
   }
-  return false;
+  return { canvases: canvases.length, ink, unreadable };
 }
 
 for (const { name, port, renderers, knownErrors = [] } of EXAMPLES) {
@@ -50,12 +64,34 @@ for (const { name, port, renderers, knownErrors = [] } of EXAMPLES) {
     await page.locator('[data-tegaki="canvas"]').first().waitFor({ state: 'attached', timeout: 30_000 });
     for (const selector of renderers ?? [null]) {
       await expect
-        .poll(() => page.evaluate(hasInk, selector), {
-          timeout: 30_000,
-          message: selector ? `the renderer in ${selector} never drew any ink` : 'no canvas ever drew any ink',
-        })
-        .toBe(true);
+        .poll(
+          async () => {
+            const s = await page.evaluate(sampleInk, selector);
+            return s.unreadable ? `unreadable canvas: ${s.unreadable}` : s.ink > 0 ? 'ink' : `no ink in ${s.canvases} canvases`;
+          },
+          {
+            timeout: 30_000,
+            message: selector ? `the renderer in ${selector} never drew any ink` : 'no renderer canvas ever drew any ink',
+          },
+        )
+        .toBe('ink');
     }
+
+    // Every example has a looping renderer, so the ink must keep changing: the
+    // engine's rAF loop is really animating, not a canvas painted once (or the
+    // plain-text fallback a renderer that failed would leave behind).
+    let last = (await page.evaluate(sampleInk, null)).ink;
+    await expect
+      .poll(
+        async () => {
+          const { ink } = await page.evaluate(sampleInk, null);
+          const moved = ink !== last;
+          last = ink;
+          return moved;
+        },
+        { timeout: 15_000, intervals: [250], message: 'the ink never changed — the animation is not running' },
+      )
+      .toBe(true);
 
     expect(errors, `runtime errors:\n${errors.join('\n')}`).toEqual([]);
   });

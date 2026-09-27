@@ -22,10 +22,24 @@ export default defineConfig({
     // across OSes, so allow a small pixel delta before failing a snapshot.
     toHaveScreenshot: { maxDiffPixelRatio: 0.02, animations: 'disabled' },
   },
+  // Chromium runs every spec. WebKit (what every iOS browser runs —
+  // gkurt/tegaki#29) and Firefox run only the cross-browser render check: the
+  // pixel snapshots are committed for Chromium alone, so text-preview.e2e.ts
+  // stays out of their runs. Run one engine with `--project=webkit`.
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+      testMatch: '**/cross-browser.e2e.ts',
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+      testMatch: '**/cross-browser.e2e.ts',
     },
   ],
   webServer: {

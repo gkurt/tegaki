@@ -83,7 +83,16 @@ export default defineConfig({
   workers: 1,
   reporter: CI ? 'list' : [['list'], ['html', { open: 'never' }]],
   use: { trace: 'on-first-retry' },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // Every example in all three engines: WebKit is what every iOS browser runs
+  // (Safari and Chrome alike — gkurt/tegaki#29 was the renderer not showing on
+  // an iPhone), and `mobile-webkit` adds the phone viewport, touch and a 3×
+  // device pixel ratio on top. Run one with `--project=webkit`.
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    { name: 'mobile-webkit', use: { ...devices['iPhone 15'] } },
+  ],
   webServer: [
     previewServer('vite'),
     {

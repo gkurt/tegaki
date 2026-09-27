@@ -1,33 +1,16 @@
 import { expect, type Page, test } from '@playwright/test';
+import { type PreviewParams, previewUrl, waitForReady } from './preview.ts';
 
-const PAGE = '/tegaki/preview/';
-
-/**
- * Build a URL with the standalone preview params. Values are URL-encoded via
- * URLSearchParams so callers don't have to escape them. The snapshots are of
- * the default geometry pipeline (what the shipped bundles use); a case can
- * still set `pl=raster`.
- */
-function previewUrl(params: Record<string, string | number>): string {
-  const p = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) p.set(k, String(v));
-  return `${PAGE}?${p.toString()}`;
-}
-
-/** Wait for the standalone preview to signal that the bundle is loaded and rendered. */
-async function waitForReady(page: Page) {
-  await page.waitForSelector('body[data-tegaki-ready="true"]', { timeout: 30_000 });
-  // Guarantee the font has been applied and the SVG element is actually painted.
-  await page.evaluate(() => document.fonts.ready);
-  // One extra frame for any final layout pass (stroke widths depend on measured font-size).
-  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))));
-}
+// Pixel snapshots are committed for Chromium only (darwin + linux baselines);
+// the other engines are covered by cross-browser.e2e.ts, which asserts
+// structure rather than pixels. playwright.config.ts runs this file in the
+// chromium project alone.
 
 interface PreviewCase {
   /** Snapshot filename (without extension) and step label. */
   name: string;
   /** URL params fed to the standalone text preview. */
-  params: Record<string, string | number>;
+  params: PreviewParams;
   /** Extra per-case assertions, evaluated against the container element. */
   extraAssert?: (page: Page) => Promise<void>;
 }
