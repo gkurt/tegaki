@@ -4,25 +4,34 @@
 // the agent prompt leave them out.
 
 import {
+  annotatePlugin,
   boilPlugin,
+  captionPlugin,
   type TegakiPlugin,
   type TegakiPluginFactory,
   type TegakiPluginOptions,
   type TegakiPluginParams,
+  textPathPlugin,
   variationPlugin,
 } from 'tegaki/core';
 import { ballpointPlugin } from './ballpoint.ts';
 import { bleedPlugin } from './bleed.ts';
 import { brushPlugin } from './brush.ts';
+import { burnPlugin } from './burn.ts';
+import { chalkPlugin } from './chalk.ts';
 import { colorsPlugin } from './colors.ts';
 import { crtPlugin } from './crt.ts';
 import { echoPlugin } from './echo.ts';
 import { eraserPlugin } from './eraser.ts';
+import { foilPlugin } from './foil.ts';
 import { grainPlugin } from './grain.ts';
 import { graphitePlugin } from './graphite.ts';
 import { hapticsPlugin } from './haptics.ts';
+import { hatchPlugin } from './hatch.ts';
+import { joinsPlugin } from './joins.ts';
 import { karaokePlugin } from './karaoke.ts';
 import { laserPlugin } from './laser.ts';
+import { markerPlugin } from './marker.ts';
 import { neonPlugin } from './neon.ts';
 import { nibPlugin } from './nib.ts';
 import { paperPlugin } from './paper.ts';
@@ -34,6 +43,8 @@ import { shakyPlugin } from './shaky.ts';
 import { slantPlugin } from './slant.ts';
 import { soundPlugin } from './sound.ts';
 import { sparklePlugin } from './sparkle.ts';
+import { sprayPlugin } from './spray.ts';
+import { stitchPlugin } from './stitch.ts';
 import { strokeOrderPlugin } from './stroke-order.ts';
 import { sweepPlugin } from './sweep.ts';
 import { typewriterPlugin } from './typewriter.ts';
@@ -47,32 +58,48 @@ export interface ShowcasePlugin {
 }
 
 // Listed in the order they run, which is the order that matters: geometry
-// first, so the painters get the reshaped strokes; the timing hooks in the
-// order they retime, a hand's pace before a sweep or the typewriter replaces it; underlays bottom-most
+// first, so the painters get the reshaped strokes (a glyph leaned and shaken
+// before it's laid on a path, the broad nib at the page's angle after); the
+// timing hooks in the order they retime, a hand's pace before the joins make
+// room between letters, the captions fit words to the voice, and a sweep or
+// the typewriter replaces it all, then the annotations after the writing
+// they mark, before the eraser rubs it all out; underlays bottom-most
 // first, overlays top-most last; in the paint chain, whoever sets the color
 // before whoever reads it (Colors, then Wet ink), Ballpoint's pieces before
-// Wet ink times them, and the painters that bring their own color (Graphite,
-// Neon, Laser) after Colors, and the ones that decide what shows when
+// Wet ink times them, the painters that read the color (Marker, Spray,
+// Hatching, Embroidery) and the ones that bring their own (Graphite, Chalk,
+// Foil, Burn, Neon, Laser) after Colors, and the ones that decide what shows when
 // (Typewriter, Eraser) ahead of the painters; in the ink hooks, the glows
 // and grain before the shadow is cast, then the cathode tube over all of
 // it, and the screen shake last, moving everything drawn before it.
 export const SHOWCASE_PLUGINS: readonly ShowcasePlugin[] = [
-  // Shipped in tegaki/core, not demos.
+  // Shipped in tegaki/core, not demos: Variation, Boil, Text on a path, Captions and Annotate.
   { id: 'vary', factory: variationPlugin },
   { id: 'boil', factory: boilPlugin },
   { id: 'slant', factory: slantPlugin },
   { id: 'shaky', factory: shakyPlugin },
+  { id: 'path', factory: textPathPlugin },
   { id: 'nib', factory: nibPlugin },
   { id: 'rhythm', factory: rhythmPlugin },
+  { id: 'joins', factory: joinsPlugin },
+  { id: 'caption', factory: captionPlugin },
   { id: 'sweep', factory: sweepPlugin },
   { id: 'paper', factory: paperPlugin },
   { id: 'order', factory: strokeOrderPlugin },
   { id: 'colors', factory: colorsPlugin },
   { id: 'type', factory: typewriterPlugin },
+  { id: 'annotate', factory: annotatePlugin },
   { id: 'erase', factory: eraserPlugin },
   { id: 'ball', factory: ballpointPlugin },
   { id: 'graphite', factory: graphitePlugin },
   { id: 'wet', factory: wetPlugin },
+  { id: 'marker', factory: markerPlugin },
+  { id: 'spray', factory: sprayPlugin },
+  { id: 'hatch', factory: hatchPlugin },
+  { id: 'stitch', factory: stitchPlugin },
+  { id: 'chalk', factory: chalkPlugin },
+  { id: 'foil', factory: foilPlugin },
+  { id: 'burn', factory: burnPlugin },
   { id: 'neon', factory: neonPlugin },
   { id: 'laser', factory: laserPlugin },
   { id: 'brush', factory: brushPlugin },

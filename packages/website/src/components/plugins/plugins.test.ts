@@ -3,16 +3,22 @@ import { describe, expect, test } from 'bun:test';
 import { clearance, type PlacedStroke, type StrokeFrame, StrokePath, type TegakiFrame } from 'tegaki/core';
 import { skipPieces } from './ballpoint.ts';
 import { bristles, brushWidth, splashes } from './brush.ts';
+import { burnColor, puffAt, puffs } from './burn.ts';
+import { moteAt, motes } from './chalk.ts';
 import { mix, parseCanvasColor } from './color.ts';
 import { colorIndex, PALETTES, pickColor } from './colors.ts';
 import { dimAt, tearsAt } from './crt.ts';
 import { echoPasses, echoPlugin, lagged } from './echo.ts';
 import { crumbs, eraseTimeline, erasingAt, isErased } from './eraser.ts';
+import { foilColor, glintAt, METALS, sheen } from './foil.ts';
 import { graphiteGray, smudges, splinters } from './graphite.ts';
 import { hapticFor } from './haptics.ts';
+import { hatchLines, inkOutline } from './hatch.ts';
 import { createShowcasePlugins, normalizePluginOptions, SHOWCASE_PLUGINS } from './index.ts';
+import { joinPath, joinProgress, joinTimes, planJoins } from './joins.ts';
 import { ballAt, landings } from './karaoke.ts';
 import { cooled, emitterAt } from './laser.ts';
+import { markerLine } from './marker.ts';
 import { brightness } from './neon.ts';
 import { broadNib, nibFactor } from './nib.ts';
 import { grainTile } from './noise.ts';
@@ -24,6 +30,8 @@ import { tremorAt, tremorWaves } from './shaky.ts';
 import { leanAbout } from './slant.ts';
 import { penMotion } from './sound.ts';
 import { sparkleAt, strokeSparkles } from './sparkle.ts';
+import { dripLength, drips, lowPoints, overspray } from './spray.ts';
+import { stitches } from './stitch.ts';
 import { layoutGuides } from './stroke-order.ts';
 import { sweepOrder, sweepTimes } from './sweep.ts';
 import { keyTimes, punch, strikeOf, typedGlyphs } from './typewriter.ts';
@@ -682,5 +690,213 @@ describe('practice paper shapes', () => {
     expect(squares).toHaveLength(1);
     expect(rules).toHaveLength(4);
     expect(rules.every((r) => r.dashed)).toBe(true);
+  });
+});
+
+/** Placed strokes for `text` on one line: a glyph per character half an em (50 px) wide, one stroke across its lower half each, 0.2 s apart. A space draws nothing. */
+function placedText(text: string): PlacedStroke[] {
+  const out: PlacedStroke[] = [];
+  let x = 0;
+  let t = 0;
+  [...text].forEach((char, i) => {
+    if (char !== ' ') {
+      const path = new StrokePath([
+        { x: x + 5, y: 40, width: 6, t: 0 },
+        { x: x + 45, y: 80, width: 6, t: 1 },
+      ]);
+      out.push({
+        id: `${i}:0`,
+        entryIndex: i,
+        entry: { char, graphemeIndex: i, offset: t, duration: 0.2, hasGlyph: true },
+        glyph: { w: 500, t: 0.2, s: [] },
+        strokeIndex: 0,
+        start: t,
+        duration: 0.2,
+        path,
+        rawPath: path,
+        nibs: [],
+        seed: i,
+        place: { x, y: 0, scale: 0.1, ascender: 800 },
+      } as unknown as PlacedStroke);
+      t += 0.2;
+    }
+    x += char === ' ' ? 25 : 50;
+  });
+  return out;
+}
+
+describe('cursive joins', () => {
+  const joinOptions = { reach: 0.7, weight: 0.6, swing: 0.06, pace: 1.4 };
+
+  test('a join runs from where one stroke ends to where the next starts', () => {
+    const path = joinPath(0, 0, 0, 40, -20, 0, 4, 5);
+    expect(path.pointAt(0)).toMatchObject({ x: 0, y: 0 });
+    const end = path.pointAt(1);
+    expect(end.x).toBeCloseTo(40);
+    expect(end.y).toBeCloseTo(-20);
+    // A hairline: thinner in the middle than at its ends.
+    expect(path.pointAt(0.5).width).toBeLessThan(4);
+  });
+
+  test('letters are joined within a word, never across a space', () => {
+    const joins = planJoins(placedText('ab cd'), joinOptions, 100);
+    expect(joins.map((j) => [j.from, j.to])).toEqual([
+      [0, 1],
+      [2, 3],
+    ]);
+  });
+
+  test('the writing waits for each join, from the stroke it runs into on', () => {
+    const strokes = placedText('abc');
+    const joins = planJoins(strokes, joinOptions, 100);
+    const times = joinTimes(strokes, joins);
+    expect(times[0]!.start).toBe(0);
+    expect(times[1]!.start).toBeCloseTo(0.2 + joins[0]!.duration);
+    expect(times[2]!.start).toBeCloseTo(0.4 + joins[0]!.duration + joins[1]!.duration);
+  });
+
+  test('a join is drawn between the end of the stroke it leaves and the start of the next', () => {
+    const join = { from: 0, to: 1, path: joinPath(0, 0, 0, 10, 0, 0, 2, 0), duration: 0.1 };
+    const from = { start: 0, duration: 0.2 };
+    const to = { start: 0.3, duration: 0.2 };
+    expect(joinProgress(join, from, to, 0.2)).toBe(0);
+    expect(joinProgress(join, from, to, 0.25)).toBeCloseTo(0.5);
+    expect(joinProgress(join, from, to, 0.3)).toBe(1);
+  });
+});
+
+describe('hatching', () => {
+  test('lines are spaced as asked and cover the box', () => {
+    const lines = hatchLines({ minX: 0, minY: 0, maxX: 100, maxY: 100 }, 0, 10, 0, 1);
+    const ys = lines.map((l) => l.y0).sort((a, b) => a - b);
+    expect(ys[1]! - ys[0]!).toBeCloseTo(10);
+    expect(ys[0]!).toBeLessThanOrEqual(0);
+    expect(ys[ys.length - 1]!).toBeGreaterThanOrEqual(100);
+  });
+
+  test('overlapping boxes share their lines, so overlapping strokes share their hatching', () => {
+    const a = hatchLines({ minX: 0, minY: 0, maxX: 50, maxY: 50 }, 0.7, 8, 2, 3);
+    const b = hatchLines({ minX: 20, minY: 20, maxX: 90, maxY: 90 }, 0.7, 8, 2, 3);
+    const across = (l: { x0: number; y0: number }) => Math.round((-Math.sin(0.7) * l.x0 + Math.cos(0.7) * l.y0) * 1000);
+    const shared = a.map(across).filter((k) => b.map(across).includes(k));
+    expect(shared.length).toBeGreaterThan(0);
+  });
+
+  test("a stroke's ink outline runs along both its edges; a dot has none", () => {
+    const outline = inkOutline(line(0, 100, 0, 10))!;
+    expect(Math.min(...outline.map((p) => p.y))).toBeCloseTo(-5);
+    expect(Math.max(...outline.map((p) => p.y))).toBeCloseTo(5);
+    expect(inkOutline(new StrokePath([{ x: 0, y: 0, width: 4, t: 0 }]))).toBeNull();
+  });
+});
+
+describe('marker', () => {
+  test('a felt tip lays one even width, the tip times the stroke’s mean', () => {
+    const path = new StrokePath([
+      { x: 0, y: 0, width: 2, t: 0 },
+      { x: 10, y: 0, width: 6, t: 1 },
+    ]);
+    const out = markerLine(path, 2);
+    expect(out.uniformWidth).toBe(true);
+    expect(out.points[0]!.width).toBe(8);
+  });
+});
+
+describe('chalk', () => {
+  test('dust falls from where it’s shed and fades, then is gone', () => {
+    const [m] = motes(line(0, 100, 0), 100, 1, lcg());
+    const early = moteAt(m!, 0, 0, 0.1, 100)!;
+    const late = moteAt(m!, 0, 0, m!.life * 0.9, 100)!;
+    expect(late.y).toBeGreaterThan(early.y);
+    expect(late.alpha).toBeLessThan(early.alpha);
+    expect(moteAt(m!, 0, 0, -0.1, 100)).toBeNull();
+    expect(moteAt(m!, 0, 0, m!.life + 0.1, 100)).toBeNull();
+  });
+});
+
+describe('spray paint', () => {
+  test('a drip waits, then runs, slowing, to its length', () => {
+    const d = { t: 0, length: 40, width: 2, wait: 0.2 };
+    expect(dripLength(d, 0.1, 1)).toBe(0);
+    // It runs further in its first quarter second than in the next.
+    const first = dripLength(d, 0.45, 1) - dripLength(d, 0.2, 1);
+    const second = dripLength(d, 0.7, 1) - dripLength(d, 0.45, 1);
+    expect(first).toBeGreaterThan(second);
+    const end = dripLength(d, 5, 1);
+    expect(end).toBeLessThanOrEqual(40);
+    expect(end).toBeGreaterThan(39);
+  });
+
+  test('paint runs from where a line bottoms out, lowest first', () => {
+    // A "u": down, round the bottom, and up again.
+    const u = new StrokePath([
+      { x: 0, y: 0, width: 4, t: 0 },
+      { x: 5, y: 40, width: 4, t: 0.4 },
+      { x: 10, y: 50, width: 4, t: 0.5 },
+      { x: 15, y: 40, width: 4, t: 0.6 },
+      { x: 20, y: 0, width: 4, t: 1 },
+    ]);
+    expect(lowPoints(u)).toEqual([0.5]);
+    // A line running down ends low.
+    expect(lowPoints(line(0, 0, 0).map((p) => ({ ...p, y: p.t * 30 })))).toEqual([1]);
+  });
+
+  test('overspray lands near the line, and none with no flecks asked for', () => {
+    const path = line(0, 100, 0, 10);
+    for (const f of overspray(path, 1, lcg())) expect(Math.abs(f.y)).toBeLessThanOrEqual(10 * 2.2);
+    expect(overspray(path, 0, lcg())).toEqual([]);
+    expect(drips(path, 100, 0, lcg())).toEqual([]);
+  });
+});
+
+describe('gold foil', () => {
+  test('the foil is brightest running across the light, darkest along it', () => {
+    expect(sheen(Math.PI / 4, -Math.PI / 4)).toBeCloseTo(0);
+    expect(sheen(0, 0)).toBeCloseTo(1);
+    expect(foilColor(METALS.gold, 1, 0)).toEqual(METALS.gold[2]);
+    expect(foilColor(METALS.gold, 0.5, 1)).toEqual([255, 255, 255, 1]);
+  });
+
+  test('the glint crosses in its sweep, then is off until the next', () => {
+    expect(glintAt(0, 90, 3, 1)).toBe(0);
+    expect(glintAt(15, 90, 3, 1)).toBeCloseTo(0.5);
+    expect(glintAt(60, 90, 3, 1)).toBeNull();
+    expect(glintAt(90, 90, 3, 1)).toBe(0);
+  });
+});
+
+describe('embroidery', () => {
+  test('satin stitches cross the stroke within the width asked, packed tighter the denser', () => {
+    const path = line(0, 200, 0, 10);
+    const loose = stitches(path, 'satin', 0.3, 1.4);
+    const dense = stitches(path, 'satin', 0.9, 1.4);
+    expect(dense.length).toBeGreaterThan(loose.length);
+    for (const s of dense) expect(Math.max(Math.abs(s.y0), Math.abs(s.y1))).toBeLessThanOrEqual(7 + 1e-9);
+  });
+
+  test('running stitch leaves gaps along the line, cross stitch sews two threads a step', () => {
+    const path = line(0, 200, 0, 10);
+    const run = stitches(path, 'running', 0.6, 1);
+    expect(run[1]!.x0).toBeGreaterThan(run[0]!.x1);
+    const cross = stitches(path, 'cross', 0.6, 1);
+    expect(cross.length % 2).toBe(0);
+  });
+});
+
+describe('burn', () => {
+  test('the line cools from white-hot to char', () => {
+    expect(burnColor(0, 1)[0]).toBeGreaterThan(250);
+    expect(burnColor(5, 1)).toEqual([38, 20, 10, 1]);
+    const ember = burnColor(0.3, 1);
+    expect(ember[0]).toBeGreaterThan(ember[2]);
+  });
+
+  test('smoke rises and fades', () => {
+    const [p] = puffs(line(0, 100, 0), 100, 1, lcg());
+    const a = puffAt(p!, p!.life * 0.3)!;
+    const b = puffAt(p!, p!.life * 0.8)!;
+    expect(b.dy).toBeLessThan(a.dy);
+    expect(b.alpha).toBeLessThan(a.alpha);
+    expect(puffAt(p!, p!.life + 1)).toBeNull();
   });
 });
