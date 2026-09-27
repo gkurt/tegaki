@@ -28,7 +28,7 @@ describe('normalizeSteps', () => {
 });
 
 describe('stepAt', () => {
-  const steps = { count: 3, fps: 12, idle: false };
+  const steps = { count: 3, fps: 12, idle: false, paintOnly: false };
 
   test('a new drawing every 1/fps seconds, round and round', () => {
     expect([0, 0.05, 1 / 12, 2 / 12, 3 / 12, 4 / 12].map((t) => stepAt(steps, t))).toEqual([0, 0, 1, 2, 0, 1]);
