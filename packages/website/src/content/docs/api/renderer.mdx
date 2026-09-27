@@ -206,7 +206,7 @@ A plugin is an object with a `name` and any of these hooks:
 | `bounds({ strokes, fontSize })` | when the layout changes | reserving room for what you paint outside the ink |
 | `outline(contour, ctx)` | once per glyph, with clip-to-text on | reshaping the letter shapes the ink is clipped to, in step with `geometry` |
 | `svg(svg)` | once per `toSVG` / `exportSVG` | what the plugin paints, in the exported SVG (see [In an exported SVG](#in-an-exported-svg-svg)) |
-| `steps: { count, fps, idle? }` | not a hook: a setting | redrawing the ink a few ways in turn, over time (see [Drawings over time](#drawings-over-time-steps)) |
+| `steps: { count, fps, idle?, paintOnly? }` | not a hook: a setting | redrawing the ink a few ways in turn, over time (see [Drawings over time](#drawings-over-time-steps)) |
 
 The built-in [effects](#effects) are plugins too, and run first, so each hook of yours sees what they made: `geometry` gets the path after pressure width, taper and wobble, and `paint` gets the gradient as its `style`.
 
@@ -364,7 +364,7 @@ const shimmer: TegakiPlugin = {
 - The ink cycles whenever it's drawn: while the text writes, and on every redraw. With `idle: true` the engine also keeps redrawing once the text is written or paused, in uncontrolled and CSS time.
 - When motion is reduced (see [`reducedMotion`](#reducedmotion)), the first drawing is shown and nothing cycles.
 
-The painting hooks (`paint`, `ink`, `underlay`, `overlay`) are told the plugin's drawing too, as `step`. So a plugin with no `geometry` or `outline` can use `steps` purely as a clock, say for a neon sign's flicker. Its steps don't reshape anything, so they cost nothing but a redraw per step: the strokes aren't placed again for each one, and the canvas doesn't grow for them.
+The painting hooks (`paint`, `ink`, `underlay`, `overlay`) are told the plugin's drawing too, as `step`. So a plugin with no `geometry` or `outline` can use `steps` purely as a clock, say for a neon sign's flicker. Its steps don't reshape anything, so they cost nothing but a redraw per step: the strokes aren't placed again for each one, and the canvas doesn't grow for them. A plugin that has a `geometry` or `outline` hook but steps only its painting (a camera swaying over ink it shaped once) says so with `paintOnly: true`: its hooks are then called once per layout, for drawing `0`.
 
 ```ts
 const flicker: TegakiPlugin = {

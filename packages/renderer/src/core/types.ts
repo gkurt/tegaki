@@ -225,6 +225,14 @@ export interface TegakiPluginSteps {
    * time it's given, so it holds still when the time does. Default `false`.
    */
   idle?: boolean;
+  /**
+   * The drawings differ only in how they're painted — a flicker, a camera
+   * swaying — though the plugin has `geometry` or `outline` too: those are
+   * called once per layout, for drawing `0`, rather than once per drawing,
+   * and the canvas isn't sized for each. The painting hooks still get
+   * `step`. Default `false`.
+   */
+  paintOnly?: boolean;
 }
 
 /** A stroke a `paint` hook paints, and how the next hook will paint it. */

@@ -15,7 +15,7 @@ const flicker = (count: number, fps: number): TegakiPlugin => ({
 
 describe('normalizeSteps', () => {
   test('a count is made whole, and one drawing (or no fps) is nothing to cycle', () => {
-    expect(normalizeSteps({ count: 3.7, fps: 12 })).toEqual({ count: 3, fps: 12, idle: false });
+    expect(normalizeSteps({ count: 3.7, fps: 12 })).toEqual({ count: 3, fps: 12, idle: false, paintOnly: false });
     expect(normalizeSteps({ count: 1, fps: 12 })).toBeNull();
     expect(normalizeSteps({ count: 3, fps: 0 })).toBeNull();
     expect(normalizeSteps({ count: 3, fps: Number.NaN })).toBeNull();
@@ -133,6 +133,14 @@ describe('steps that only paint', () => {
     const { steps } = pluginStepsAt([shaping, painting], 0.1);
     expect(shapeSteps(steps).steps.has(painting)).toBe(false);
     expect(shapeSteps(steps).key).toBe(String(steps.get(shaping)));
+  });
+
+  test('a plugin that shapes the ink but steps only its painting is placed once, for drawing 0', () => {
+    const sway: TegakiPlugin = { name: 'sway', geometry: (path) => path, steps: { count: 240, fps: 30, paintOnly: true } };
+    expect(allPluginSteps([sway])).toHaveLength(1);
+    const { steps } = pluginStepsAt([sway], 1);
+    expect(steps.get(sway)).toBe(30);
+    expect(shapeSteps(steps).steps.has(sway)).toBe(false);
   });
 
   test('paint is told its own plugin’s step, and 0 without steps', () => {

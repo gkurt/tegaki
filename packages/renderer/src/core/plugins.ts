@@ -24,7 +24,7 @@ export function normalizeSteps(steps: TegakiPluginSteps | undefined): Required<T
   if (!steps) return null;
   const count = Math.max(1, Math.floor(Number.isFinite(steps.count) ? steps.count : 1));
   if (count < 2 || !(steps.fps > 0) || !Number.isFinite(steps.fps)) return null;
-  return { count, fps: steps.fps, idle: steps.idle === true };
+  return { count, fps: steps.fps, idle: steps.idle === true, paintOnly: steps.paintOnly === true };
 }
 
 /** The drawing a cycle shows at `clock` seconds: a new one every `1 / fps`, round and round. */
@@ -55,9 +55,9 @@ export function stepsKey(steps: PluginSteps): string {
   return [...steps.values()].join(',');
 }
 
-/** Whether a plugin's steps change the ink's shape — it has `geometry` or `outline`. Only those need the strokes placed once per drawing; the rest (a flicker) just paint differently. */
+/** Whether a plugin's steps change the ink's shape — it has `geometry` or `outline`, and its steps aren't `paintOnly`. Only those need the strokes placed once per drawing; the rest (a flicker) just paint differently. */
 export function shapesInk(plugin: TegakiPlugin): boolean {
-  return !!(plugin.geometry || plugin.outline);
+  return !!(plugin.geometry || plugin.outline) && plugin.steps?.paintOnly !== true;
 }
 
 /** The steps of the plugins that shape the ink, and their key — what placed strokes and clip outlines are cached by. */
