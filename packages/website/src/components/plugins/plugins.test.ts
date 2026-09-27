@@ -25,7 +25,7 @@ import { grainTile } from './noise.ts';
 import { type PaperLayout, paperBounds, paperLayout, paperShapes } from './paper.ts';
 import { penPoses } from './pen.ts';
 import { handTimes } from './rhythm.ts';
-import { segmentLag, segmentSpan, segmentsEnd } from './segment.ts';
+import { segmentLag, segmentPlugin, segmentSpan, segmentsEnd, taperAt, taperPath } from './segment.ts';
 import { shakeAt, shakeStrength } from './shake.ts';
 import { tremorAt, tremorWaves } from './shaky.ts';
 import { leanAbout } from './slant.ts';
@@ -184,6 +184,27 @@ describe('segment', () => {
     expect(segmentSpan(done, 1, 25)).toEqual({ from: 0.75, to: 1 });
     expect(segmentSpan(done, 1.1, 25)!.from).toBeCloseTo(0.85);
     expect(segmentSpan(done, 1.25, 25)).toBeNull();
+  });
+
+  test('a taper narrows to a point at the end and is full width past its reach', () => {
+    expect(taperAt(0, 10)).toBe(0);
+    expect(taperAt(5, 10)).toBeCloseTo(Math.SQRT1_2);
+    expect(taperAt(10, 10)).toBe(1);
+    expect(taperAt(0, 0)).toBe(1);
+  });
+
+  test('a tapered segment comes to a point at both ends and keeps its width in the middle', () => {
+    const tapered = taperPath(path, 20);
+    const pts = tapered.points;
+    expect(pts[0]!.width).toBe(0);
+    expect(pts[pts.length - 1]!.width).toBeCloseTo(0);
+    expect(tapered.pointAt(0.5).width).toBeCloseTo(8);
+    expect(pts[0]!.t).toBe(0);
+    expect(pts[pts.length - 1]!.t).toBe(1);
+  });
+
+  test('by default the segment is untapered, over the ink, and the text is written as usual', () => {
+    expect(segmentPlugin.defaults).toMatchObject({ width: 1, taper: 0, own: false, under: false, whole: false, hide: false });
   });
 
   test('the timeline runs until the last segment has left its stroke', () => {
