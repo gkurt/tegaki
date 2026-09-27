@@ -15,6 +15,20 @@ Tegaki provides a native Astro component that renders full HTML at build time an
 
 <InstallTabs />
 
+Then add the Tegaki integration to your Astro config:
+
+```js
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+import tegaki from 'tegaki/astro/integration';
+
+export default defineConfig({
+  integrations: [tegaki()],
+});
+```
+
+The component renders on the server and hands the font bundle to the browser, so the bundle's font URLs have to work there. Vite turns them into public asset URLs for client code but leaves server code as it stands, where they point at files on the build machine. The integration makes Vite resolve them on the server too. Without it, the build warns and the page loads the handwriting in a fallback font's widths.
+
 ## Basic example
 
 ```astro

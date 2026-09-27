@@ -75,6 +75,7 @@ packages/renderer/src/
   vue/                        # Vue 3 adapter
   solid/                      # SolidJS adapter
   astro/TegakiRenderer.astro  # Astro adapter (SSR-capable)
+  astro/integration.ts        # `tegaki/astro/integration` — on the server, rewrites bundle font URLs to `?url` asset imports (Vite leaves `new URL(…, import.meta.url)` a file:// path there); the adapter warns without it
   wc/                         # Web Component adapter (`<tegaki-renderer>`)
 ```
 

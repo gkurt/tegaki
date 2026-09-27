@@ -40,6 +40,24 @@ Production builds (Rollup) handle Tegaki out of the box; this only affects `vite
 | --- | --- | --- |
 | Text is invisible but can be selected, or only appears with `showOverlay`. Console shows `Failed to decode downloaded font: …/node_modules/.vite/deps/<family>.ttf` / `OTS parsing error: invalid sfntVersion`, a `NetworkError: A network error occurred` or a `[tegaki] Failed to load font` warning. | The `.ttf` URL broke during pre-bundling, so the dev server returns HTML instead of the font. Older `tegaki` versions stop drawing at this point; newer ones keep drawing with the fallback font's spacing. | `optimizeDeps.exclude: ['tegaki']` |
 
+## Astro
+
+Vite turns a bundle's font URLs into public asset URLs only in client code. On the server it leaves `new URL('./font.ttf', import.meta.url)` as it stands, and that evaluates to a `file://` path on the build machine. The [`tegaki/astro`](/tegaki/frameworks/astro/) component renders on the server and passes that bundle to the browser, which refuses to load a local file: the handwriting still draws, but in a fallback font's widths. The Tegaki integration makes Vite emit the fonts and resolve their URLs on the server as well:
+
+```js
+// astro.config.mjs
+import { defineConfig } from 'astro/config';
+import tegaki from 'tegaki/astro/integration';
+
+export default defineConfig({
+  integrations: [tegaki()],
+});
+```
+
+| Symptom | What's happening | Fix |
+| --- | --- | --- |
+| The build logs `[tegaki] The font of "…" resolved to a local file`, and the browser console shows `Not allowed to load local resource: file:///…/.prerender/chunks/<family>.ttf`. The text draws with the wrong letter spacing. | The server evaluated the bundle's font URL as a path on disk. | Add `tegaki()` to `integrations` |
+
 ## Other bundlers
 
 Webpack, Rollup, Parcel, and esbuild's standalone build mode all handle `with { type: 'url' }` natively in the configurations Tegaki has been tested with. Open an issue if you hit something — the maintainer welcomes bundler-specific notes here.

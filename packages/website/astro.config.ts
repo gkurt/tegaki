@@ -13,6 +13,7 @@ import tailwindcss from '@tailwindcss/vite';
 import type { AstroIntegration } from 'astro';
 import { defineConfig, fontProviders } from 'astro/config';
 import starlightThemeNova from 'starlight-theme-nova';
+import tegaki from 'tegaki/astro/integration';
 import { SHARED_HEAD_LINKS } from './src/seo.ts';
 import { BASE, CARD_IMAGE, DOCS_DESCRIPTION, REPO_URL, SIDEBAR, SITE, TWITTER_URL } from './src/site.ts';
 
@@ -72,6 +73,8 @@ export default defineConfig({
   site,
   base,
   integrations: [
+    // Font bundles' URLs as public assets on the server too, where tegaki/astro serializes them.
+    tegaki(),
     // Starlight adds a plain sitemap only when none is configured; this one skips the pages above.
     sitemap({
       filter: (page) => !UNINDEXED_PAGES.includes(page),

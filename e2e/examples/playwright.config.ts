@@ -39,19 +39,7 @@ export const EXAMPLES: readonly Example[] = [
   { name: 'svelte', port: 4313, renderers: ['#looping', '#scrubbable'] },
   { name: 'vue', port: 4314, renderers: ['#looping', '#scrubbable', '#arabic'] },
   { name: 'solid', port: 4315, renderers: ['#looping', '#scrubbable'] },
-  {
-    name: 'astro',
-    port: 4316,
-    renderers: ['#looping', '#finished'],
-    // Known bug: `tegaki/astro` serializes the bundle as the server evaluated it,
-    // and a font bundle's `fontUrl` / `fullFontUrl` are `new URL('./x.ttf',
-    // import.meta.url)` — a `file://` path on the build machine once prerendered.
-    // The browser refuses to load it, so the page falls back to an unloaded font
-    // (the strokes still draw from the glyph data).
-    // Each engine words it differently (Chromium: "Not allowed to load local resource"; Firefox: a
-    // security error and a failed download), but every message names the file:// font URL.
-    knownErrors: [/file:\/\/\S*\.ttf/],
-  },
+  { name: 'astro', port: 4316, renderers: ['#looping', '#finished'] },
   { name: 'vanilla', port: 4317, renderers: ['#wc', '#core'] },
 ];
 

@@ -94,6 +94,12 @@
       "import": "./dist/shaper-harfbuzz/index.mjs"
     },
     "./astro": "./src/astro/TegakiRenderer.astro",
+    "./astro/integration": {
+      "tegaki@dev": "./src/astro/integration.ts",
+      "source": "./src/astro/integration.ts",
+      "types": "./src/astro/integration.ts",
+      "default": "./src/astro/integration.ts"
+    },
     "./fonts/caveat": {
       "tegaki@dev": "./fonts/caveat/bundle.ts",
       "source": "./fonts/caveat/bundle.ts",
@@ -190,15 +196,19 @@
   },
   "dependencies": {},
   "peerDependencies": {
-    "harfbuzzjs": "^1.1.0",
     "@nuxt/kit": "^3.0.0 || ^4.0.0",
+    "astro": ">=4.0.0",
+    "harfbuzzjs": "^1.1.0",
     "react": ">=18",
+    "solid-js": ">=1",
     "svelte": ">=5",
-    "vue": ">=3",
-    "solid-js": ">=1"
+    "vue": ">=3"
   },
   "peerDependenciesMeta": {
     "@nuxt/kit": {
+      "optional": true
+    },
+    "astro": {
       "optional": true
     },
     "harfbuzzjs": {
@@ -207,21 +217,22 @@
     "react": {
       "optional": true
     },
+    "solid-js": {
+      "optional": true
+    },
     "svelte": {
       "optional": true
     },
     "vue": {
       "optional": true
-    },
-    "solid-js": {
-      "optional": true
     }
   },
   "devDependencies": {
-    "harfbuzzjs": "^1.6.2",
     "@nuxt/kit": "^4.5.2",
     "@nuxt/schema": "^4.5.2",
     "@types/react": "^19.3.0",
+    "astro": "^7.3.5",
+    "harfbuzzjs": "^1.6.2",
     "magic-string": "^1.4.2",
     "tegaki-generator": "workspace:*",
     "tsdown": "^0.23.0",

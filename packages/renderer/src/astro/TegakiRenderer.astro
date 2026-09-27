@@ -22,6 +22,19 @@ if (typeof font === 'string') {
   TegakiEngine.registerBundle(font);
 }
 
+// A font URL the server evaluated as a local file can't load in the browser:
+// the tegaki/astro/integration isn't in the Astro config (see integration.ts).
+if (resolvedFont && [resolvedFont.fontUrl, resolvedFont.fullFontUrl].some((url) => url?.startsWith('file:'))) {
+  const warned = globalThis as { __tegakiFileUrlWarned?: boolean };
+  if (!warned.__tegakiFileUrlWarned) {
+    warned.__tegakiFileUrlWarned = true;
+    console.warn(
+      `[tegaki] The font of "${resolvedFont.family}" resolved to a local file (${resolvedFont.fontUrl}), which the browser won't load. ` +
+        "Add the Tegaki integration to your Astro config: `import tegaki from 'tegaki/astro/integration'` and `integrations: [tegaki()]`.",
+    );
+  }
+}
+
 const shouldRender = !!text || !(registerBundle || loadFont);
 
 const engineOptions: Omit<TegakiEngineOptions, 'onComplete' | 'onChangeTimeline' | 'plugins'> = {

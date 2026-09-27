@@ -227,6 +227,7 @@
         "@nuxt/kit": "^4.5.2",
         "@nuxt/schema": "^4.5.2",
         "@types/react": "^19.3.0",
+        "astro": "^7.3.5",
         "harfbuzzjs": "^1.6.2",
         "magic-string": "^1.4.2",
         "tegaki-generator": "workspace:*",
@@ -235,6 +236,7 @@
       },
       "peerDependencies": {
         "@nuxt/kit": "^3.0.0 || ^4.0.0",
+        "astro": ">=4.0.0",
         "harfbuzzjs": "^1.1.0",
         "react": ">=18",
         "solid-js": ">=1",
@@ -243,6 +245,7 @@
       },
       "optionalPeers": [
         "@nuxt/kit",
+        "astro",
         "harfbuzzjs",
         "react",
         "solid-js",
