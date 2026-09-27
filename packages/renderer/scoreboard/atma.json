@@ -1,7 +1,7 @@
 {
   "family": "Atma",
-  "missing": ["'"],
-  "summary": {"glyphs":157,"geometryFailed":0,"geometryMean":0.001708,"geometryOver2":0,"geometryOver5":0,"rasterMean":0.02068,"withReference":68,"countsAgree":66,"dataset":59,"guided":0},
+  "missing": [],
+  "summary": {"glyphs":158,"geometryFailed":0,"geometryMean":0.001717,"geometryOver2":0,"geometryOver5":0,"rasterMean":0.020789,"withReference":68,"countsAgree":66,"dataset":59,"guided":0},
   "glyphs": {
     "0": {"geometry":0.0004,"raster":0.0019,"strokes":1,"reference":1,"order":"heuristic"},
     "1": {"geometry":0.0005,"raster":0.018,"strokes":1,"reference":1,"order":"dataset"},
@@ -54,7 +54,7 @@
     "ল": {"geometry":0.002,"raster":0.021,"strokes":3,"reference":null,"order":"heuristic"},
     "শ": {"geometry":0.0023,"raster":0.009,"strokes":3,"reference":null,"order":"heuristic"},
     "ষ": {"geometry":0.0034,"raster":0.0158,"strokes":1,"reference":null,"order":"heuristic"},
-    "স": {"geometry":0.0026,"raster":0.0238,"strokes":13,"reference":null,"order":"heuristic"},
+    "স": {"geometry":0.0026,"raster":0.0238,"strokes":3,"reference":null,"order":"heuristic"},
     "হ": {"geometry":0.0028,"raster":0.0153,"strokes":3,"reference":null,"order":"heuristic"},
     "়": {"geometry":0.0049,"raster":0,"strokes":1,"reference":null,"order":"heuristic"},
     "া": {"geometry":0.0037,"raster":0.0137,"strokes":2,"reference":null,"order":"heuristic"},
@@ -139,6 +139,7 @@
     ":": {"geometry":0.008,"raster":0.2529,"strokes":2,"reference":2,"order":"dataset"},
     "!": {"geometry":0.0019,"raster":0.0879,"strokes":2,"reference":2,"order":"dataset"},
     "?": {"geometry":0.0011,"raster":0.0571,"strokes":2,"reference":2,"order":"dataset"},
+    "'": {"geometry":0.0031,"raster":0.0378,"strokes":1,"reference":null,"order":"heuristic"},
     "\"": {"geometry":0.0026,"raster":0.042,"strokes":2,"reference":null,"order":"heuristic"},
     "-": {"geometry":0.0018,"raster":0.0331,"strokes":1,"reference":null,"order":"heuristic"},
     "(": {"geometry":0,"raster":0.0073,"strokes":1,"reference":null,"order":"heuristic"},

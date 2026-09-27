@@ -1,7 +1,7 @@
 {
   "family": "Caveat",
   "missing": [],
-  "summary": {"glyphs":90,"geometryFailed":0,"geometryMean":0.002322,"geometryOver2":0,"geometryOver5":0,"rasterMean":0.0174,"withReference":68,"countsAgree":64,"dataset":42,"guided":0},
+  "summary": {"glyphs":90,"geometryFailed":0,"geometryMean":0.002306,"geometryOver2":0,"geometryOver5":0,"rasterMean":0.0174,"withReference":68,"countsAgree":65,"dataset":43,"guided":0},
   "glyphs": {
     "0": {"geometry":0.0013,"raster":0.011,"strokes":1,"reference":1,"order":"heuristic"},
     "1": {"geometry":0.0008,"raster":0.0077,"strokes":1,"reference":1,"order":"dataset"},
@@ -18,7 +18,7 @@
     "C": {"geometry":0,"raster":0.0077,"strokes":1,"reference":1,"order":"dataset"},
     "D": {"geometry":0.0017,"raster":0.0144,"strokes":2,"reference":2,"order":"dataset"},
     "E": {"geometry":0.0056,"raster":0.0173,"strokes":4,"reference":4,"order":"dataset"},
-    "F": {"geometry":0.0047,"raster":0.0185,"strokes":85,"reference":3,"order":"heuristic"},
+    "F": {"geometry":0.0032,"raster":0.0185,"strokes":3,"reference":3,"order":"dataset"},
     "G": {"geometry":0.0003,"raster":0.0056,"strokes":2,"reference":2,"order":"dataset"},
     "H": {"geometry":0.0009,"raster":0.0122,"strokes":3,"reference":3,"order":"dataset"},
     "I": {"geometry":0.0009,"raster":0.02,"strokes":1,"reference":1,"order":"dataset"},
