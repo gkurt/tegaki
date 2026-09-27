@@ -1,6 +1,7 @@
 import { type Box, createPlugin, expandBox, type StrokeFrame, type StrokePath, seededRandom, unionBoxes } from 'tegaki/core';
 import { canvasColor, rgba } from './color.ts';
 import { grainTile } from './noise.ts';
+import { settle } from './settle.ts';
 import { meanWidth } from './svg.ts';
 
 /** A mote of chalk dust: where on its stroke it's knocked off (draw progress), how it drifts, how big. */
@@ -58,7 +59,7 @@ export const chalkPlugin = createPlugin({
   name: 'chalk',
   label: 'Chalk',
   description:
-    'Powdery chalk lines on a blackboard, the grain showing through, shedding dust as they’re drawn. underlay + paint + overlay.',
+    'Powdery chalk lines on a blackboard, the grain showing through, shedding dust as they’re drawn. underlay + paint + overlay + timing.',
   params: {
     color: { type: 'color', label: 'Chalk', default: '#f3f1e7' },
     board: { type: 'color', label: 'Board', default: '#2c4235' },
@@ -122,6 +123,7 @@ export const chalkPlugin = createPlugin({
     const inkBox = (strokes: readonly { path: StrokePath }[]) => unionBoxes(strokes.map((s) => s.path.bounds()));
     const frameWidth = (fontSize: number) => (frame ? fontSize * 0.14 : 0);
     return {
+      timing: settle(dust > 0 ? 1.5 : 0),
       bounds: ({ strokes, fontSize }) => {
         const ink = inkBox(strokes);
         return ink && expandBox(boardBox(ink, fontSize, margin), frameWidth(fontSize) + fontSize * 0.1);

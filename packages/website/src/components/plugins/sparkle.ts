@@ -1,4 +1,5 @@
 import { createPlugin, expandBox, type StrokeFrame, type StrokePath, unionBoxes } from 'tegaki/core';
+import { settle } from './settle.ts';
 
 /** One sparkle: where along its stroke it's thrown off, and how it moves and turns from there. */
 export interface Sparkle {
@@ -90,7 +91,7 @@ function star(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, tu
 export const sparklePlugin = createPlugin({
   name: 'sparkle',
   label: 'Sparkles',
-  description: 'Sparkles thrown off behind the pen, drifting away as they fade. overlay + bounds.',
+  description: 'Sparkles thrown off behind the pen, drifting away as they fade. overlay + bounds + timing.',
   params: {
     color: { type: 'color', label: 'Color', default: '#f5a623' },
     density: { type: 'number', label: 'Density', description: 'Sparkles per em of ink.', default: 6, min: 1, max: 24, step: 1 },
@@ -132,6 +133,7 @@ export const sparklePlugin = createPlugin({
     };
     const reach = spread + size + Math.abs(rise) * life + 0.2 * life + 0.05;
     return {
+      timing: settle(life),
       bounds: ({ strokes, fontSize }) => expandBox(unionBoxes(strokes.map((s) => s.path.bounds())), fontSize * reach),
       overlay({ ctx, frame, fontSize, random }) {
         const r = size * fontSize;

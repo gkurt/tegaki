@@ -1,5 +1,6 @@
 import { createPlugin, offsetPath, type PathPoint, type StrokeFrame, type StrokePath } from 'tegaki/core';
 import { canvasColor, mix, type Rgba, rgba } from './color.ts';
+import { settle } from './settle.ts';
 
 const WHITE: Rgba = [255, 255, 255, 1];
 
@@ -67,7 +68,7 @@ export function poolFactors(points: readonly PathPoint[], pool: number): number[
 export const wetPlugin = createPlugin({
   name: 'wet',
   label: 'Wet ink',
-  description: 'Fresh ink dark and glossy, drying lighter behind the pen. paint.',
+  description: 'Fresh ink dark and glossy, drying lighter behind the pen. paint + timing.',
   params: {
     dry: { type: 'number', label: 'Drying time', description: 'Seconds the ink takes to dry.', default: 1.5, min: 0.2, max: 6, step: 0.1 },
     fade: { type: 'number', label: 'Fade', description: 'How much lighter dry ink is.', default: 0.3, min: 0, max: 0.8, step: 0.05 },
@@ -100,6 +101,7 @@ export const wetPlugin = createPlugin({
       return s;
     };
     return {
+      timing: settle(dry),
       geometry(path) {
         if (pool <= 0) return path;
         const factors = poolFactors(path.points, pool);

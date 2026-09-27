@@ -145,6 +145,17 @@ export default defineConfig({
       display: 'optional',
       fallbacks: ['monospace'],
     },
+    // The hero headline's face, for its faint tracing while the bundle loads:
+    // `block`, since the tracing is only worth showing in the font it traces.
+    {
+      provider: fontProviders.google(),
+      name: 'Parisienne',
+      cssVariable: '--font-parisienne',
+      styles: ['normal'],
+      subsets: ['latin'],
+      display: 'block',
+      fallbacks: ['cursive'],
+    },
   ],
   devToolbar: {
     enabled: false,

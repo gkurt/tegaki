@@ -1,6 +1,7 @@
 import { createPlugin, expandBox, type StrokePath, seededRandom, unionBoxes } from 'tegaki/core';
 import { canvasColor, mix, type Rgba, rgba } from './color.ts';
 import { inkRegion, scratchCanvas, shrunk } from './ink-canvas.ts';
+import { settle } from './settle.ts';
 
 /** How bright a tube is (0 off, 1 fully lit) at one moment. */
 export interface FlickerOptions {
@@ -58,7 +59,7 @@ export const neonPlugin = createPlugin({
   name: 'neon',
   label: 'Neon',
   description:
-    'Glass tubes of lit gas that sputter on and hum, the odd letter stuttering. steps + paint + ink — best on a dark background.',
+    'Glass tubes of lit gas that sputter on and hum, the odd letter stuttering. steps + paint + ink + timing — best on a dark background.',
   params: {
     color: { type: 'color', label: 'Color', default: '#ff2bd6' },
     tube: {
@@ -104,6 +105,7 @@ export const neonPlugin = createPlugin({
     const far = scratchCanvas();
     let lit: Rgba | null = null;
     return {
+      timing: settle(warmup),
       // 600 steps at 20 a second: half a minute before the pattern repeats.
       steps: { count: 600, fps, idle: true },
       bounds: ({ strokes, fontSize }) => expandBox(unionBoxes(strokes.map((st) => st.path.bounds())), fontSize * 0.3 * glow),

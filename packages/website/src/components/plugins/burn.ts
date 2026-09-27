@@ -1,6 +1,7 @@
 import { createPlugin, expandBox, type StrokePath, seededRandom, unionBoxes } from 'tegaki/core';
 import { mix, type Rgba, rgba } from './color.ts';
 import { inkRegion, scratchCanvas, silhouette } from './ink-canvas.ts';
+import { settle } from './settle.ts';
 import { inkAge } from './wet.ts';
 
 /** The burn's colors as it cools: white-hot, orange, ember red, char. */
@@ -68,7 +69,7 @@ export const burnPlugin = createPlugin({
   name: 'burn',
   label: 'Burn',
   description:
-    'A flame writes the text: white-hot, cooling through ember to char, the paper scorched, smoke curling up. paint + ink + overlay.',
+    'A flame writes the text: white-hot, cooling through ember to char, the paper scorched, smoke curling up. paint + ink + overlay + timing.',
   params: {
     cool: {
       type: 'number',
@@ -109,6 +110,7 @@ export const burnPlugin = createPlugin({
     const risen = new WeakMap<StrokePath, Puff[]>();
     const halo = scratchCanvas();
     return {
+      timing: settle(Math.max(cool, smoke > 0 ? 2.2 : 0)),
       bounds: ({ strokes, fontSize }) => {
         const box = unionBoxes(strokes.map((s) => s.path.bounds()));
         return box && { ...expandBox(box, fontSize * 0.2), minY: box.minY - fontSize * (smoke > 0 ? 1.2 : 0.3) };

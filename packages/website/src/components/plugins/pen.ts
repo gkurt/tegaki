@@ -11,16 +11,46 @@ export interface PenPose {
 /** Seconds the pen takes to come off the paper once the last stroke is done. */
 const LIFT_TIME = 0.25;
 
+/** Seconds of a stroke the pen's angle follows: the way the ink runs over that stretch, not every turn under the nib. */
+const SWAY_TIME = 0.2;
+
+/** Seconds between strokes the pen needs to lift fully; a quicker hop only rises part of the way. */
+const HOP_TIME = 0.3;
+
 const smooth = (f: number) => f * f * (3 - 2 * f);
+
+/**
+ * The way the ink runs at `progress` along a stroke, over `SWAY_TIME` of it:
+ * the chord from that far behind to the head (or, near the start, from the
+ * start to that far along), so a fast stroke's tight turns and loops don't
+ * swing the pen with them.
+ */
+export function inkDirection(s: Pick<StrokeFrame, 'path' | 'duration'>, progress: number): number {
+  const reach = s.duration > 0 ? Math.min(1, SWAY_TIME / s.duration) : 1;
+  const a = s.path.pointAt(Math.max(0, progress - reach));
+  const b = s.path.pointAt(Math.max(progress, Math.min(1, reach)));
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  return dx * dx + dy * dy > 1e-6 ? Math.atan2(dy, dx) : b.angle;
+}
+
+/** The angle `f` of the way from `a` to `b`, turning the short way round. */
+function turn(a: number, b: number, f: number): number {
+  const d = Math.atan2(Math.sin(b - a), Math.cos(b - a));
+  return a + d * f;
+}
 
 /**
  * Where the pens are at a frame. One on each stroke being drawn; between
  * strokes, one pen travels from the end of the last stroke to the start of
- * the next, lifting off the paper on the way. Before the first stroke it
- * hovers over its start, and after the last it lifts off its end.
+ * the next, lifting off the paper on the way — as high as the gap gives it
+ * time for. Before the first stroke it hovers over its start, and after the
+ * last it lifts off its end.
  */
 export function penPoses(frame: TegakiFrame): PenPose[] {
-  if (frame.active.length > 0) return frame.active.map(({ head }) => ({ x: head.x, y: head.y, angle: head.angle, lift: 0 }));
+  if (frame.active.length > 0) {
+    return frame.active.map((s) => ({ x: s.head.x, y: s.head.y, angle: inkDirection(s, s.progress), lift: 0 }));
+  }
   let prev: StrokeFrame | undefined;
   let next: StrokeFrame | undefined;
   for (const s of frame.strokes) {
@@ -33,13 +63,21 @@ export function penPoses(frame: TegakiFrame): PenPose[] {
     const t0 = prev.start + prev.duration;
     const span = next.start - t0;
     const f = span > 0 ? smooth(Math.max(0, Math.min(1, (frame.time - t0) / span))) : 1;
-    return [{ x: from.x + (to.x - from.x) * f, y: from.y + (to.y - from.y) * f, angle: to.angle, lift: Math.sin(Math.PI * f) }];
+    const hop = Math.min(1, span / HOP_TIME);
+    return [
+      {
+        x: from.x + (to.x - from.x) * f,
+        y: from.y + (to.y - from.y) * f,
+        angle: turn(inkDirection(prev, 1), inkDirection(next, 0), f),
+        lift: hop * Math.sin(Math.PI * f),
+      },
+    ];
   }
   if (prev && from) {
     const f = Math.max(0, Math.min(1, (frame.time - prev.start - prev.duration) / LIFT_TIME));
-    return [{ x: from.x, y: from.y, angle: from.angle, lift: smooth(f) }];
+    return [{ x: from.x, y: from.y, angle: inkDirection(prev, 1), lift: smooth(f) }];
   }
-  if (to) return [{ x: to.x, y: to.y, angle: to.angle, lift: 1 }];
+  if (next && to) return [{ x: to.x, y: to.y, angle: inkDirection(next, 0), lift: 1 }];
   return [];
 }
 

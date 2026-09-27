@@ -26,6 +26,7 @@ import { type PaperLayout, paperBounds, paperLayout, paperShapes } from './paper
 import { penPoses } from './pen.ts';
 import { handTimes } from './rhythm.ts';
 import { segmentLag, segmentPlugin, segmentSpan, segmentsEnd, taperAt, taperPath } from './segment.ts';
+import { settle } from './settle.ts';
 import { shakeAt, shakeStrength } from './shake.ts';
 import { tremorAt, tremorWaves } from './shaky.ts';
 import { leanAbout } from './slant.ts';
@@ -76,6 +77,19 @@ describe('pen', () => {
     expect(pose!.x).toBeCloseTo(100);
     expect(pose!.y).toBeCloseTo(20);
     expect(pose!.lift).toBeCloseTo(1);
+  });
+
+  test('a quick hop between strokes only lifts the pen part of the way', () => {
+    const strokes = [stroke('0', line(0, 100, 0), 'done', 1, 0), stroke('1', line(100, 200, 40), 'pending', 0, 1.06)];
+    const [pose] = penPoses(frame(1.03, strokes));
+    expect(pose!.lift).toBeCloseTo(0.2);
+  });
+
+  test('on a fast stroke the pen follows the way the ink runs, not each zigzag under the nib', () => {
+    // Right along a zigzag: every segment steep, the whole of it level.
+    const zigzag = new StrokePath(Array.from({ length: 21 }, (_, i) => ({ x: i * 5, y: i % 2 ? 10 : 0, width: 8, t: i / 20 })));
+    const [pose] = penPoses(frame(0.1, [stroke('0', zigzag, 'drawing', 1, 0, 0.2)]));
+    expect(Math.abs(pose!.angle)).toBeLessThan(0.1);
   });
 
   test('once the text is done the pen lifts off its last point', () => {
@@ -865,6 +879,27 @@ describe('chalk', () => {
     expect(late.alpha).toBeLessThan(early.alpha);
     expect(moteAt(m!, 0, 0, -0.1, 100)).toBeNull();
     expect(moteAt(m!, 0, 0, m!.life + 0.1, 100)).toBeNull();
+  });
+});
+
+describe('settle', () => {
+  const strokes = [
+    { start: 0, duration: 1 },
+    { start: 1.5, duration: 1 },
+  ] as unknown as PlacedStroke[];
+  const ctx = (duration: number) => ({ strokes, duration, fontSize: 100, random: () => Math.random });
+
+  test('the timeline runs on until the last stroke has settled', () => {
+    expect(settle(1.5)!(ctx(2.5))!.duration).toBe(4);
+  });
+
+  test('two plugins settling wait for the longer, not both', () => {
+    const once = settle(1)!(ctx(2.5))!.duration!;
+    expect(settle(0.5)!(ctx(once))!.duration).toBe(3.5);
+  });
+
+  test('nothing to settle leaves the timing alone', () => {
+    expect(settle(0)).toBeUndefined();
   });
 });
 

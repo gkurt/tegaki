@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { type TegakiBundle, TegakiRenderer } from 'tegaki';
+import { brushPlugin } from '../plugins/brush.ts';
 import { type FontName, INK, loadFont, markHeadlineWritten, useFont, useHeadlineWritten, useInView, useTheme } from './shared.ts';
 
 const HEADLINE = 'Every font,\nwritten by hand.';
@@ -23,6 +24,7 @@ const GREETINGS: Greeting[] = [
   { word: 'नमस्ते', language: 'Hindi', lang: 'hi', font: 'Tillana', scale: 0.9 },
   { word: 'שלום', language: 'Hebrew', lang: 'he', font: 'Suez One', scale: 0.85, dir: 'rtl', clip: 1.6 },
   { word: '반가워요', language: 'Korean', lang: 'ko', font: 'Nanum Pen Script', scale: 0.95 },
+  { word: '你好', language: 'Chinese', lang: 'zh-Hans', font: 'LXGW WenKai', scale: 0.85 },
 ];
 
 /** Seconds each greeting takes to write, then the pause before the row writes again. */
@@ -115,8 +117,9 @@ export function Greetings() {
 }
 
 /**
- * The headline writes itself, then a giant 書 ("to write") is drawn behind it.
- * It waits for the headline, which also gives Klee One (8 MB) time to arrive.
+ * The headline writes itself over a faint tracing of it, then a giant 書 ("to
+ * write") is brushed behind it. The 書 waits for the headline, which also gives
+ * Klee One (8 MB) time to arrive.
  */
 export function Hero() {
   const font = useFont('Parisienne');
@@ -124,6 +127,7 @@ export function Hero() {
   const [run, setRun] = useState(0);
   const kanjiFont = useFont(written ? 'Klee One' : null);
   const palette = INK[useTheme()];
+  const brush = useMemo(() => [brushPlugin(brushPlugin.presets.Scroll)], []);
 
   const headlineEffects = useMemo(
     () => ({ globalGradient: { colors: [palette.ink, palette.ink, palette.ink, palette.seal], angle: 12 } }),
@@ -134,16 +138,25 @@ export function Hero() {
     <div className="hero-writing">
       <div className="hero-kanji" aria-hidden="true">
         {kanjiFont && (
-          <TegakiRenderer key={`k${run}`} font={kanjiFont} time={{ mode: 'uncontrolled', duration: 4.5 }} quality={{ smoothing: true }}>
+          <TegakiRenderer
+            key={`k${run}`}
+            font={kanjiFont}
+            time={{ mode: 'uncontrolled', duration: 4.5 }}
+            quality={{ smoothing: true }}
+            plugins={brush}
+          >
             書
           </TegakiRenderer>
         )}
       </div>
-      {/* Keyed so the headline is replaced, not resized, when the font arrives: its
-          width follows the text, and a resized box would shift the page. */}
-      <div key={font ? 'ink' : 'placeholder'} className="hero-headline">
+      <div className="hero-headline">
+        {/* The tracing, in the headline's own face, holds its place (and its size) while the bundle
+            loads, then fades as the pen goes over it — again on every replay. */}
         <div className="hero-headline-ink" aria-hidden="true">
-          {font ? (
+          <div key={`g${run}`} className="hero-headline-ghost" data-fading={font ? '' : undefined}>
+            {HEADLINE}
+          </div>
+          {font && (
             <TegakiRenderer
               key={`h${run}`}
               font={font}
@@ -155,8 +168,6 @@ export function Hero() {
             >
               {HEADLINE}
             </TegakiRenderer>
-          ) : (
-            <div className="hero-headline-placeholder">{HEADLINE}</div>
           )}
         </div>
         <button

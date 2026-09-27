@@ -1,5 +1,6 @@
 import { createPlugin, expandBox, type StrokeFrame, type StrokePath, unionBoxes } from 'tegaki/core';
 import { grainTile } from './noise.ts';
+import { settle } from './settle.ts';
 
 /** A fleck of graphite broken off the point: where it lies, its size and turn, and the draw progress it's shed at. */
 export interface Splinter {
@@ -81,7 +82,7 @@ export function graphiteGray(darkness: number): string {
 export const graphitePlugin = createPlugin({
   name: 'graphite',
   label: 'Graphite',
-  description: 'A grainy pencil line, graphite splinters shed along it, and dust smudged off it. paint + underlay.',
+  description: 'A grainy pencil line, graphite splinters shed along it, and dust smudged off it. paint + underlay + timing.',
   params: {
     darkness: {
       type: 'number',
@@ -159,6 +160,7 @@ export const graphitePlugin = createPlugin({
       return v;
     };
     return {
+      timing: settle(dust > 0 ? 0.5 : 0),
       bounds: ({ strokes, fontSize }) => expandBox(unionBoxes(strokes.map((st) => st.path.bounds())), fontSize * 0.15),
       paint(s, next) {
         // Not drawn yet: pass it on, and the default painter shows nothing.

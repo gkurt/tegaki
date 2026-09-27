@@ -5,8 +5,9 @@ import { ChatStream } from '../components/home/ChatStream';
 import { ControlledTime } from '../components/home/ControlledTime';
 import { Finale } from '../components/home/Finale';
 import { Greetings, Hero } from '../components/home/Hero';
+import { Plugins, RainbowDemo } from '../components/home/Plugins';
+import rainbowSource from '../components/home/rainbow.ts?raw';
 import { Scripts } from '../components/home/Scripts';
-import { Styles } from '../components/home/Styles';
 import { TypeIt } from '../components/home/TypeIt';
 import { Write } from '../components/home/Write';
 import { FRAMEWORKS } from '../components/home/snippets';
@@ -52,6 +53,7 @@ const codeSpans = (text: string) => text.split('`').map((part, i) => ({ part, co
     <Font cssVariable="--font-geist" preload />
     <Font cssVariable="--font-geist-mono" preload />
     <Font cssVariable="--font-instrument-serif" preload />
+    <Font cssVariable="--font-parisienne" preload />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@700&text=%E6%89%8B%E6%9B%B8&display=block" />
@@ -146,24 +148,50 @@ const codeSpans = (text: string) => text.split('`').map((part, i) => ({ part, co
       <section class="chapter" id="scripts">
         <header class="chapter-head">
           <span class="chapter-num">02</span>
-          <h2>Eight writing <em>systems</em></h2>
+          <h2><em>Multilingual</em> text</h2>
           <p>
             Hebrew and Arabic right to left with positional forms, Devanagari and Bengali headlines drawn across the word, and Japanese, Korean
-            and Chinese in reference stroke order (KanjiVG, Make Me a Hanzi). Text is shaped with HarfBuzz.
+            and Chinese in reference stroke order (KanjiVG, Make Me a Hanzi). Text is shaped with HarfBuzz. These are the scripts the bundled
+            fonts cover; the Studio makes a bundle from any other font.
           </p>
         </header>
         <Scripts client:load />
       </section>
 
-      <section class="chapter" id="styles">
+      <section class="chapter" id="plugins">
         <header class="chapter-head">
           <span class="chapter-num">03</span>
-          <h2><em>Effects</em></h2>
+          <h2><em>Plugins</em></h2>
           <p>
-            Glow, wobble, per-stroke and whole-text gradients, and taper, composed per renderer. Strokes keep the font's own width by default.
+            A plugin reshapes the strokes, retimes them, or paints them — under the ink, over it, or instead of it — and composes with the
+            others in order. The built-in effects (glow, wobble, gradients, taper) are plugins too. Each card below runs one or a few of the
+            Studio's demo plugins, written against the same public API.
           </p>
         </header>
-        <Styles client:load />
+        <Plugins client:load />
+        <div class="own">
+          <div class="own-code">
+            <span class="own-label">rainbow.ts</span>
+            <Code class="code" lang="ts" themes={{ light: 'vitesse-light', dark: 'vitesse-dark' }} defaultColor={false} code={rainbowSource.trim()} />
+          </div>
+          <div class="own-side">
+            <div class="own-sheet">
+              <RainbowDemo client:load />
+            </div>
+            <Code
+              class="code own-usage"
+              lang="tsx"
+              themes={{ light: 'vitesse-light', dark: 'vitesse-dark' }}
+              defaultColor={false}
+              code={`<TegakiRenderer font={caveat} plugins={[rainbow()]}>`}
+            />
+          </div>
+        </div>
+        <div class="ship-links">
+          <a href={`${base}/api/renderer/#plugins`}>Plugin API →</a>
+          <a href={`${base}/studio/?m=text`}>Every demo plugin in the Studio →</a>
+          <a href="https://github.com/gkurt/tegaki/tree/main/packages/website/src/components/plugins">Demo plugin source →</a>
+        </div>
       </section>
 
       <section class="chapter" id="write">
@@ -253,7 +281,7 @@ const codeSpans = (text: string) => text.split('`').map((part, i) => ({ part, co
       <section class="chapter" id="faq" aria-labelledby="faq-title">
         <header class="chapter-head">
           <span class="chapter-num">07</span>
-          <h2 id="faq-title">Questions, <em>answered</em></h2>
+          <h2 id="faq-title">Frequently asked <em>questions</em></h2>
         </header>
         <dl class="faq">
           {

@@ -1,6 +1,7 @@
 import { type Box, createPlugin, expandBox, type StrokeFrame, seededRandom, unionBoxes } from 'tegaki/core';
 import { canvasColor, mix, type Rgba, rgba } from './color.ts';
 import { inkRegion, scratchCanvas, shrunk } from './ink-canvas.ts';
+import { settle } from './settle.ts';
 import { inkAge } from './wet.ts';
 
 export type LaserOrigin = 'top' | 'left' | 'right' | 'bottom';
@@ -51,7 +52,7 @@ const CHAR: Rgba = [46, 26, 14, 1];
 export const laserPlugin = createPlugin({
   name: 'laser',
   label: 'Laser',
-  description: 'A beam writes the text, sparking where it hits, the line glowing hot and cooling. overlay + paint + ink + bounds.',
+  description: 'A beam writes the text, sparking where it hits, the line glowing hot and cooling. overlay + paint + ink + bounds + timing.',
   params: {
     color: { type: 'color', label: 'Color', default: '#ff2a2a' },
     origin: {
@@ -89,6 +90,7 @@ export const laserPlugin = createPlugin({
       return emitter.point;
     };
     return {
+      timing: settle(cool),
       bounds: ({ strokes, fontSize }) => {
         const box = unionBoxes(strokes.map((s) => s.path.bounds()));
         if (!box) return null;

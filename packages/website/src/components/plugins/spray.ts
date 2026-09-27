@@ -1,5 +1,6 @@
 import { createPlugin, expandBox, type StrokePath, unionBoxes } from 'tegaki/core';
 import { canvasColor, type Rgba, rgba } from './color.ts';
+import { settle } from './settle.ts';
 import { meanWidth } from './svg.ts';
 
 /** A fleck of overspray: where it lands, how big, and at what draw progress it's sprayed. */
@@ -129,7 +130,7 @@ export const sprayPlugin = createPlugin({
     return {
       bounds: ({ strokes, fontSize }) =>
         expandBox(unionBoxes(strokes.map((s) => s.path.bounds())), fontSize * (0.1 * size + 0.6 * dripAmount)),
-      timing: dripAmount > 0 ? ({ strokes, duration }) => ({ strokes, duration: duration + run + 0.4 }) : undefined,
+      timing: settle(dripAmount > 0 ? run + 0.4 : 0),
       paint(s, next) {
         if (s.stroke.state === 'pending') return next(s);
         const { stroke, fontSize } = s;

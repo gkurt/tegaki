@@ -273,16 +273,50 @@ dd code {
   text-align: center;
 }
 
+/* The tracing and the renderer share one cell, so the box is the same size
+   before the bundle arrives and after. */
 .hero-headline-ink {
+  display: grid;
+  justify-items: center;
   max-width: 100%;
   padding-bottom: 0.14em;
+}
+
+.hero-headline-ink > * {
+  grid-area: 1 / 1;
+  max-width: 100%;
+}
+
+/* The headline in its own face, faint, set as the renderer sets it (only the
+   written breaks, one font in the line box), so the pen goes over its lines. */
+.hero-headline-ghost {
+  font-family: var(--font-parisienne);
+  white-space: pre;
+  color: var(--ink);
+  opacity: 0.1;
+  pointer-events: none;
+  user-select: none;
+}
+
+:root[data-theme="dark"] .hero-headline-ghost {
+  opacity: 0.13;
+}
+
+/* Gone by the time the pen has written the headline (Hero.tsx: 4.6s after 0.3s). */
+.hero-headline-ghost[data-fading] {
+  animation: ghost-fade 4.2s cubic-bezier(0.5, 0, 0.75, 0.4) 0.3s forwards;
+}
+
+@keyframes ghost-fade {
+  to {
+    opacity: 0;
+  }
 }
 
 /* Holds the renderer's place while its bundle loads. The renderer's box is its
    line count × line-height, so the placeholder keeps the same lines (only the
    written breaks, no wrapping) in the parent's own font: a second font in the
    line box would stretch it past the line-height. */
-.hero-headline-placeholder,
 .write-placeholder {
   display: block;
   max-width: 100%;
@@ -361,7 +395,7 @@ dd code {
 /* Live greetings under the fold line. */
 .greetings {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 12px;
   width: 100%;
   max-width: 1240px;
@@ -407,10 +441,11 @@ dd code {
     spin 1s linear infinite;
 }
 
+/* Language over font: seven tiles leave too little room for both on a line. */
 .greeting figcaption {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  line-height: 1.45;
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.02em;
@@ -833,23 +868,23 @@ dd code {
   animation: fill 1.6s linear forwards;
 }
 
-/* ---------------------------------------------------------------- 03 styles */
+/* ---------------------------------------------------------------- 03 plugins */
 
-.specimens {
+.plugs {
   display: grid;
-  grid-template-columns: repeat(12, 1fr);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 16px;
 }
 
-.specimen {
+.plug {
   --fg: var(--ink);
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 260px;
+  min-height: 300px;
   margin: 0;
-  padding: 28px;
+  padding: 26px 28px;
   border-radius: 24px;
   overflow: hidden;
   isolation: isolate;
@@ -857,16 +892,27 @@ dd code {
   box-shadow: var(--shadow);
 }
 
-.specimen-ink {
+.plug-ink {
+  position: relative;
+  z-index: 1;
   flex: 1;
   display: grid;
   place-items: center;
+  min-width: 0;
   font-size: var(--size);
   line-height: 1.2;
   text-align: center;
+  white-space: pre;
 }
 
-.specimen figcaption {
+.plug-ink > * {
+  grid-area: 1 / 1;
+  animation: fade-in 0.6s ease both;
+}
+
+.plug figcaption {
+  position: relative;
+  z-index: 2;
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -875,60 +921,376 @@ dd code {
   font-weight: 500;
 }
 
-.specimen figcaption code {
+.plug figcaption code {
   font-size: 12px;
   font-weight: 400;
   opacity: 0.62;
 }
 
-.specimen-fountain {
-  --fg: #1d2a5c;
+/* Each plugin name links to its source. */
+.plug-uses a {
+  color: inherit;
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 3px;
+}
+
+.plug-uses a:hover,
+.plug-uses a:focus-visible {
+  text-decoration-style: solid;
+  text-decoration-color: currentColor;
+}
+
+/* Neon on a brick wall at night, the tubes lighting the bricks round them. */
+.plug-neon {
+  --fg: #ffd6ea;
   grid-column: span 7;
-  background: radial-gradient(circle at 85% 20%, rgb(29 42 92 / 0.06), transparent 40%), #f7f0e0;
+  min-height: 420px;
+  background-color: #120c0e;
+  background-image:
+    radial-gradient(ellipse 60% 55% at 50% 48%, rgb(255 61 139 / 0.2), transparent 70%),
+    radial-gradient(ellipse at 50% 50%, transparent 35%, rgb(5 2 3 / 0.85) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='60'%3E%3Crect width='120' height='60' fill='%23100a0c'/%3E%3Crect x='1.5' y='1.5' width='57' height='27' rx='2' fill='%23291a1c'/%3E%3Crect x='61.5' y='1.5' width='57' height='27' rx='2' fill='%23241618'/%3E%3Crect x='-28.5' y='31.5' width='57' height='27' rx='2' fill='%232c1c1d'/%3E%3Crect x='31.5' y='31.5' width='57' height='27' rx='2' fill='%23221517'/%3E%3Crect x='91.5' y='31.5' width='57' height='27' rx='2' fill='%23291a1c'/%3E%3C/svg%3E");
+  background-size:
+    auto,
+    auto,
+    90px 45px;
 }
 
-.specimen-neon {
-  --fg: #ffe4f8;
+/* An embroidery hoop on a cutting mat: linen stretched in a wooden ring. */
+.plug-stitch {
+  --fg: #2a3a55;
   grid-column: span 5;
+  min-height: 420px;
   background:
-    radial-gradient(ellipse at 50% 55%, rgb(255 31 143 / 0.18), transparent 60%),
-    repeating-linear-gradient(0deg, rgb(255 255 255 / 0.018) 0 2px, transparent 2px 4px), #0c0910;
+    linear-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgb(255 255 255 / 0.07) 1px, transparent 1px) 0 0 / 28px 28px,
+    #3f6b5a;
 }
 
-.specimen-rainbow {
-  --fg: #1c1d2b;
-  grid-column: span 5;
-  background: #fffdf8;
-}
-
-:root[data-theme="dark"] .specimen-rainbow {
-  --fg: #f1e9da;
-  background: #1c1c21;
-}
-
-.specimen-chalk {
-  --fg: #f3f0e6;
-  grid-column: span 7;
+.plug-stitch::before {
+  content: "";
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  z-index: 0;
+  width: min(84%, 350px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
   background:
-    radial-gradient(ellipse at 20% 80%, rgb(255 255 255 / 0.07), transparent 45%),
-    radial-gradient(ellipse at 75% 25%, rgb(255 255 255 / 0.05), transparent 40%), #2c3b33;
+    radial-gradient(circle, transparent 62%, rgb(80 60 30 / 0.16) 100%),
+    repeating-linear-gradient(0deg, rgb(120 100 70 / 0.1) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgb(120 100 70 / 0.08) 0 1px, transparent 1px 3px), #f1e9da;
   box-shadow:
-    inset 0 0 0 10px #6b4a2e,
-    inset 0 0 0 12px #553a23,
-    var(--shadow);
-  padding: 34px;
+    0 0 0 9px #c99a5e,
+    0 0 0 10px #a97a42,
+    0 0 0 15px #d8ad73,
+    0 0 0 16px #9c6e38,
+    0 18px 30px 10px rgb(0 0 0 / 0.35);
 }
 
-.specimen-sunset {
-  --fg: #ffd9c2;
-  grid-column: span 7;
-  background: radial-gradient(ellipse at 50% 120%, rgb(255 111 97 / 0.35), transparent 60%), linear-gradient(180deg, #120d24, #2a1638);
+.plug-hoop-screw {
+  position: absolute;
+  top: calc(46% - min(42%, 175px) - 26px);
+  left: 50%;
+  z-index: 1;
+  width: 34px;
+  height: 22px;
+  border-radius: 5px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, #e9e6df, #9a968d 60%, #6f6b63);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.35);
 }
 
-.specimen-gilded {
+.plug-stitch .plug-ink {
+  margin-bottom: 8%;
+}
+
+.plug-stitch figcaption {
+  color: #e6efe9;
+}
+
+/* Rice paper for a practice sheet. */
+.plug-order {
+  --fg: #1c1d2b;
+  grid-column: span 4;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgb(255 255 255 / 0.6), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.09' numOctaves='3' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.38 0 0 0 0 0.25 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E"),
+    #f5efe1;
+}
+
+/* A letterpress invitation: deep green board, a gold rule, printed lines. */
+.plug-foil {
   --fg: #e9c77b;
+  grid-column: span 4;
+  text-align: center;
+  background: radial-gradient(ellipse at 50% 30%, rgb(255 255 255 / 0.05), transparent 60%), #10291f;
+}
+
+.plug-foil::before {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border: 1px solid rgb(233 199 123 / 0.45);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 4px #10291f,
+    inset 0 0 0 5px rgb(233 199 123 / 0.25);
+  pointer-events: none;
+}
+
+.plug-foil-top,
+.plug-foil-bottom {
+  position: relative;
+  z-index: 1;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: rgb(233 199 123 / 0.72);
+}
+
+.plug-foil-top {
+  margin-top: 6px;
+}
+
+/* After the writing, though it comes before it in the markup. */
+.plug-foil-bottom {
+  order: 1;
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 10.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.plug-foil figcaption {
+  order: 2;
+  margin-top: 14px;
+}
+
+/* A sticky note, taped to the page and curling off it at the corner. */
+.plug-annotate {
+  --fg: #1d2a5c;
+  grid-column: span 4;
+  border-radius: 3px 3px 22px 3px;
+  background: linear-gradient(170deg, #fff08a, #ffe45c 60%, #f7d64a);
+  box-shadow:
+    0 1px 1px rgb(60 40 10 / 0.08),
+    8px 14px 22px -10px rgb(60 40 10 / 0.35),
+    var(--shadow);
+  transform: rotate(-1.4deg);
+}
+
+.plug-tape {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  z-index: 2;
+  width: 108px;
+  height: 30px;
+  transform: translateX(-50%) rotate(2.5deg);
+  background: rgb(255 255 255 / 0.45);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  backdrop-filter: blur(1px);
+}
+
+.plug-annotate figcaption {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* Old parchment, darker toward its edges. */
+.plug-burn {
+  --fg: #3a2414;
   grid-column: span 5;
-  background: radial-gradient(circle at 30% 20%, rgb(233 199 123 / 0.08), transparent 50%), #1a1411;
+  background:
+    radial-gradient(ellipse at 50% 45%, transparent 45%, rgb(110 64 22 / 0.35) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.02' numOctaves='4' seed='9'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.3 0 0 0 0 0.1 0 0 0 0.22 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E"),
+    #ecd9b0;
+}
+
+/* A concrete wall. */
+.plug-spray {
+  --fg: #ff2e7e;
+  grid-column: span 7;
+  background:
+    radial-gradient(ellipse at 20% 110%, rgb(0 0 0 / 0.35), transparent 55%),
+    radial-gradient(ellipse at 90% -10%, rgb(255 255 255 / 0.08), transparent 50%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.35 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='s'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008' numOctaves='3' seed='12'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.1 0 0 0 0 0.1 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23s)'/%3E%3C/svg%3E"),
+    #6e716f;
+}
+
+/* Expansion joints in the concrete. */
+.plug-spray::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    90deg,
+    transparent calc(66% - 1px),
+    rgb(0 0 0 / 0.25) calc(66% - 1px) 66%,
+    rgb(255 255 255 / 0.08) 66% calc(66% + 1px),
+    transparent calc(66% + 1px)
+  );
+}
+
+.plug-spray figcaption {
+  color: #eceae4;
+}
+
+/* A rubber stamp's ring round the text, and its mark in the middle. */
+.plug-path {
+  --fg: #c7321f;
+  grid-column: span 4;
+  min-height: 340px;
+  background: #f8f3e8;
+}
+
+:root[data-theme="dark"] .plug-path {
+  background: #efe7d6;
+}
+
+/* The text is laid on one line and bent into a circle as wide round as the
+   line is long, so the line mustn't wrap to the card's width. */
+.plug-path [data-tegaki="root"] {
+  /* biome-ignore lint/complexity/noImportantStyles: the adapter sets an inline width */
+  width: max-content !important;
+  /* biome-ignore lint/complexity/noImportantStyles: and max-width */
+  max-width: none !important;
+  /* Centered on the card however far past it the straight line runs. */
+  justify-self: unsafe center;
+  /* The circle hangs from the line's middle: lift it by its radius (the line is
+     22.15em long in Caveat, so 22.15em / 2π) to center it in the card. */
+  translate: 0 -3.52em;
+}
+
+/* Inked unevenly, as a rubber stamp is: specks where the rubber missed. */
+.plug-path .plug-ink {
+  /* The card's width, not the line's, so the line centers on the card. */
+  grid-template-columns: minmax(0, 1fr);
+  transform: rotate(-6deg);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' seed='5'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -11 0 0 0 7.2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)'/%3E%3C/svg%3E");
+}
+
+/* The rings round the text, outside it and in. */
+.plug-path .plug-ink::before,
+.plug-path .plug-ink::after {
+  content: "";
+  grid-area: 1 / 1;
+  width: 8.9em;
+  aspect-ratio: 1;
+  border: 0.09em solid currentColor;
+  border-radius: 50%;
+}
+
+.plug-path .plug-ink::after {
+  width: 5.5em;
+  border-width: 0.06em;
+}
+
+.plug-stamp-mark {
+  display: grid;
+  place-items: center;
+  width: 1.45em;
+  aspect-ratio: 1;
+  font-family: var(--kanji);
+  font-size: 1.85em;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Cream letter paper, faintly ruled. */
+.plug-quill {
+  --fg: #1d2a5c;
+  grid-column: span 8;
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 43px, rgb(29 42 92 / 0.09) 43px 44px),
+    radial-gradient(ellipse at 70% 30%, rgb(255 255 255 / 0.7), transparent 60%), #f7f0e0;
+}
+
+/* A plugin's source, and what it draws. */
+.own {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.own-code {
+  position: relative;
+}
+
+.own-code pre {
+  height: 100%;
+  padding: 44px 26px 22px;
+  font-size: 13px;
+}
+
+.own-label,
+.own-sheet::after {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  z-index: 1;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.own-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.own-sheet {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='2' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.4 0 0 0 0 0.35 0 0 0 0 0.3 0 0 0 0.18 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23r)'/%3E%3C/svg%3E"),
+    #f4efe4;
+}
+
+.own-sheet::after {
+  content: "Output";
+  color: #8b857a;
+}
+
+.own-ink {
+  justify-self: stretch;
+  display: grid;
+  justify-items: center;
+  font-size: clamp(64px, 7vw, 108px);
+  line-height: 1.1;
+  white-space: pre;
+  color: #0078bf;
+}
+
+.own-side .own-usage {
+  padding: 14px 18px;
+  font-size: 13px;
+}
+
+@media (max-width: 960px) {
+  .plugs > * {
+    grid-column: span 12;
+  }
+
+  .own {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* -------------------------------------------------------------- 04 type it */
@@ -1480,12 +1842,15 @@ dd code {
 /* ------------------------------------------------------------ responsive */
 
 @media (max-width: 960px) {
-  .specimens > * {
-    grid-column: span 12;
+  /* Seven tiles: four over three, the short row centered. */
+  .greetings {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
-  .greetings {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .greeting {
+    flex: 0 0 calc((100% - 3 * 12px) / 4);
   }
 
   .controlled {
@@ -1515,8 +1880,7 @@ dd code {
     padding: 0 9px;
   }
 
-  .specimen {
-    min-height: 240px;
+  .plug {
     padding: 22px;
   }
 
@@ -1534,6 +1898,7 @@ dd code {
   }
 
   .greetings {
+    display: grid;
     grid-template-columns: none;
     grid-auto-flow: column;
     grid-auto-columns: 46%;
