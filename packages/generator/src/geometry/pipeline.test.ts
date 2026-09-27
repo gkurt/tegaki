@@ -103,6 +103,21 @@ describe('geometry pipeline — primitives', () => {
     expect(r.strokesFontUnits.length).toBe(1);
   });
 
+  test('a bar with a hairline spike at its tip is still one stroke, meshed cleanly', () => {
+    // The spike runs out 30 units past the right end and straight back (Caveat's F has one).
+    const bar = [
+      { x: 100, y: 450 },
+      { x: 800, y: 450 },
+      { x: 830, y: 480 },
+      { x: 800, y: 450 },
+      { x: 800, y: 550 },
+      { x: 100, y: 550 },
+    ];
+    const result = run('-', commandsFromPolygons(bar), DEFAULT_GEOMETRY_OPTIONS);
+    expect(result.warnings.filter((w) => w.startsWith('ink mesh'))).toEqual([]);
+    expect(result.strokesFontUnits).toHaveLength(1);
+  });
+
   test('small dot: single blob stroke', () => {
     const r = run('.', commandsFromPolygons(rect(450, 750, 550, 850)));
     expect(r.corners.length).toBe(0);

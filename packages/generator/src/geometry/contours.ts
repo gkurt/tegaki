@@ -19,6 +19,46 @@ function cumulativeArcLengths(points: Point[]): number[] {
   return out;
 }
 
+/**
+ * Collapse the zero-width spikes of a closed polygon: vertices where the
+ * outline runs out and straight back along the same line (Caveat's `F` has
+ * one at the tip of its top bar). A spike holds no ink, and its two edges
+ * overlap, so no triangulation can hold both — the ink mesh splits them over
+ * and over and the glyph comes out in dozens of fragments. Removing each tip
+ * in turn folds the spike back to its base.
+ */
+export function dropSpikes(points: Point[]): Point[] {
+  const out = [...points];
+  let i = 0;
+  let stable = 0;
+  while (out.length >= 3 && stable < out.length) {
+    const n = out.length;
+    const a = out[(i + n - 1) % n]!;
+    const p = out[i % n]!;
+    const b = out[(i + 1) % n]!;
+    const ux = p.x - a.x;
+    const uy = p.y - a.y;
+    const vx = b.x - p.x;
+    const vy = b.y - p.y;
+    const cross = ux * vy - uy * vx;
+    const dot = ux * vx + uy * vy;
+    // Turning back (dot < 0) with a sine of the turn under 1e-6: a hairline.
+    if (dot < 0 && Math.abs(cross) <= 1e-6 * Math.hypot(ux, uy) * Math.hypot(vx, vy)) {
+      out.splice(i % n, 1);
+      // The spike's base may now repeat itself.
+      const m = out.length;
+      const at = (i + m - 1) % m;
+      if (m > 1 && dist(out[at]!, out[(at + 1) % m]!) < 1e-9) out.splice((at + 1) % m, 1);
+      i = Math.max(0, i - 2);
+      stable = 0;
+    } else {
+      i = (i + 1) % n;
+      stable++;
+    }
+  }
+  return out;
+}
+
 export function buildContours(subPaths: Point[][]): Contour[] {
   const cleaned: Point[][] = [];
 
@@ -31,7 +71,9 @@ export function buildContours(subPaths: Point[][]): Contour[] {
     }
     // Drop the duplicate closing point flattenPath appends on 'Z'.
     if (points.length > 1 && dist(points[0]!, points[points.length - 1]!) < 1e-9) points.pop();
-    if (points.length < 3) continue;
+    const unspiked = dropSpikes(points);
+    if (unspiked.length < 3) continue;
+    points.splice(0, points.length, ...unspiked);
     if (Math.abs(signedArea(points)) < 1e-9) continue;
     cleaned.push(points);
   }
