@@ -122,24 +122,43 @@ describe('plugin goal', () => {
     expect(prompt).toContain('`createPlugin`');
     expect(prompt).toContain('What it should do, in my words: ink that glows like lava');
     expect(prompt).toContain(`${SITE}/api/renderer.md`);
-    expect(prompt).toContain('SHOWCASE_PLUGINS');
   });
 
   test('without a note the agent is told to ask what the plugin should do', () => {
     expect(buildAgentPrompt(input({ goal: 'plugin' }))).toContain('Ask me what it should do');
   });
 
-  test('lists the demo plugins on, with their changed options, and keeps them in the links', () => {
-    const prompt = buildAgentPrompt(input({ goal: 'plugin' }, { plugins: ['pen', 'echo'], pluginOptions: { echo: { lag: 0.2 } } }));
-    expect(prompt).toContain('(`pen`)');
-    expect(prompt).toContain('(`echo`) — set to `{"lag":0.2}`');
-    const preview = prompt.match(/Preview \(chrome-free render, for screenshots\): (\S+)/)?.[1] ?? '';
-    expect(new URL(preview).searchParams.get('pg')).toBe('pen,echo');
+  test("is written for the user's own project, not the Tegaki repo", () => {
+    const prompt = buildAgentPrompt(input({ goal: 'plugin' }));
+    expect(prompt).toContain('`tegaki` npm package');
+    expect(prompt).toContain('plugins={plugins}');
+    expect(prompt).not.toContain('SHOWCASE_PLUGINS');
+    expect(prompt).not.toContain('bun ');
+  });
+
+  test('a shipped font is imported from tegaki/fonts', () => {
+    expect(buildAgentPrompt(input({ goal: 'plugin' }))).toContain("import bundle from 'tegaki/fonts/caveat'");
+  });
+
+  test('any other font is generated in the studio', () => {
+    const prompt = buildAgentPrompt(
+      input({ goal: 'plugin', font: { family: 'Pacifico', style: 'Regular', unitsPerEm: 1000, lineCap: 'round', features: [] } }),
+    );
+    expect(prompt).toContain('Export → Download bundle');
+  });
+
+  test('shipped plugins are named by their tegaki/core export, demos as not in the package; both stay in the links', () => {
+    const prompt = buildAgentPrompt(input({ goal: 'plugin' }, { plugins: ['vary', 'echo'], pluginOptions: { echo: { lag: 0.2 } } }));
+    expect(prompt).toContain('`variationPlugin()`');
+    expect(prompt).toContain('Echo (set to `{"lag":0.2}`)');
+    expect(prompt).toContain("aren't in the package");
+    const preview = prompt.match(/Preview \(the same, chrome-free, for screenshots\): (\S+)/)?.[1] ?? '';
+    expect(new URL(preview).searchParams.get('pg')).toBe('vary,echo');
   });
 
   test('leaves out the stroke-tuning parts: pipeline flags and the generate command', () => {
     const prompt = buildAgentPrompt(input({ goal: 'plugin' }, { pipeline: 'raster', options: { ...DEFAULT_OPTIONS, resolution: 600 } }));
     expect(prompt).not.toContain('--resolution');
-    expect(prompt).not.toContain('bun start generate');
+    expect(prompt).not.toContain('generate "');
   });
 });

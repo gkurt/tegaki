@@ -1,4 +1,5 @@
 import { DEFAULT_GEOMETRY_OPTIONS, DEFAULT_OPTIONS, type GeometryOptions, type PipelineOptions } from 'tegaki-generator';
+import { BUNDLED_FONTS } from '../../site.ts';
 import { SHOWCASE_PLUGINS } from '../plugins/index.ts';
 import { buildUrlParams, type UrlState } from '../url-state.ts';
 
@@ -22,7 +23,7 @@ const GOAL_TEXT: Record<AgentGoal, string> = {
     'Improve how this font animates: strokes that cover all the ink with nothing doubled or missing, natural stroke order and direction, and pleasant timing. Try settings, compare the results visually, and tell me the settings (URL params and CLI flags) that work best.',
   fix: 'Help me fix a problem with how this font is extracted, rendered or animated. Reproduce it, find the cause (settings or pipeline), and fix it — or tell me which settings avoid it.',
   plugin:
-    "Write a plugin for Tegaki's renderer that does what I describe below: a `TegakiPlugin`, made with `createPlugin` from `tegaki/core` so its options are typed params a UI can build controls from, with presets worth trying. Use only the hooks it needs, draw its randomness from `random(key)` (not `Math.random`) so every frame and every load agree, and check the result visually in the studio before handing it over.",
+    "Write a plugin for Tegaki's renderer that does what I describe below: a `TegakiPlugin`, made with `createPlugin` from `tegaki/core` so its options are typed params a UI can build controls from, with presets worth trying. Use only the hooks it needs, draw its randomness from `random(key)` (not `Math.random`) so every frame and every load agree, and check the result visually in my project before handing it over.",
 };
 
 const REPO = 'https://github.com/gkurt/tegaki';
@@ -203,72 +204,100 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
   return out.join('\n');
 }
 
-/** The studio's demo plugins switched on in `settings`, each with its changed options. */
-function pluginsOn(settings: UrlState): string[] {
-  return SHOWCASE_PLUGINS.filter((p) => settings.plugins.includes(p.id)).map((p) => {
+/** The plugins shipped in `tegaki/core`, by showcase id: the name they're exported under. */
+const CORE_PLUGINS: Record<string, string> = {
+  vary: 'variationPlugin',
+  boil: 'boilPlugin',
+  path: 'textPathPlugin',
+  caption: 'captionPlugin',
+  annotate: 'annotatePlugin',
+};
+
+const DEMO_SOURCE = `${REPO}/tree/main/packages/website/src/components/plugins`;
+
+/**
+ * The studio's plugins switched on in `settings`, each with its changed options:
+ * the shipped ones by their `tegaki/core` export, the demos (not in the package) by label.
+ */
+function pluginsOn(settings: UrlState): { core: string[]; demos: string[] } {
+  const core: string[] = [];
+  const demos: string[] = [];
+  for (const p of SHOWCASE_PLUGINS) {
+    if (!settings.plugins.includes(p.id)) continue;
     const options = settings.pluginOptions[p.id];
-    const changed = options && Object.keys(options).length ? ` — set to \`${JSON.stringify(options)}\`` : '';
-    return `${p.factory.label} (\`${p.id}\`)${changed}`;
-  });
+    const set = options && Object.keys(options).length ? JSON.stringify(options) : '';
+    const exported = CORE_PLUGINS[p.id];
+    if (exported) core.push(`\`${exported}(${set})\``);
+    else demos.push(`${p.factory.label}${set ? ` (set to \`${set}\`)` : ''}`);
+  }
+  return { core, demos };
 }
 
-/** The "Plugin" goal: a prompt for writing a renderer plugin rather than tuning the font's strokes. */
+/** The "Plugin" goal: a prompt for writing a renderer plugin in the user's own project. */
 function buildPluginPrompt(input: AgentPromptInput): string {
   const { settings, font } = input;
   const family = font?.family ?? settings.fontFamily;
   const { studio, preview } = agentUrls(settings, input.siteUrl, true);
   const note = input.note.trim();
-  const on = pluginsOn(settings);
+  const { core, demos } = pluginsOn(settings);
   const docs = `${input.siteUrl}/api/renderer.md`;
+  const bundled = font?.fileName ? undefined : BUNDLED_FONTS.find(([, name]) => name === family)?.[0];
   const out: string[] = [];
 
   out.push(
-    `I'm using Tegaki (${REPO}) to animate handwriting with the font **${family}**. Its renderer draws a font's pen strokes one by one, and plugins reshape, retime or paint that ink, draw under or over it, or run on every frame.`,
+    `I'm adding a handwriting animation to my project with Tegaki (${REPO}, the \`tegaki\` npm package), in the font **${family}**. Its renderer draws a font's pen strokes one by one, and plugins reshape, retime or paint that ink, draw under or over it, or run on every frame.`,
   );
 
   out.push('', '## Goal', '', GOAL_TEXT.plugin, '');
   out.push(note ? `What it should do, in my words: ${note}` : 'Ask me what it should do before writing it.');
 
-  out.push('', "## What I'm looking at", '');
-  out.push(
-    font?.fileName ? `- Font: ${family} — a local file (\`${font.fileName}\`), not from Google Fonts` : `- Font: ${family} (Google Fonts)`,
-  );
-  out.push(`- Text: “${settings.previewText}” at ${settings.fontSizePx}px`);
-  if (on.length) {
-    out.push('- Plugins already on in the studio, in the order they run (the new one should work alongside them):');
-    for (const p of on) out.push(`  - ${p}`);
+  out.push('', "## What I'm starting from", '');
+  if (bundled) {
+    out.push(`- Font: ${family}, shipped with the package — \`import bundle from 'tegaki/fonts/${bundled}'\``);
   } else {
-    out.push('- No other plugins on');
+    const source = font?.fileName ? `a local file (\`${font.fileName}\`)` : 'from Google Fonts';
+    out.push(
+      `- Font: ${family}, ${source}. It isn't one of the bundles shipped under \`tegaki/fonts/*\`, so I generate it in the Tegaki studio (Export → Download bundle) and import the bundle's \`bundle.ts\`; if I haven't yet, use \`tegaki/fonts/caveat\` meanwhile.`,
+    );
+  }
+  out.push(`- Text: “${settings.previewText}” at ${settings.fontSizePx}px`);
+  if (core.length) {
+    out.push(
+      `- Plugins from \`tegaki/core\` I'm using, in the order they run (the new one should work alongside them): ${core.join(', ')}`,
+    );
+  }
+  if (demos.length) {
+    out.push(
+      `- Studio demo plugins I have on: ${demos.join(', ')}. They aren't in the package; their source is in ${DEMO_SOURCE}, to copy or learn from.`,
+    );
   }
 
   out.push('', '## Links', '');
-  out.push(`- Studio (interactive, this exact state): ${studio}`);
-  out.push(`- Preview (chrome-free render, for screenshots): ${preview}`);
+  out.push(`- Studio (the look I have now, interactive): ${studio}`);
+  out.push(`- Preview (the same, chrome-free, for screenshots): ${preview}`);
+  out.push('- The studio only runs its own plugins, so the new one is tried in my project, not there.');
   if (font?.fileName) out.push(`- The font is a local file, so these links only load it if “${family}” is also on Google Fonts.`);
 
   out.push('', '## The plugin API', '');
   out.push(
-    `- Reference: ${docs} (the Plugins section of the TegakiRenderer docs, as Markdown): every hook, its context, and \`createPlugin\`. The types are in ${REPO}/blob/main/packages/renderer/src/core/types.ts.`,
+    `- Reference: ${docs} (the TegakiRenderer docs as Markdown; see its Plugins section): every hook, what it's given, and \`createPlugin\`. Everything a plugin needs is exported from \`tegaki/core\` (\`createPlugin\`, \`TegakiPlugin\`, \`StrokePath\`, \`offsetPath\`, \`expandBox\`, …), typed.`,
   );
   out.push(
     '- `geometry` / `outline` reshape the ink and the letters it is clipped to, once per layout; `timing` decides when each stroke draws; `paint` draws every stroke on every frame (pending ones too) through `next`, the rest of the chain; `ink` works on the finished ink; `underlay` / `overlay` draw under / over it; `onFrame` runs after each frame; `bounds` grows the canvas for what is drawn outside the ink; `steps` cycles a few drawings over time; `svg` puts what the plugin paints into an exported SVG.',
   );
   out.push(
-    `- Examples: the studio's demo plugins in ${REPO}/tree/main/packages/website/src/components/plugins (brushes, textures, a pen at the tip, a typewriter, neon, stroke-order arrows, …), and the shipped ones (variation, boil, annotate, text on a path, captions) in ${REPO}/tree/main/packages/renderer/src/plugins. Start from the closest one.`,
+    `- Examples to start from: the studio's demo plugins (${DEMO_SOURCE} — brushes, textures, a pen at the tip, a typewriter, neon, stroke-order arrows, …) and the ones shipped in \`tegaki/core\` (${REPO}/tree/main/packages/renderer/src/plugins). Pick the closest one.`,
   );
 
-  out.push('', '## How to iterate', '');
+  out.push('', '## How to try it', '');
   out.push(
-    "- Clone the repo and write the plugin in packages/website/src/components/plugins/, then list it in `SHOWCASE_PLUGINS` (packages/website/src/components/plugins/index.ts) under a short id, where it should run in the chain (the comment above the list explains the order). Run `bun dev`: the studio's Plugins tab builds its controls from its params and presets, `pg=<ids>` in the URL switches plugins on and `po=<JSON by id>` sets their options.",
+    "- Install `tegaki` if the project doesn't have it, write the plugin in its own file, and pass it to the renderer through the adapter for my framework (`tegaki/react`, `tegaki/svelte`, `tegaki/vue`, `tegaki/solid`, `tegaki/wc`, …): e.g. `<TegakiRenderer font={bundle} plugins={plugins}>…</TegakiRenderer>`, with `const plugins = [myPlugin({ … })]` kept stable (outside the component, or memoized), since a new array redraws the text.",
   );
   out.push(
-    '- All state lives in the URL and the page reads it once on load, so re-navigate after each change. In /preview, wait for `body[data-tegaki-ready="true"]` before taking a screenshot; `tm=controlled&ct=<seconds>` pauses on a frame (a `ct` past the end shows the finished text), so sweep a few times to see it move, and `rs=<n>` changes the seed.',
+    '- To look at a frame, pass a number as `time` (seconds; controlled mode pauses there, and a time past the end shows the finished text), screenshot a few times to see it move, and change `seed` to see its randomness vary. Then switch back to the timing I use.',
   );
   out.push(
-    "- Pin its behaviour with unit tests beside the demo plugins' (packages/website/src/components/plugins/plugins.test.ts) and run `bun checks` (lint, types, tests).",
-  );
-  out.push(
-    '- In an app, pass it to the renderer: `<TegakiRenderer font={bundle} plugins={plugins}>…</TegakiRenderer>` with `const plugins = [myPlugin({ … })]` kept stable (outside the component, or memoized), since a new array redraws the text.',
+    "- Keep the plugin's maths in small pure functions and unit-test them; `engine.frameAt(time)` gives the strokes of any frame without drawing.",
   );
 
   return out.join('\n');
