@@ -16,6 +16,7 @@ import type { LoadedFont, SetSetting } from './state.ts';
 import { TextFrame } from './TextFrame.tsx';
 import { LOOP_HOLD_MS, Transport } from './Transport.tsx';
 import { cx, IconButton, Popover, Spinner } from './ui.tsx';
+import { VariableFontPreview } from './VariableFontPreview.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
@@ -30,6 +31,9 @@ export function TextWorkspace({
   resultsCache,
   rendererRef,
   playbackRef,
+  bundleRef,
+  showVariableFont,
+  onCloseVariableFont,
 }: {
   font: LoadedFont | null;
   settings: UrlState;
@@ -37,6 +41,11 @@ export function TextWorkspace({
   resultsCache: RefObject<Map<string, PipelineResult>>;
   rendererRef: RefObject<TegakiRendererHandle | null>;
   playbackRef: RefObject<TextPlaybackHandle | null>;
+  /** The bundle the renderer last drew — what Export's variable font is built from. */
+  bundleRef: RefObject<TegakiBundle | null>;
+  /** Draw the text in its variable font under the canvas too (switched on from Export). */
+  showVariableFont: boolean;
+  onCloseVariableFont: () => void;
 }) {
   const { timeMode, animSpeed, previewText: text } = settings;
   const fontInfo = font?.info ?? null;
@@ -88,6 +97,7 @@ export function TextWorkspace({
   const [displayTime, setDisplayTime] = useState(() => settings.currentTime);
   const timeRef = useRef(settings.currentTime);
   const [bundleReady, setBundleReady] = useState(false);
+  const [bundle, setBundle] = useState<TegakiBundle | null>(null);
   const [totalDuration, setTotalDuration] = useState(0);
 
   playbackRef.current = { pause: () => setPlaying(false) };
@@ -125,6 +135,8 @@ export function TextWorkspace({
         drawnFontUrl.current = info.bundle.fontUrl;
       }
       setBundleReady(true);
+      setBundle(info.bundle);
+      bundleRef.current = info.bundle;
       setTotalDuration(info.totalDuration);
       setTimelineVersion((v) => v + 1);
       // Mirror the renderer's engine onto `window.__tegakiEngine` so an attached
@@ -134,7 +146,7 @@ export function TextWorkspace({
       // affordance — does not affect rendering.
       (window as Window & { __tegakiEngine?: unknown }).__tegakiEngine = rendererRef.current?.engine ?? null;
     },
-    [rendererRef],
+    [rendererRef, bundleRef],
   );
 
   const prevTotalRef = useRef(totalDuration);
@@ -233,6 +245,9 @@ export function TextWorkspace({
     [strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `timelineVersion` marks a new timeline on the same engine
+  const timelineEntries = useMemo(() => rendererRef.current?.engine?.timeline.entries ?? [], [rendererRef, timelineVersion]);
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <TextInputBar text={text} onChange={(t) => set('previewText', t)} />
@@ -298,6 +313,23 @@ export function TextWorkspace({
                     useShaper={settings.useShaper}
                   />
                 </GlyphPicker>
+              </TextFrame>
+            )}
+            {font && showVariableFont && (
+              <TextFrame width={settings.frameWidth} onWidthChange={(w) => set('frameWidth', w)} autoClassName="w-full max-w-3xl">
+                <VariableFontPreview
+                  bundle={bundle}
+                  fontInfo={font.info}
+                  entries={timelineEntries}
+                  text={text}
+                  time={timeMode === 'controlled' ? displayTime : null}
+                  strokeEasing={timingConfig?.strokeEasing}
+                  glyphEasing={timingConfig?.glyphEasing}
+                  fontSizePx={settings.fontSizePx}
+                  lineHeightRatio={settings.lineHeightRatio}
+                  letterSpacingPx={settings.letterSpacingPx}
+                  onClose={onCloseVariableFont}
+                />
               </TextFrame>
             )}
           </div>

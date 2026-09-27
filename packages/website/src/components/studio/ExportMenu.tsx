@@ -32,6 +32,9 @@ export function ExportMenu({
   chars,
   pipeline,
   speed,
+  onDownloadProgressFont,
+  showVariableFont,
+  onShowVariableFontChange,
 }: {
   /** Null outside text mode — the animation formats are disabled then. */
   getEngine: (() => TegakiEngine | null) | null;
@@ -44,6 +47,11 @@ export function ExportMenu({
   pipeline: string;
   /** Motion › Speed — the animated formats play at it. */
   speed: number;
+  /** Downloads the variable font of the text's glyphs. Null outside text mode. */
+  onDownloadProgressFont: (() => void) | null;
+  /** Whether the text is also drawn in its variable font, under the canvas. */
+  showVariableFont: boolean;
+  onShowVariableFontChange: (show: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<Format>('svg');
@@ -156,6 +164,28 @@ export function ExportMenu({
           {bundleBusy ? <Spinner className="size-3" /> : <DownloadIcon size={14} />}
           {bundleBusy ? 'Generating…' : 'Download bundle (.zip)'}
         </button>
+      </div>
+
+      <div className="flex flex-col gap-2 border-b border-zinc-200 p-3 dark:border-zinc-800">
+        <div className="flex items-baseline justify-between">
+          <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Variable font</span>
+          <span className="text-[11px] text-zinc-400">{onDownloadProgressFont ? 'prototype' : 'Text mode only'}</span>
+        </div>
+        <Hint>
+          The text's glyphs as a .ttf that writes itself: animate <code>font-variation-settings: 'PROG'</code> from 0 to 100 per character.
+        </Hint>
+        <div className={cx('flex flex-col gap-2', !onDownloadProgressFont && 'pointer-events-none opacity-40')}>
+          <DialScope className="flex flex-col gap-1.5">
+            <Toggle label="Preview under the canvas" checked={showVariableFont} onChange={onShowVariableFontChange} />
+          </DialScope>
+          <button
+            type="button"
+            onClick={() => onDownloadProgressFont?.()}
+            className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-zinc-200 text-[13px] font-medium text-zinc-900 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          >
+            <DownloadIcon size={14} /> Download .ttf
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2 p-3">

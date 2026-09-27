@@ -71,6 +71,14 @@ export {
 } from './font/glyph-forms.ts';
 export { createHbShaper, type HbShaper, type ShapedGlyph } from './font/hb-shaper.ts';
 export { enumerateFontChars } from './font/parse.ts';
+export {
+  buildProgressFont,
+  PROGRESS_AXIS_TAG,
+  type ProgressFont,
+  type ProgressFontInput,
+  progressAt,
+  progressDuration,
+} from './font/progress-font.ts';
 export { subsetUnicodeRanges } from './font/unicode-range.ts';
 export { initStraightSkeleton, isStraightSkeletonReady } from './geometry/face-straight-skeleton.ts';
 export { findHeadlines, isHeadlineScriptChar } from './geometry/ordering.ts';

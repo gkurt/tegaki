@@ -1,8 +1,9 @@
 import { zipSync } from 'fflate';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { TegakiRendererHandle } from 'tegaki';
+import type { TegakiBundle, TegakiRendererHandle } from 'tegaki';
 import { CHARSET_PRESETS, enumerateFontChars, extractTegakiBundle, type PipelineResult } from 'tegaki-generator';
-import { DEFAULT_EXAMPLE_FONT_TEXT, EXAMPLE_FONT_TEXTS, type Pipeline } from '../preview/constants.ts';
+import { DEFAULT_EXAMPLE_FONT_TEXT, EXAMPLE_FONT_TEXTS, getEasingFn, type Pipeline } from '../preview/constants.ts';
+import { downloadBlob } from '../preview/export.ts';
 import { strokeOrderProviders } from '../preview/stroke-order-providers.ts';
 import { defaultClipText } from '../url-state.ts';
 import { AgentPromptMenu } from './AgentPromptMenu.tsx';
@@ -25,11 +26,13 @@ import {
 } from './icons.tsx';
 import { DialThemeContext } from './inspector/dial.tsx';
 import { Inspector } from './inspector/Inspector.tsx';
+import { studioProgressFont } from './progress-font.ts';
 import { ShortcutsDialog } from './ShortcutsDialog.tsx';
 import { useShortcuts } from './shortcuts.ts';
 import { useFontLoader, useStudioSettings, useTheme } from './state.ts';
 import { type TextPlaybackHandle, TextWorkspace } from './TextWorkspace.tsx';
 import { cx, IconButton, Popover, Segmented, useMediaQuery } from './ui.tsx';
+import { progressFontFileName } from './VariableFontPreview.tsx';
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
@@ -43,6 +46,7 @@ export function Studio() {
   const resultsCache = useRef(new Map<string, PipelineResult>());
   const rendererRef = useRef<TegakiRendererHandle>(null);
   const playbackRef = useRef<TextPlaybackHandle>(null);
+  const bundleRef = useRef<TegakiBundle>(null);
 
   // A font the user picks switches the charset to the one it's made for, unless
   // the current set was edited by hand. Fonts restored from the URL keep the
@@ -130,6 +134,16 @@ export function Studio() {
       setBundleBusy(false);
     }
   }, [font, settings.chars, settings.options, settings.pipeline, settings.geometryOptions]);
+
+  // The variable font of the text's glyphs, from the bundle the renderer drew (prototype).
+  const downloadProgressFont = useCallback(() => {
+    const bundle = bundleRef.current;
+    if (!bundle) return;
+    const { buffer } = studioProgressFont(bundle, font?.info ?? null, getEasingFn(settings.strokeEasing));
+    downloadBlob(new Blob([buffer], { type: 'font/ttf' }), progressFontFileName(bundle));
+  }, [font, settings.strokeEasing]);
+
+  const [showVariableFont, setShowVariableFont] = useState(false);
 
   const [agentOpen, setAgentOpen] = useState(false);
   const [glyphReport, setGlyphReport] = useState<{ char: string; form?: string; warnings: string[] } | null>(null);
@@ -230,6 +244,9 @@ export function Studio() {
               chars={settings.chars}
               pipeline={settings.pipeline}
               speed={settings.animSpeed}
+              onDownloadProgressFont={mode === 'text' ? downloadProgressFont : null}
+              showVariableFont={showVariableFont}
+              onShowVariableFontChange={setShowVariableFont}
             />
             <IconButton
               label={showInspector ? 'Hide inspector (I)' : 'Show inspector (I)'}
@@ -252,6 +269,9 @@ export function Studio() {
                 resultsCache={resultsCache}
                 rendererRef={rendererRef}
                 playbackRef={playbackRef}
+                bundleRef={bundleRef}
+                showVariableFont={showVariableFont}
+                onCloseVariableFont={() => setShowVariableFont(false)}
               />
             ) : (
               <GlyphWorkspace
