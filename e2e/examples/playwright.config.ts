@@ -48,7 +48,9 @@ export const EXAMPLES: readonly Example[] = [
     // import.meta.url)` — a `file://` path on the build machine once prerendered.
     // The browser refuses to load it, so the page falls back to an unloaded font
     // (the strokes still draw from the glyph data).
-    knownErrors: [/Not allowed to load local resource: file:\/\/.*\.ttf/],
+    // Each engine words it differently (Chromium: "Not allowed to load local resource"; Firefox: a
+    // security error and a failed download), but every message names the file:// font URL.
+    knownErrors: [/file:\/\/\S*\.ttf/],
   },
   { name: 'vanilla', port: 4317, renderers: ['#wc', '#core'] },
 ];
