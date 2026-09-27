@@ -201,7 +201,8 @@ test.describe('preview renders in every engine', () => {
   // the font from the CDN: slower than the default 30s allows in WebKit/Firefox.
   test.describe.configure({ timeout: 90_000 });
 
-  let errors: string[];
+  // Empty until beforeEach runs, so a browser that never launched fails on its launch error, not here.
+  let errors: string[] = [];
   test.beforeEach(({ page }) => {
     errors = [];
     page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));

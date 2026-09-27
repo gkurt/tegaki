@@ -34,6 +34,10 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
+    # The image runs as root with $HOME owned by pwuser, and Firefox refuses to
+    # launch as root in another user's home (Playwright's documented workaround).
+    env:
+      HOME: /root
     permissions:
       contents: read
     steps:
