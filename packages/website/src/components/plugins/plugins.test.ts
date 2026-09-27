@@ -25,6 +25,7 @@ import { grainTile } from './noise.ts';
 import { type PaperLayout, paperBounds, paperLayout, paperShapes } from './paper.ts';
 import { penPoses } from './pen.ts';
 import { handTimes } from './rhythm.ts';
+import { segmentLag, segmentSpan, segmentsEnd } from './segment.ts';
 import { shakeAt, shakeStrength } from './shake.ts';
 import { tremorAt, tremorWaves } from './shaky.ts';
 import { leanAbout } from './slant.ts';
@@ -157,6 +158,38 @@ describe('echo', () => {
   test('the highlighter preset is one wide pass that keeps pace with the ink', () => {
     const passes = echoPasses(echoPlugin.resolve(echoPlugin.presets.Highlighter));
     expect(passes).toEqual([{ color: '#fff176', width: 4, lag: 0 }]);
+  });
+});
+
+describe('segment', () => {
+  const path = line(0, 100, 0);
+
+  test('the tail trails the pen by the length, as a share of the stroke, never past its start', () => {
+    expect(segmentLag(100, 25)).toBe(0.25);
+    expect(segmentLag(100, 400)).toBe(1);
+    expect(segmentLag(0, 25)).toBe(1);
+  });
+
+  test('while the stroke is drawn the segment ends at the pen', () => {
+    expect(segmentSpan(stroke('0', path, 'drawing', 0.6, 0), 0.6, 25)).toEqual({ from: 0.35, to: 0.6 });
+    expect(segmentSpan(stroke('0', path, 'drawing', 0.1, 0), 0.1, 25)).toEqual({ from: 0, to: 0.1 });
+  });
+
+  test('nothing shows before the pen reaches the stroke', () => {
+    expect(segmentSpan(stroke('0', path, 'pending', 0, 1), 0.5, 25)).toBeNull();
+  });
+
+  test("once the stroke is done the tail runs on at the pen's pace, then the segment is gone", () => {
+    const done = stroke('0', path, 'done', 1, 0, 1);
+    expect(segmentSpan(done, 1, 25)).toEqual({ from: 0.75, to: 1 });
+    expect(segmentSpan(done, 1.1, 25)!.from).toBeCloseTo(0.85);
+    expect(segmentSpan(done, 1.25, 25)).toBeNull();
+  });
+
+  test('the timeline runs until the last segment has left its stroke', () => {
+    const strokes = [stroke('0', path, 'done', 1, 0, 1), stroke('1', line(0, 10, 0), 'done', 1, 1, 2)];
+    // The second is shorter than the segment: its tail takes a whole stroke's time to catch up.
+    expect(segmentsEnd(strokes, 25)).toBe(5);
   });
 });
 

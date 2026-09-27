@@ -37,6 +37,7 @@ import { nibPlugin } from './nib.ts';
 import { paperPlugin } from './paper.ts';
 import { penPlugin } from './pen.ts';
 import { rhythmPlugin } from './rhythm.ts';
+import { segmentPlugin } from './segment.ts';
 import { shadowPlugin } from './shadow.ts';
 import { shakePlugin } from './shake.ts';
 import { shakyPlugin } from './shaky.ts';
@@ -69,7 +70,8 @@ export interface ShowcasePlugin {
 // Wet ink times them, the painters that read the color (Marker, Spray,
 // Hatching, Embroidery) and the ones that bring their own (Graphite, Chalk,
 // Foil, Burn, Neon, Laser) after Colors, and the ones that decide what shows when
-// (Typewriter, Eraser) ahead of the painters; in the ink hooks, the glows
+// (Typewriter, Eraser) ahead of the painters, and the Segment after them
+// and before the painters, so they paint the stretch it passes on; in the ink hooks, the glows
 // and grain before the shadow is cast, then the cathode tube over all of
 // it, and the screen shake last, moving everything drawn before it.
 export const SHOWCASE_PLUGINS: readonly ShowcasePlugin[] = [
@@ -90,6 +92,7 @@ export const SHOWCASE_PLUGINS: readonly ShowcasePlugin[] = [
   { id: 'type', factory: typewriterPlugin },
   { id: 'annotate', factory: annotatePlugin },
   { id: 'erase', factory: eraserPlugin },
+  { id: 'segment', factory: segmentPlugin },
   { id: 'ball', factory: ballpointPlugin },
   { id: 'graphite', factory: graphitePlugin },
   { id: 'wet', factory: wetPlugin },
