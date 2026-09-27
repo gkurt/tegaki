@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import * as opentype from 'opentype.js';
 import { createPadrone, padroneProgress } from 'padrone';
@@ -13,6 +13,13 @@ import {
   parseFont,
   pickGeometryOptions,
 } from '../commands/generate.ts';
+import {
+  compareScoreboards,
+  formatScoreboardComparison,
+  parseScoreboard,
+  runScoreboard,
+  serializeScoreboard,
+} from '../commands/scoreboard.ts';
 import { formatStrokeOrderSummary, runStrokeOrderReport } from '../commands/stroke-order-report.ts';
 import { DEFAULT_CHARS, DEFAULT_FONT_FAMILY } from '../constants.ts';
 import { writeDebugOutput, writeGeometryDebugOutput } from '../debug/output.ts';
@@ -293,6 +300,69 @@ export const tegakiProgram = createPadrone('tegaki')
         progress?.succeed(`Measured ${summary.totalGlyphs} glyphs of ${family}`);
         // The table is the output (a returned summary would be printed again, raw).
         console.log(`\n${formatCoverageSummary(summary)}${json ? `\n\nfull report: ${json}` : ''}`);
+      }),
+  )
+  .command('scoreboard', (c) =>
+    c
+      .extend(padroneProgress(PROGRESS))
+      .configure({
+        title: 'Score a character set against a committed baseline',
+        description:
+          'Scores every glyph once through both pipelines — the ink the geometry strokes leave unpainted, and how its strokes were ordered — and compares the run with a baseline file, glyph by glyph. Exits non-zero on a regression; `--update` writes the run as the new baseline. The CI gate over the shipped bundles (`bun --filter tegaki scoreboard`).',
+      })
+      .arguments(
+        geometryOptionsSchema.extend({
+          family: z.string().optional().describe(`Google Fonts family name (default: ${DEFAULT_FONT_FAMILY})`),
+          fontFile: fontFileArg,
+          chars: z
+            .string()
+            .default(DEFAULT_CHARS)
+            .describe("Characters to sweep (default: the generator's default set)")
+            .meta({ flags: 'c' }),
+          baseline: z.string().describe('Baseline JSON file to compare with (or write, with --update)').meta({ flags: 'b' }),
+          update: z.boolean().default(false).describe('Write this run as the baseline instead of comparing with it').meta({ flags: 'u' }),
+          name: z.string().optional().describe("Heading for the comparison (default: the font's family)"),
+          summary: z.string().optional().describe('Append the Markdown comparison to this file (default: $GITHUB_STEP_SUMMARY when set)'),
+          force: z.boolean().default(false).describe('Re-download font even if cached').meta({ flags: 'f' }),
+        }),
+        { positional: ['family'] },
+      )
+      .action(async (args, ctx) => {
+        const progress = ctx.context.progress;
+        const { chars, baseline, update } = args;
+        if (!update && !existsSync(baseline)) throw new Error(`No baseline at ${baseline}; run with --update to write one`);
+
+        progress?.update(args.fontFile ? `Reading font "${args.fontFile}"...` : 'Downloading font...');
+        const { family, fontBuffer, extraFontBuffers } = await resolveFont(args, chars, DEFAULT_FONT_FAMILY);
+        const fontInfo = await parseFont(fontBuffer, extraFontBuffers, family);
+
+        const geometryOptions = pickGeometryOptions(args);
+        await initStraightSkeleton();
+        const board = await runScoreboard(fontInfo, family, chars, referenceProviders(geometryOptions.hanLocale), {
+          geometryOptions,
+          onProgress: (done, total, char) => {
+            progress?.update({ message: `Scoring ${char || 'done'} (${done}/${total})`, progress: total > 0 ? done / total : 1 });
+          },
+        });
+
+        if (update) {
+          mkdirSync(dirname(baseline), { recursive: true });
+          await Bun.write(baseline, serializeScoreboard(board));
+          progress?.succeed(`Wrote the baseline for ${Object.keys(board.glyphs).length} glyphs of ${family} to ${baseline}`);
+          return;
+        }
+
+        const comparison = compareScoreboards(parseScoreboard(await Bun.file(baseline).text()), board);
+        const report = formatScoreboardComparison(args.name ?? family, comparison);
+        const summaryFile = args.summary ?? process.env.GITHUB_STEP_SUMMARY;
+        if (summaryFile) appendFileSync(summaryFile, `${report}\n\n`);
+        progress?.succeed(`Scored ${Object.keys(board.glyphs).length} glyphs of ${family}`);
+        console.log(`\n${report}`);
+        if (comparison.regressions.length > 0) {
+          throw new Error(
+            `${comparison.regressions.length} scoreboard regression(s) against ${baseline}. If they are intended, rerun with --update and commit the baseline.`,
+          );
+        }
       }),
   );
 

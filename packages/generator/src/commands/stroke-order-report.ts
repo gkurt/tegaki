@@ -8,7 +8,7 @@
 
 import type { ParsedFontInfo } from '../commands/generate.ts';
 import { processGlyphGeometry } from '../commands/generate.ts';
-import type { GeometryOptions } from '../geometry/types.ts';
+import type { GeometryOptions, GeometryPipelineResult } from '../geometry/types.ts';
 import { DEFAULT_GEOMETRY_OPTIONS } from '../geometry/types.ts';
 import { matchStrokes } from '../stroke-order/match.ts';
 import { collectReferences } from '../stroke-order/providers.ts';
@@ -80,6 +80,30 @@ export function summarizeStrokeOrderReports(glyphs: GlyphStrokeOrderReport[], mi
   };
 }
 
+/** One glyph's report from its geometry pipeline result. */
+export function glyphStrokeOrder(char: string, result: GeometryPipelineResult): GlyphStrokeOrderReport {
+  let meanCost: number | null = null;
+  if (result.reference) {
+    const bb = result.pathBBox;
+    const diag = Math.hypot(bb.x2 - bb.x1, bb.y2 - bb.y1);
+    meanCost = matchStrokes(
+      result.geoStrokes.map((g) => g.points),
+      result.reference.strokes.map((s) => s.points),
+      diag,
+    ).meanCost;
+  }
+  return {
+    char,
+    extracted: result.strokesFontUnits.length,
+    reference: result.reference ? result.reference.strokes.length : null,
+    meanCost,
+    applied: result.strokeOrderSource === 'dataset',
+    regrouped: result.strokeOrderRegrouped === true,
+    guided: result.strokeOrderSource === 'guided',
+    warnings: result.warnings,
+  };
+}
+
 export interface StrokeOrderReportResult {
   summary: StrokeOrderSummary;
   glyphs: GlyphStrokeOrderReport[];
@@ -111,26 +135,7 @@ export async function runStrokeOrderReport(
       missingGlyph++;
       continue;
     }
-    let meanCost: number | null = null;
-    if (result.reference) {
-      const bb = result.pathBBox;
-      const diag = Math.hypot(bb.x2 - bb.x1, bb.y2 - bb.y1);
-      meanCost = matchStrokes(
-        result.geoStrokes.map((g) => g.points),
-        result.reference.strokes.map((s) => s.points),
-        diag,
-      ).meanCost;
-    }
-    glyphs.push({
-      char,
-      extracted: result.strokesFontUnits.length,
-      reference: result.reference ? result.reference.strokes.length : null,
-      meanCost,
-      applied: result.strokeOrderSource === 'dataset',
-      regrouped: result.strokeOrderRegrouped === true,
-      guided: result.strokeOrderSource === 'guided',
-      warnings: result.warnings,
-    });
+    glyphs.push(glyphStrokeOrder(char, result));
   }
   options.onProgress?.(uniqueChars.length, uniqueChars.length, '');
 

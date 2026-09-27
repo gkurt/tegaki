@@ -9,9 +9,9 @@
 // pipeline changes; the summary numbers are the metric.
 
 import type { Nib } from 'tegaki';
-import type { ParsedFontInfo, PipelineOptions } from '../commands/generate.ts';
+import type { ParsedFontInfo, PipelineOptions, PipelineResult } from '../commands/generate.ts';
 import { DEFAULT_OPTIONS, processGlyph, processGlyphGeometry } from '../commands/generate.ts';
-import type { GeometryOptions } from '../geometry/types.ts';
+import type { GeometryOptions, GeometryPipelineResult } from '../geometry/types.ts';
 import { DEFAULT_GEOMETRY_OPTIONS } from '../geometry/types.ts';
 import { collectReferences } from '../stroke-order/providers.ts';
 import type { StrokeOrderProvider } from '../stroke-order/types.ts';
@@ -167,6 +167,25 @@ export function summarizeCoverageReports(glyphs: GlyphCoverageReport[], missingG
   };
 }
 
+/**
+ * One glyph's report: the raster pipeline's bitmap is the ink, measured
+ * against the geometry pipeline's strokes (`geo`) and the raster's own.
+ */
+export function glyphCoverage(
+  char: string,
+  raster: PipelineResult,
+  geo: GeometryPipelineResult | null,
+  options: CoverageOptions = {},
+): GlyphCoverageReport {
+  const ink: InkBitmap = { bitmap: raster.bitmap, width: raster.bitmapWidth, height: raster.bitmapHeight, transform: raster.transform };
+  return {
+    char,
+    geometry: geo && geo.strokesFontUnits.length > 0 ? unpaintedShare(ink, geo.strokesFontUnits, options) : null,
+    raster: unpaintedShare(ink, raster.strokesFontUnits, options),
+    warnings: geo?.warnings ?? [],
+  };
+}
+
 export interface CoverageReportResult {
   summary: CoverageSummary;
   glyphs: GlyphCoverageReport[];
@@ -202,15 +221,9 @@ export async function runCoverageReport(
       missingGlyph++;
       continue;
     }
-    const ink: InkBitmap = { bitmap: raster.bitmap, width: raster.bitmapWidth, height: raster.bitmapHeight, transform: raster.transform };
     const references = geometryOptions.strokeOrder === 'heuristic' ? [] : await collectReferences(char, providers).catch(() => []);
     const geo = processGlyphGeometry(fontInfo, char, geometryOptions, pipelineOptions.bezierTolerance, references);
-    glyphs.push({
-      char,
-      geometry: geo && geo.strokesFontUnits.length > 0 ? unpaintedShare(ink, geo.strokesFontUnits, options) : null,
-      raster: unpaintedShare(ink, raster.strokesFontUnits, options),
-      warnings: geo?.warnings ?? [],
-    });
+    glyphs.push(glyphCoverage(char, raster, geo, options));
   }
   options.onProgress?.(uniqueChars.length, uniqueChars.length, '');
 

@@ -37,6 +37,20 @@ export {
   type VariantLetter,
 } from './commands/generate.ts';
 export {
+  compareScoreboards,
+  DEFAULT_SCOREBOARD_THRESHOLDS,
+  formatScoreboardComparison,
+  parseScoreboard,
+  runScoreboard,
+  type Scoreboard,
+  type ScoreboardComparison,
+  type ScoreboardGlyph,
+  type ScoreboardSummary,
+  type ScoreboardThresholds,
+  serializeScoreboard,
+  summarizeScoreboard,
+} from './commands/scoreboard.ts';
+export {
   formatStrokeOrderSummary,
   type GlyphStrokeOrderReport,
   runStrokeOrderReport,

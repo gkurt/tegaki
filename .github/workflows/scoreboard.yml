@@ -1,0 +1,57 @@
+name: Scoreboard
+
+# The generator's quality gate: reruns the stroke pipelines on every shipped
+# bundle's own font subset and compares the scores (ink the geometry strokes
+# leave unpainted, stroke order against the references, stroke counts) with
+# the committed baselines in packages/renderer/scoreboard/, glyph by glyph.
+# A regression fails the job; the job summary lists every glyph that moved.
+# After an intended change: `bun --filter tegaki scoreboard --update` and
+# commit the baselines, so the diff shows what the change did to each glyph.
+#
+# Only runs when something that feeds the pipelines or the baselines changes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/generator/**'
+      - 'packages/renderer/fonts/**'
+      - 'packages/renderer/scoreboard/**'
+      - 'packages/renderer/scripts/bundled-fonts.ts'
+      - 'packages/renderer/scripts/scoreboard.ts'
+      - 'bun.lock'
+      - '.github/workflows/scoreboard.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/generator/**'
+      - 'packages/renderer/fonts/**'
+      - 'packages/renderer/scoreboard/**'
+      - 'packages/renderer/scripts/bundled-fonts.ts'
+      - 'packages/renderer/scripts/scoreboard.ts'
+      - 'bun.lock'
+      - '.github/workflows/scoreboard.yml'
+  workflow_dispatch:
+
+jobs:
+  scoreboard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # Shards of about equal cost over the bundled fonts (see shardFonts in
+        # scripts/scoreboard.ts), so the matrix follows the font list.
+        shard: ['1/4', '2/4', '3/4', '4/4']
+    name: scoreboard (${{ matrix.shard }})
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - run: bun i --frozen-lockfile
+      # Stroke-order references (KanjiVG, Make Me a Hanzi) are fetched per
+      # character at pinned versions; keep them between runs.
+      - uses: actions/cache@v4
+        with:
+          path: packages/generator/.cache
+          key: stroke-order-refs-${{ hashFiles('packages/generator/src/stroke-order/*-fetch.ts') }}
+      - run: bun --filter tegaki scoreboard --shard ${{ matrix.shard }}

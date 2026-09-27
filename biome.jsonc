@@ -16,6 +16,7 @@
       "!**/build",
       "!**/out",
       "!**/fonts",
+      "!**/scoreboard/*.json",
       "!**/.agents",
       "!**/.claude",
       "!**/*.md",

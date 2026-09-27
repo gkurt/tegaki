@@ -185,7 +185,8 @@
     "typecheck": "tsc --noEmit",
     "build": "bun --bun tsdown",
     "prepack": "bun run build && bun ../../scripts/prepareForRelease.ts",
-    "generate-fonts": "bun scripts/generate-fonts.ts"
+    "generate-fonts": "bun scripts/generate-fonts.ts",
+    "scoreboard": "bun --conditions=tegaki@dev scripts/scoreboard.ts"
   },
   "dependencies": {},
   "peerDependencies": {
