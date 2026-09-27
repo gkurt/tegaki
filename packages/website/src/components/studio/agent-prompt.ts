@@ -1,12 +1,18 @@
 import { DEFAULT_GEOMETRY_OPTIONS, DEFAULT_OPTIONS, type GeometryOptions, type PipelineOptions } from 'tegaki-generator';
+import { SHOWCASE_PLUGINS } from '../plugins/index.ts';
 import { buildUrlParams, type UrlState } from '../url-state.ts';
 
-export type AgentGoal = 'generate' | 'optimize' | 'fix';
+export type AgentGoal = 'generate' | 'optimize' | 'fix' | 'plugin';
 
 export const AGENT_GOALS: { value: AgentGoal; label: string; placeholder: string }[] = [
   { value: 'generate', label: 'Generate', placeholder: 'Anything to keep in mind? e.g. “only lowercase + digits”, “for a React app”' },
   { value: 'optimize', label: 'Optimize', placeholder: 'What should improve? e.g. “strokes look too mechanical”, “the kanji order”' },
   { value: 'fix', label: 'Fix issue', placeholder: 'What looks wrong? e.g. “the tail of g draws backwards”' },
+  {
+    value: 'plugin',
+    label: 'Plugin',
+    placeholder: 'What should the plugin do? e.g. “ink that glows like lava as it cools”, “a pencil that smudges under the hand”',
+  },
 ];
 
 const GOAL_TEXT: Record<AgentGoal, string> = {
@@ -15,6 +21,8 @@ const GOAL_TEXT: Record<AgentGoal, string> = {
   optimize:
     'Improve how this font animates: strokes that cover all the ink with nothing doubled or missing, natural stroke order and direction, and pleasant timing. Try settings, compare the results visually, and tell me the settings (URL params and CLI flags) that work best.',
   fix: 'Help me fix a problem with how this font is extracted, rendered or animated. Reproduce it, find the cause (settings or pipeline), and fix it — or tell me which settings avoid it.',
+  plugin:
+    "Write a plugin for Tegaki's renderer that does what I describe below: a `TegakiPlugin`, made with `createPlugin` from `tegaki/core` so its options are typed params a UI can build controls from, with presets worth trying. Use only the hooks it needs, draw its randomness from `random(key)` (not `Math.random`) so every frame and every load agree, and check the result visually in the studio before handing it over.",
 };
 
 const REPO = 'https://github.com/gkurt/tegaki';
@@ -79,10 +87,14 @@ export function nonDefaultFlags(options: PipelineOptions, geometry: GeometryOpti
   return flags;
 }
 
-/** The studio link (current state) and a /preview link paused on a deterministic frame. */
-export function agentUrls(settings: UrlState, siteUrl: string): { studio: string; preview: string } {
-  // The demo plugins draw over the render — not what an agent tuning the strokes should judge.
-  const params = buildUrlParams({ ...settings, plugins: [] });
+/**
+ * The studio link (current state) and a /preview link paused on a deterministic frame.
+ * The demo plugins draw over the render — not what an agent tuning the strokes should
+ * judge — so they're left out unless `keepPlugins` (an agent writing a plugin sees what
+ * it's combined with).
+ */
+export function agentUrls(settings: UrlState, siteUrl: string, keepPlugins = false): { studio: string; preview: string } {
+  const params = buildUrlParams(keepPlugins ? settings : { ...settings, plugins: [] });
   const studio = `${siteUrl}/studio/${params.size ? `?${params}` : ''}`;
   const preview = new URLSearchParams(params);
   for (const key of ['m', 'g', 's', 'gs']) preview.delete(key);
@@ -94,6 +106,7 @@ export function agentUrls(settings: UrlState, siteUrl: string): { studio: string
 
 /** Markdown prompt that hands an agent this font, the studio state and links it can iterate on. */
 export function buildAgentPrompt(input: AgentPromptInput): string {
+  if (input.goal === 'plugin') return buildPluginPrompt(input);
   const { goal, settings, font, charset, glyph } = input;
   const family = font?.family ?? settings.fontFamily;
   const { studio, preview } = agentUrls(settings, input.siteUrl);
@@ -186,6 +199,77 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
     "- `--debug` writes each glyph's pipeline stages. `bun start coverage-report` (ink the strokes miss) and `bun start stroke-order-report` (agreement with reference stroke orders) score a character set, so run them before and after a change.",
   );
   out.push(`- Rendering the bundle: ${REPO}#readme`);
+
+  return out.join('\n');
+}
+
+/** The studio's demo plugins switched on in `settings`, each with its changed options. */
+function pluginsOn(settings: UrlState): string[] {
+  return SHOWCASE_PLUGINS.filter((p) => settings.plugins.includes(p.id)).map((p) => {
+    const options = settings.pluginOptions[p.id];
+    const changed = options && Object.keys(options).length ? ` — set to \`${JSON.stringify(options)}\`` : '';
+    return `${p.factory.label} (\`${p.id}\`)${changed}`;
+  });
+}
+
+/** The "Plugin" goal: a prompt for writing a renderer plugin rather than tuning the font's strokes. */
+function buildPluginPrompt(input: AgentPromptInput): string {
+  const { settings, font } = input;
+  const family = font?.family ?? settings.fontFamily;
+  const { studio, preview } = agentUrls(settings, input.siteUrl, true);
+  const note = input.note.trim();
+  const on = pluginsOn(settings);
+  const docs = `${input.siteUrl}/api/renderer.md`;
+  const out: string[] = [];
+
+  out.push(
+    `I'm using Tegaki (${REPO}) to animate handwriting with the font **${family}**. Its renderer draws a font's pen strokes one by one, and plugins reshape, retime or paint that ink, draw under or over it, or run on every frame.`,
+  );
+
+  out.push('', '## Goal', '', GOAL_TEXT.plugin, '');
+  out.push(note ? `What it should do, in my words: ${note}` : 'Ask me what it should do before writing it.');
+
+  out.push('', "## What I'm looking at", '');
+  out.push(
+    font?.fileName ? `- Font: ${family} — a local file (\`${font.fileName}\`), not from Google Fonts` : `- Font: ${family} (Google Fonts)`,
+  );
+  out.push(`- Text: “${settings.previewText}” at ${settings.fontSizePx}px`);
+  if (on.length) {
+    out.push('- Plugins already on in the studio, in the order they run (the new one should work alongside them):');
+    for (const p of on) out.push(`  - ${p}`);
+  } else {
+    out.push('- No other plugins on');
+  }
+
+  out.push('', '## Links', '');
+  out.push(`- Studio (interactive, this exact state): ${studio}`);
+  out.push(`- Preview (chrome-free render, for screenshots): ${preview}`);
+  if (font?.fileName) out.push(`- The font is a local file, so these links only load it if “${family}” is also on Google Fonts.`);
+
+  out.push('', '## The plugin API', '');
+  out.push(
+    `- Reference: ${docs} (the Plugins section of the TegakiRenderer docs, as Markdown): every hook, its context, and \`createPlugin\`. The types are in ${REPO}/blob/main/packages/renderer/src/core/types.ts.`,
+  );
+  out.push(
+    '- `geometry` / `outline` reshape the ink and the letters it is clipped to, once per layout; `timing` decides when each stroke draws; `paint` draws every stroke on every frame (pending ones too) through `next`, the rest of the chain; `ink` works on the finished ink; `underlay` / `overlay` draw under / over it; `onFrame` runs after each frame; `bounds` grows the canvas for what is drawn outside the ink; `steps` cycles a few drawings over time; `svg` puts what the plugin paints into an exported SVG.',
+  );
+  out.push(
+    `- Examples: the studio's demo plugins in ${REPO}/tree/main/packages/website/src/components/plugins (brushes, textures, a pen at the tip, a typewriter, neon, stroke-order arrows, …), and the shipped ones (variation, boil, annotate, text on a path, captions) in ${REPO}/tree/main/packages/renderer/src/plugins. Start from the closest one.`,
+  );
+
+  out.push('', '## How to iterate', '');
+  out.push(
+    "- Clone the repo and write the plugin in packages/website/src/components/plugins/, then list it in `SHOWCASE_PLUGINS` (packages/website/src/components/plugins/index.ts) under a short id, where it should run in the chain (the comment above the list explains the order). Run `bun dev`: the studio's Plugins tab builds its controls from its params and presets, `pg=<ids>` in the URL switches plugins on and `po=<JSON by id>` sets their options.",
+  );
+  out.push(
+    '- All state lives in the URL and the page reads it once on load, so re-navigate after each change. In /preview, wait for `body[data-tegaki-ready="true"]` before taking a screenshot; `tm=controlled&ct=<seconds>` pauses on a frame (a `ct` past the end shows the finished text), so sweep a few times to see it move, and `rs=<n>` changes the seed.',
+  );
+  out.push(
+    "- Pin its behaviour with unit tests beside the demo plugins' (packages/website/src/components/plugins/plugins.test.ts) and run `bun checks` (lint, types, tests).",
+  );
+  out.push(
+    '- In an app, pass it to the renderer: `<TegakiRenderer font={bundle} plugins={plugins}>…</TegakiRenderer>` with `const plugins = [myPlugin({ … })]` kept stable (outside the component, or memoized), since a new array redraws the text.',
+  );
 
   return out.join('\n');
 }

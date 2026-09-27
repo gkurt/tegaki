@@ -1,7 +1,7 @@
 // Demo plugins for the studio's Plugins tab: what the renderer's plugin API
 // (`TegakiPlugin`, made with `createPlugin`) can draw, written the way a user
 // of `tegaki` would write them. They're for showing, not shipped — Export and
-// the agent prompt leave them out.
+// the agent prompt leave them out (but for its Plugin goal, which lists them).
 
 import {
   annotatePlugin,

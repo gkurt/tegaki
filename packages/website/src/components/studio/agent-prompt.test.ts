@@ -115,3 +115,31 @@ describe('all-in-font charset', () => {
     expect(prompt).toContain(' -c true ');
   });
 });
+
+describe('plugin goal', () => {
+  test('asks for a createPlugin plugin doing what the note says, with the API docs', () => {
+    const prompt = buildAgentPrompt(input({ goal: 'plugin', note: 'ink that glows like lava' }));
+    expect(prompt).toContain('`createPlugin`');
+    expect(prompt).toContain('What it should do, in my words: ink that glows like lava');
+    expect(prompt).toContain(`${SITE}/api/renderer.md`);
+    expect(prompt).toContain('SHOWCASE_PLUGINS');
+  });
+
+  test('without a note the agent is told to ask what the plugin should do', () => {
+    expect(buildAgentPrompt(input({ goal: 'plugin' }))).toContain('Ask me what it should do');
+  });
+
+  test('lists the demo plugins on, with their changed options, and keeps them in the links', () => {
+    const prompt = buildAgentPrompt(input({ goal: 'plugin' }, { plugins: ['pen', 'echo'], pluginOptions: { echo: { lag: 0.2 } } }));
+    expect(prompt).toContain('(`pen`)');
+    expect(prompt).toContain('(`echo`) — set to `{"lag":0.2}`');
+    const preview = prompt.match(/Preview \(chrome-free render, for screenshots\): (\S+)/)?.[1] ?? '';
+    expect(new URL(preview).searchParams.get('pg')).toBe('pen,echo');
+  });
+
+  test('leaves out the stroke-tuning parts: pipeline flags and the generate command', () => {
+    const prompt = buildAgentPrompt(input({ goal: 'plugin' }, { pipeline: 'raster', options: { ...DEFAULT_OPTIONS, resolution: 600 } }));
+    expect(prompt).not.toContain('--resolution');
+    expect(prompt).not.toContain('bun start generate');
+  });
+});
