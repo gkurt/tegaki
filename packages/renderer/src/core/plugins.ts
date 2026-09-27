@@ -89,7 +89,7 @@ export function allPluginSteps(plugins: readonly TegakiPlugin[], limit = 64): Pl
 /** Every `geometry` hook in order, as one reshape; `undefined` when no plugin has one. Each hook is told its plugin's drawing in `ctx.step`. */
 export function reshapeWith(
   plugins: readonly TegakiPlugin[],
-  extra: Pick<TegakiGeometryContext, 'fontSize' | 'random'>,
+  extra: Pick<TegakiGeometryContext, 'fontSize' | 'random' | 'textBox'>,
   onError: PluginErrorHandler,
   steps?: PluginSteps,
 ): ((path: StrokePath, ctx: StrokeGeometryContext) => StrokePath) | undefined {

@@ -1,4 +1,4 @@
-import { ColorControl, SelectControl, Slider, Toggle } from 'dialkit';
+import { ColorControl, SelectControl, Slider, TextControl, Toggle } from 'dialkit';
 import type { TegakiPluginParam, TegakiPluginParams } from 'tegaki/core';
 import { normalizePluginIds, type PluginOptions, SHOWCASE_PLUGINS, type ShowcasePlugin } from '../../plugins/index.ts';
 import type { UrlState } from '../../url-state.ts';
@@ -48,8 +48,8 @@ export function PluginsPanel({ settings, set }: { settings: UrlState; set: SetSe
         <div className="flex flex-col gap-1">
           <SeedControl value={settings.seed} onChange={(v) => set('seed', v)} />
           <Hint>
-            What Variation, Boil and the random demos — Brush, Ballpoint, Shaky hand, Graphite, Neon, Sparkles, shuffled Colors — draw by:
-            the same seed draws the same every time.
+            What Variation, Boil, Annotate's marks and the random demos — Brush, Ballpoint, Shaky hand, Graphite, Chalk, Spray, Burn, Neon,
+            Sparkles, shuffled Colors — draw by: the same seed draws the same every time.
           </Hint>
         </div>
         {SHOWCASE_PLUGINS.map((p) => (
@@ -151,5 +151,7 @@ function ParamControl({
       return <SelectControl label={label} value={String(value)} options={[...param.options]} onChange={onChange} />;
     case 'color':
       return <ColorControl label={label} value={String(value)} onChange={onChange} />;
+    case 'text':
+      return <TextControl label={label} value={String(value ?? '')} placeholder={param.placeholder} onChange={onChange} />;
   }
 }

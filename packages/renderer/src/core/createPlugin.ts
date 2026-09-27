@@ -41,7 +41,15 @@ export interface TegakiColorParam extends ParamBase {
   default: string;
 }
 
-export type TegakiPluginParam = TegakiNumberParam | TegakiBooleanParam | TegakiSelectParam | TegakiColorParam;
+/** Free text: a list of cue times, say. Any string, the empty one included. */
+export interface TegakiTextParam extends ParamBase {
+  type: 'text';
+  default: string;
+  /** What a control shows while it's empty. */
+  placeholder?: string;
+}
+
+export type TegakiPluginParam = TegakiNumberParam | TegakiBooleanParam | TegakiSelectParam | TegakiColorParam | TegakiTextParam;
 
 /** A plugin's params, by key. */
 export type TegakiPluginParams = Record<string, TegakiPluginParam>;
@@ -52,7 +60,7 @@ type ParamValue<P> = P extends TegakiNumberParam
     ? boolean
     : P extends TegakiSelectParam<infer V>
       ? V
-      : P extends TegakiColorParam
+      : P extends TegakiColorParam | TegakiTextParam
         ? string
         : never;
 
@@ -175,6 +183,8 @@ export function resolveParam(param: TegakiPluginParam, value: unknown): TegakiPl
       return typeof value === 'string' && selectValues(param).includes(value) ? value : undefined;
     case 'color':
       return typeof value === 'string' && value.length > 0 ? value : undefined;
+    case 'text':
+      return typeof value === 'string' ? value : undefined;
   }
 }
 

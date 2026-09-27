@@ -92,7 +92,12 @@ describe('hooks are told their drawing', () => {
         return p;
       },
     };
-    const reshape = reshapeWith([stepped, plain], { fontSize: 10, random: () => Math.random }, mock(), new Map([[stepped, 2]]))!;
+    const reshape = reshapeWith(
+      [stepped, plain],
+      { fontSize: 10, random: () => Math.random, textBox: { minX: 0, minY: 0, maxX: 0, maxY: 0 } },
+      mock(),
+      new Map([[stepped, 2]]),
+    )!;
     reshape(new StrokePath([{ x: 0, y: 0, width: 1, t: 0 }]), {} as StrokeGeometryContext);
     expect(seen).toEqual([
       ['stepped', 2],
@@ -110,7 +115,12 @@ describe('hooks are told their drawing', () => {
         return [...c];
       },
     };
-    outlineWith([stepped], mock(), new Map([[stepped, 1]]))!([], { place: { x: 0, y: 0, scale: 1, ascender: 0 }, seed: 0, fontSize: 10 });
+    outlineWith([stepped], mock(), new Map([[stepped, 1]]))!([], {
+      place: { x: 0, y: 0, scale: 1, ascender: 0 },
+      seed: 0,
+      fontSize: 10,
+      textBox: { minX: 0, minY: 0, maxX: 0, maxY: 0 },
+    });
     expect(step).toBe(1);
   });
 });

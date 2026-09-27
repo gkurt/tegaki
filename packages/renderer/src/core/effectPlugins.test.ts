@@ -45,7 +45,11 @@ const noError = (plugin: TegakiPlugin, hook: string, error: unknown) => {
 
 /** The stroke placed at `at` and reshaped by the effects' plugins. */
 function placed(effects: ResolvedEffect[], at = { x: 0, y: 0, scale: 1, ascender: 0, seed: 0 }) {
-  const reshape = reshapeWith(effectPlugins(effects), { fontSize: 100, random: (k) => seededRandom(0, k) }, noError);
+  const reshape = reshapeWith(
+    effectPlugins(effects),
+    { fontSize: 100, random: (k) => seededRandom(0, k), textBox: { minX: 0, minY: 0, maxX: 0, maxY: 0 } },
+    noError,
+  );
   return placeStrokes(instances, { placeEntry: () => at, reshape });
 }
 const widths = (effects: ResolvedEffect[]) => placed(effects)[0]!.path.points.map((p) => p.width);

@@ -96,6 +96,13 @@ describe('resolvePluginOptions', () => {
     expect(resolved).toEqual({ size: 1, arrows: true, mode: 'sine', color: '#e5484d' });
   });
 
+  test('a text param takes any string, the empty one too, and nothing else', () => {
+    const text = { cues: { type: 'text', default: '0 1' } } as const;
+    expect(resolvePluginOptions(text, { cues: '' }).cues).toBe('');
+    expect(resolvePluginOptions(text, { cues: '0.5 hi' }).cues).toBe('0.5 hi');
+    expect(resolvePluginOptions(text, { cues: 3 }).cues).toBe('0 1');
+  });
+
   test('a number that isn’t finite takes the default', () => {
     expect(resolvePluginOptions(params, { size: Number.NaN }).size).toBe(1);
   });

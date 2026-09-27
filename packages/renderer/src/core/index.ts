@@ -51,7 +51,19 @@ export {
   type TimelineEntry,
   type TimelineStaggerConfig,
 } from '../lib/timeline.ts';
+export {
+  type AnnotateMark,
+  type AnnotateOptions,
+  type AnnotateWhen,
+  type Annotation,
+  type AnnotationStroke,
+  annotatePlugin,
+  annotations,
+} from '../plugins/annotate.ts';
 export { boilPlugin } from '../plugins/boil.ts';
+export { type CaptionCue, type CaptionFit, type CaptionOptions, captionPlugin, parseCues } from '../plugins/caption.ts';
+export { type GroupableStroke, groupStrokes, type StrokeGroup, type StrokeGroupBy } from '../plugins/groups.ts';
+export { type CurvePoint, type TextPathGlyphs, type TextPathOptions, type TextPathShape, textPathPlugin } from '../plugins/textPath.ts';
 export { variationPlugin } from '../plugins/variation.ts';
 export type * from '../types.ts';
 export type { TegakiEffectConfigs, TegakiEffects } from '../types.ts';
@@ -69,6 +81,7 @@ export {
   type TegakiPluginParam,
   type TegakiPluginParams,
   type TegakiSelectParam,
+  type TegakiTextParam,
 } from './createPlugin.ts';
 export { drawGlyph } from './drawGlyph.ts';
 export { effectPlugins } from './effectPlugins.ts';

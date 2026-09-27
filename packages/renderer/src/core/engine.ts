@@ -711,7 +711,7 @@ export class TegakiEngine {
       ? null
       : reshape
         ? this._glyphOutlines(graphemeToLine)?.map((g) => ({
-            d: this._reshapedContours(g, maxSegLenFU, font.ascender, fontSize, reshape)
+            d: this._reshapedContours(g, maxSegLenFU, font.ascender, fontSize, this._textBox(layout, fontSize, lineHeight), reshape)
               .map((c) => `M ${c.map((p) => `${fmtPx(p.x + padH)} ${fmtPx(p.y + padV)}`).join(' L ')} Z`)
               .join(' '),
             x: 0,
@@ -1849,6 +1849,7 @@ export class TegakiEngine {
     segmentLengthFU: number,
     ascender: number,
     fontSize: number,
+    textBox: Box,
   ): { path: Path2D; placed: boolean }[] {
     const plugins = this._allPlugins();
     const { steps, key: stepKey } = shapeSteps(this._steps.steps);
@@ -1866,11 +1867,12 @@ export class TegakiEngine {
         return { path, placed: false };
       }
       const seed = g.seed ?? 0;
-      const id = `${stepKey}|${seed}|${g.x}|${g.y}|${g.scale}|${g.d}`;
+      // The text box too: an outline hook can lay the glyph out by the whole text's (on a curve, say).
+      const id = `${stepKey}|${seed}|${g.x}|${g.y}|${g.scale}|${textBox.minX},${textBox.minY},${textBox.maxX},${textBox.maxY}|${g.d}`;
       let path = cache.get(id);
       if (!path) {
         path = new Path2D();
-        for (const out of this._reshapedContours(g, segmentLengthFU, ascender, fontSize, reshape)) {
+        for (const out of this._reshapedContours(g, segmentLengthFU, ascender, fontSize, textBox, reshape)) {
           for (let i = 0; i < out.length; i++) {
             if (i === 0) path.moveTo(out[i]!.x, out[i]!.y);
             else path.lineTo(out[i]!.x, out[i]!.y);
@@ -1889,13 +1891,14 @@ export class TegakiEngine {
     segmentLengthFU: number,
     ascender: number,
     fontSize: number,
+    textBox: Box,
     reshape: NonNullable<ReturnType<typeof outlineWith>>,
   ): { x: number; y: number }[][] {
     const place = { x: g.x, y: g.y - ascender * g.scale, scale: g.scale, ascender };
     return flattenPath(g.d, segmentLengthFU).map((contour) => {
       const pts: { x: number; y: number }[] = [];
       for (let i = 0; i < contour.length; i += 2) pts.push({ x: g.x + contour[i]! * g.scale, y: g.y - contour[i + 1]! * g.scale });
-      return reshape(pts, { place, seed: g.seed ?? 0, fontSize });
+      return reshape(pts, { place, seed: g.seed ?? 0, fontSize, textBox });
     });
   }
 
@@ -1972,7 +1975,12 @@ export class TegakiEngine {
     const random = (key: string | number) => seededRandom(this._seed, key);
     // At the pen's own width: clip-to-text's widening is the painter's business (see `_render`).
     const list = placeStrokes(strokes, {
-      reshape: reshapeWith(plugins, { fontSize, random }, this._reportPluginError, shaping.steps),
+      reshape: reshapeWith(
+        plugins,
+        { fontSize, random, textBox: this._textBox(layout, fontSize, lineHeight) },
+        this._reportPluginError,
+        shaping.steps,
+      ),
       getSubdivided: this._subdivider(font, scale),
       placeEntry: (ei) => {
         const entry = entries[ei]!;
@@ -2401,7 +2409,7 @@ export class TegakiEngine {
         maskCtx.translate(padH, padV);
         const outlines = this._glyphOutlines(graphemeToLine);
         if (outlines) {
-          const paths = this._outlinePaths(outlines, maxSegLenFU, font.ascender, fontSize);
+          const paths = this._outlinePaths(outlines, maxSegLenFU, font.ascender, fontSize, textBox);
           for (let i = 0; i < outlines.length; i++) {
             const g = outlines[i]!;
             const { path, placed } = paths[i]!;

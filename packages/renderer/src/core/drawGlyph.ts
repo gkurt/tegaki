@@ -91,9 +91,15 @@ export function drawGlyph(
     start: windows[si]!.delay,
     duration: windows[si]!.duration,
   }));
+  const textBox = {
+    minX: pos.x,
+    minY: pos.y,
+    maxX: pos.x + glyph.w * scale,
+    maxY: pos.y + (pos.ascender - pos.descender) * scale,
+  };
   const shaped = placeStrokes(instances, {
     placeEntry: () => ({ x: pos.x, y: pos.y, scale, ascender: pos.ascender, seed }),
-    reshape: reshapeWith(all, { fontSize: pos.fontSize, random }, onError),
+    reshape: reshapeWith(all, { fontSize: pos.fontSize, random, textBox }, onError),
     getSubdivided,
   });
   // The plugins' `timing`, over the glyph's own strokes.
@@ -111,12 +117,6 @@ export function drawGlyph(
           paintStroke({ ...s, stroke: { ...s.stroke, path } });
         };
   const paint = paintWith(all, onError, painter);
-  const textBox = {
-    minX: pos.x,
-    minY: pos.y,
-    maxX: pos.x + glyph.w * scale,
-    maxY: pos.y + (pos.ascender - pos.descender) * scale,
-  };
   const strokes: StrokeFrame[] = placed.map((stroke) => {
     const sample = strokeProgressAt(localTime, stroke.start, stroke.duration, strokeEasing ?? linear);
     return { ...stroke, ...sample, head: sample.state === 'pending' ? null : stroke.path.pointAt(sample.progress) };

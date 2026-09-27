@@ -218,7 +218,7 @@ The canvas only reaches a little past the ink, so anything painted further out i
 
 ### Reshaping the ink
 
-`geometry` gets a stroke's [`StrokePath`](#strokepath) and returns the one to draw. It runs once per layout, not per frame. Build the new path with `path.map`, which keeps the pen's position exact between points. `ctx` has the stroke (`ctx.stroke`), where its glyph sits (`ctx.place`), its `rawPath` and its `seed`. A dot is a path of one point.
+`geometry` gets a stroke's [`StrokePath`](#strokepath) and returns the one to draw. It runs once per layout, not per frame. Build the new path with `path.map`, which keeps the pen's position exact between points. `ctx` has the stroke (`ctx.stroke`), where its glyph sits (`ctx.place`), its `rawPath` and its `seed`, and `ctx.textBox`, the box the text's lines fill, for plugins that lay out the whole text (on a curve, say). An `outline` hook gets `place`, `seed` and `textBox` too, so it can move a glyph's clip outline the same way. A dot is a path of one point.
 
 ```ts
 const swell: TegakiPlugin = {
@@ -438,7 +438,7 @@ export const shadow = createPlugin({
 
 Each call makes a new plugin with the options you pass on top of the defaults. `setup` runs once per plugin made, so a cache or other state in its closure belongs to that plugin alone. The options are typed from `params`: `offset` is a `number`, and `cap` is `'round' | 'butt'`.
 
-A param is one of four types, and each has a `default` plus an optional `label` and `description`:
+A param is one of five types, and each has a `default` plus an optional `label` and `description`:
 
 | `type` | Value | Also takes |
 |--------|-------|------------|
@@ -446,6 +446,7 @@ A param is one of four types, and each has a `default` plus an optional `label` 
 | `'boolean'` | `true` or `false` | |
 | `'select'` | one of `options` | `options`: strings, or `{ value, label }` |
 | `'color'` | a CSS color | |
+| `'text'` | any string, the empty one included (a list of cue times, say) | `placeholder` |
 
 `presets` are named settings worth trying. Each one lists only the options it changes, and the rest keep their defaults.
 
@@ -506,6 +507,78 @@ const always = [boilPlugin({ idle: true, fps: 8 })]; // and after it's written, 
 
 Presets: `Cartoon` (3 drawings at 8 fps, slow bends, keeps boiling), `Nervous` (fast fine jitter) and `Sketchy` (wide, with width wander, keeps boiling). Each glyph boils its own way, from the renderer's [`seed`](#seed).
 
+### Annotate: `annotatePlugin`
+
+Marks the text the way a pen marks a page: it underlines it (once or twice), strikes it through, crosses it out, draws a circle or a box round it, or runs a highlighter over it. It can mark the whole text, each line, each word, or just one of them. The marks are drawn once the text is written, or each one as soon as what it marks is written (the writing waits for it).
+
+```tsx
+import { annotatePlugin } from 'tegaki/core';
+
+const underline = [annotatePlugin()]; // the whole text, once it's written
+const circle = [annotatePlugin({ mark: 'circle', target: 'words', pick: 2 })]; // just the second word
+const highlight = [annotatePlugin({ mark: 'highlight', target: 'lines', color: '#ffd400' })];
+```
+
+| Option | Default | What it changes |
+|--------|---------|-----------------|
+| `mark` | `'underline'` | `'underline'`, `'double'`, `'highlight'`, `'strike'`, `'circle'`, `'box'` or `'cross'`. |
+| `target` | `'text'` | What each mark goes on: `'text'`, `'lines'` or `'words'`. Underlines, strikes and highlights run along a line, so the whole text gets one per line. |
+| `pick` | `0` | Which one to mark, counting from 1. `0` marks every one. |
+| `when` | `'after'` | `'after'` draws the marks one after another once the text is written. `'each'` draws each mark as soon as what it marks is written, and holds the writing back while it's drawn. |
+| `color` | `'#e5484d'` | The pen's color. A highlighter is drawn see-through, under the ink. |
+| `width` | `0.045` | The pen's width, in ems. |
+| `padding` | `0.12` | How far the marks sit off the ink, in ems. |
+| `roughness` | `0.5` | How loosely the hand draws: `0` is ruler-straight, `1` is dashed off. |
+| `duration` | `0.5` | Seconds each mark takes to draw. |
+| `delay` | `0.25` | Seconds before each mark starts. |
+
+The timeline runs on to make time for the marks, so `duration`, `onComplete` and CSS time include them. Each mark's shape comes from the renderer's [`seed`](#seed), and `toSVG` draws the marks too (drawn on in an animated file).
+
+### Text on a path: `textPathPlugin`
+
+Lays the text on a curve: an arc (a rainbow, a smile, or right round a circle, the way a badge's lettering runs) or a wave. A wave can flow along the text like a flag in the wind. Each glyph is moved whole and turned to lie along the curve, kept upright, or bent with it.
+
+```tsx
+import { textPathPlugin } from 'tegaki/core';
+
+const rainbow = [textPathPlugin({ angle: 120 })];
+const badge = [textPathPlugin({ angle: 330 })]; // nearly a full circle
+const flag = [textPathPlugin({ shape: 'wave', amplitude: 0.2, glyphs: 'bend', flow: 0.6 })];
+```
+
+| Option | Default | What it changes |
+|--------|---------|-----------------|
+| `shape` | `'arc'` | `'arc'` or `'wave'`. |
+| `angle` | `60` | Degrees the arc turns across the text: positive bows it up, negative down, `±360` wraps it round a circle. |
+| `amplitude` | `0.25` | A wave's height either way, in ems. |
+| `wavelength` | `4` | A wave's length, crest to crest, in ems. |
+| `phase` | `0` | Where the wave starts, in degrees. |
+| `glyphs` | `'rotate'` | `'rotate'` turns each glyph to lie along the curve, `'upright'` only moves it, `'bend'` bends it with the curve. |
+| `flow` | `0` | Waves a second the wave travels along the text; `0` holds it still. A flowing wave redraws with [`steps`](#drawings-over-time-steps) and keeps going once the text is written. |
+
+The text's middle stays where it was and the text keeps its length along the curve. Glyph outlines move with the strokes, so clip-to-text follows. Presets: `Rainbow`, `Smile`, `Badge` and `Flag`. The DOM text under the canvas (for selection and screen readers) stays where the layout put it.
+
+### Captions: `captionPlugin`
+
+Writes each word of the text while it's said, for captions, lyrics and narrated videos. Give it when each word starts (and ends), as a transcriber's word timings in JSON or as `start end word` lines. Without cues it writes at a steady pace, word by word, pausing at commas and full stops.
+
+```tsx
+import { captionPlugin } from 'tegaki/core';
+
+const words = [{ word: 'Hello', start: 0.1, end: 0.5 }, { word: 'world', start: 0.62, end: 1.3 }]; // from your transcript
+const plugins = [captionPlugin({ cues: JSON.stringify(words) })];
+// or typed: captionPlugin({ cues: '0.1 0.5 Hello; 0.62 1.3 world' })
+```
+
+| Option | Default | What it changes |
+|--------|---------|-----------------|
+| `cues` | `''` | One cue per word of the text, in order. JSON: an array of `{ start, end? }` (`startTime` / `endTime` and `[start, end]` pairs work too). Text: cues separated by new lines or `;`, each `start [end] [word]`, with times in seconds or `m:ss.s`. A cue with no end lasts until the next one starts. The words aren't matched against the text; the text's words take the cues in order. |
+| `fit` | `'stretch'` | `'stretch'` fits each word's writing to its cue. `'pace'` keeps the hand's own pace and only squeezes a word that would run into the next. |
+| `lead` | `0` | Seconds the writing runs behind the voice (negative: ahead of it). |
+| `wpm` | `70` | Words a minute for words with no cue, and for all of them when there are none. |
+
+A word is the glyphs between spaces on one line, so text without spaces (Chinese, Japanese) takes one cue per line. `parseCues(text)` reads a cue list the way the plugin does. In Remotion, drive the renderer with the time in seconds, as in the [Remotion guide](/tegaki/frameworks/remotion/), so the writing stays in step with the audio.
+
 ## Helper functions
 
 ### `computeTimeline(text, font, timing?, shaper?)`
@@ -563,6 +636,10 @@ How far `point` is from the nearest ink edge of any of `paths`, in px. It is neg
 ### `unionBoxes(boxes)` / `expandBox(box, by)`
 
 `unionBoxes` returns the box covering all of `boxes`, skipping `null`s (and `null` when none are left). `expandBox` grows a box by `by` px on every side. Both are handy in `bounds`.
+
+### `groupStrokes(strokes, by, fontSize)`
+
+Gathers a list of strokes into the whole text (`'text'`), lines (`'lines'`) or words (`'words'`), in text order. Each group has its strokes' indices (`members`), its glyphs, its first line and baseline, the box its ink covers, and whether it's written right to left. Annotate, Captions and the studio's cursive joins group strokes with it.
 
 ### `seededRandom(seed, key)`
 

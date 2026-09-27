@@ -96,7 +96,7 @@ describe('boilPlugin', () => {
   test('a stroke and its outline boil together, so clip-to-text follows the ink', () => {
     const plugin = boilPlugin();
     const strokes = plugin.geometry!(path, ctx(2)).points;
-    const o: TegakiOutlineContext = { seed: 4, place, fontSize, step: 2 };
+    const o: TegakiOutlineContext = { seed: 4, place, fontSize, step: 2, textBox: { minX: 0, minY: 0, maxX: 0, maxY: 0 } };
     const outline = plugin.outline!(
       path.points.map(({ x, y }) => ({ x, y })),
       o,

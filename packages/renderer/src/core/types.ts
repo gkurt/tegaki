@@ -187,6 +187,8 @@ export interface TegakiPaintContext extends TegakiPluginContext {
 export interface TegakiGeometryContext extends StrokeGeometryContext {
   /** Font size in px. */
   fontSize: number;
+  /** The box the text's lines fill, in the same px as the path: what a plugin laying the whole text out (on a curve, say) measures it by. */
+  textBox: Box;
   /** Which of the plugin's {@link TegakiPlugin.steps} drawings to make, from `0`; always `0` for a plugin without steps. */
   step: number;
   /** See {@link TegakiPluginContext.random}. */
@@ -200,6 +202,8 @@ export interface TegakiOutlineContext {
   seed: number;
   /** Font size in px. */
   fontSize: number;
+  /** The box the text's lines fill, as for its strokes' `geometry`. */
+  textBox: Box;
   /** Which of the plugin's {@link TegakiPlugin.steps} drawings this is, as for its strokes' `geometry`. */
   step: number;
 }
