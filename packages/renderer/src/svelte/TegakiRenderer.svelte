@@ -68,12 +68,6 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// Compute initial HTML once — after the engine adopts, all updates go through engine.update().
-const { rootProps, content: innerHtml } = TegakiEngine.renderElements(
-  { text, font, time: timeProp, reducedMotion, effects: effects as Record<string, any>, quality, plugins, timing, showOverlay, direction, shaper, fallbackFont, onComplete, onChangeTimeline },
-  svelteCreateElement,
-);
-
 function styleToString(style: Record<string, any>): string {
   return Object.entries(style)
     .filter(([, v]) => v != null)
@@ -85,8 +79,58 @@ function styleToString(style: Record<string, any>): string {
     .join(';');
 }
 
+/** A `style` prop as CSS text: a string as given, an object the way the other adapters take it. */
+function cssText(style: unknown): string {
+  return typeof style === 'string' ? style : style && typeof style === 'object' ? styleToString(style as Record<string, any>) : '';
+}
+
+// Rendered once, from the props at mount: the engine then adopts this markup,
+// and later changes go through engine.update() and the style effect below.
+const { rootProps, content: innerHtml } = untrack(() => TegakiEngine.renderElements(engineOptions, svelteCreateElement));
+const baseStyleStr = styleToString(rootProps.style);
+
+// Svelte would rewrite the whole attribute whenever this changed, wiping what
+// the engine sets on the root (font-family, direction, the --tegaki-* time
+// properties), so it stays as rendered and the effect below applies changes.
 // biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
-const rootStyleStr = styleToString(rootProps.style) + (userStyle ? `;${userStyle}` : '');
+const rootStyleStr = untrack(() => baseStyleStr + (userStyle ? `;${cssText(userStyle)}` : ''));
+
+/** Root properties the engine keeps up to date itself, from its `font`, `direction` and clock. */
+const engineOwned = (name: string) => name === 'font-family' || name === 'direction' || name.startsWith('--tegaki-');
+
+/** Each declaration in `css` the engine doesn't own, by property: its value and priority. */
+function declarations(css: string): Map<string, [string, string]> {
+  const probe = document.createElement('div').style;
+  probe.cssText = css;
+  const out = new Map<string, [string, string]>();
+  for (let i = 0; i < probe.length; i++) {
+    const name = probe[i]!;
+    if (!engineOwned(name)) out.set(name, [probe.getPropertyValue(name), probe.getPropertyPriority(name)]);
+  }
+  return out;
+}
+
+// The user's style, one property at a time (as React's style diffing does):
+// a changed declaration is set, a dropped one goes back to the root's own
+// value or away. Declarations the engine owns are left alone.
+let appliedStyle = new Map<string, [string, string]>();
+$effect(() => {
+  const next = declarations(cssText(userStyle));
+  if (!container) return;
+  const el = container;
+  const base = declarations(baseStyleStr);
+  for (const name of appliedStyle.keys()) {
+    if (next.has(name)) continue;
+    const own = base.get(name);
+    if (own) el.style.setProperty(name, ...own);
+    else el.style.removeProperty(name);
+  }
+  for (const [name, [value, priority]] of next) {
+    const was = appliedStyle.get(name);
+    if (was?.[0] !== value || was?.[1] !== priority) el.style.setProperty(name, value, priority);
+  }
+  appliedStyle = next;
+});
 
 $effect(() => {
   if (!container) return;

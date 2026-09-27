@@ -3,6 +3,7 @@ import bundle from 'tegaki/fonts/caveat';
 import { TegakiRenderer } from 'tegaki/svelte';
 
 let time = $state(8);
+let size = $state(48);
 </script>
 
 <main class="page">
@@ -17,6 +18,7 @@ let time = $state(8);
   <section id="scrubbable">
     <h2>Scrubbable</h2>
     <input type="range" min={0} max={8} step={0.01} bind:value={time} />
-    <TegakiRenderer font={bundle} text="Scrub me!" {time} style="font-size: 48px" />
+    <button id="resize" onclick={() => (size = size === 48 ? 72 : 48)}>Toggle size</button>
+    <TegakiRenderer font={bundle} text="Scrub me!" {time} style={`font-size: ${size}px`} />
   </section>
 </main>

@@ -96,3 +96,44 @@ for (const { name, port, renderers, knownErrors = [] } of EXAMPLES) {
     expect(errors, `runtime errors:\n${errors.join('\n')}`).toEqual([]);
   });
 }
+
+test("svelte example follows a style change after mount, keeping the engine's root styles", async ({ page }) => {
+  await page.goto(`http://127.0.0.1:${EXAMPLES.find((e) => e.name === 'svelte')!.port}/`, { waitUntil: 'load' });
+  const root = page.locator('#scrubbable [data-tegaki="root"]');
+  const state = () =>
+    root.evaluate((el: HTMLElement) => ({
+      fontSize: getComputedStyle(el).fontSize,
+      fontFamily: el.style.fontFamily,
+      duration: el.style.getPropertyValue('--tegaki-duration'),
+    }));
+  const inkWidth = () =>
+    root.evaluate((el) => {
+      const c = el.querySelector<HTMLCanvasElement>('canvas[data-tegaki="canvas"]')!;
+      const { data, width } = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
+      let min = width;
+      let max = -1;
+      for (let i = 3; i < data.length; i += 4) {
+        if (!data[i]) continue;
+        const x = ((i - 3) / 4) % width;
+        min = Math.min(min, x);
+        max = Math.max(max, x);
+      }
+      return max - min;
+    });
+
+  await expect.poll(inkWidth, { timeout: 30_000, message: 'the scrubbable renderer never drew' }).toBeGreaterThan(0);
+  const before = await state();
+  const widthBefore = await inkWidth();
+  expect(before.fontSize).toBe('48px');
+  expect(before.fontFamily).not.toBe('');
+  expect(before.duration).not.toBe('');
+
+  await page.locator('#resize').click();
+  await expect.poll(async () => (await state()).fontSize).toBe('72px');
+  // Svelte rewriting the whole style attribute would have wiped these.
+  expect(await state()).toMatchObject({ fontFamily: before.fontFamily, duration: before.duration });
+  await expect.poll(inkWidth, { message: 'the handwriting was not redrawn at the new size' }).toBeGreaterThan(widthBefore * 1.3);
+
+  await page.locator('#resize').click();
+  await expect.poll(async () => (await state()).fontSize).toBe('48px');
+});
