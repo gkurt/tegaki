@@ -17,6 +17,7 @@ import harfbuzzShaper from 'tegaki/shaper-harfbuzz';
 import {
   collectReferences,
   DEFAULT_GEOMETRY_OPTIONS,
+  enumerateVariantGlyphIds,
   type GeometryOptions,
   type GeometryPipelineResult,
   initStraightSkeleton,
@@ -36,7 +37,7 @@ import {
 } from 'tegaki-generator';
 import type { Pipeline } from './constants.ts';
 import { fontCacheId } from './font-cache-id.ts';
-import { collectShapedGlyphs } from './shaped-glyphs.ts';
+import { collectShapedGlyphs, type ShapedGlyphRef } from './shaped-glyphs.ts';
 import { strokeOrderProviders } from './stroke-order-providers.ts';
 
 TegakiEngine.registerShaper(harfbuzzShaper);
@@ -75,6 +76,8 @@ const yieldToBrowser = () => new Promise<void>((resolve) => setTimeout(resolve, 
 export interface TegakiTextPreviewReadyInfo {
   bundle: TegakiBundle;
   totalDuration: number;
+  /** The bundle has every glyph GSUB can reach from the text (built with `closure`, or there's nothing to reach). */
+  closure: boolean;
 }
 
 export interface TegakiTextPreviewProps {
@@ -125,6 +128,46 @@ export interface TegakiTextPreviewProps {
    * to `true`.
    */
   useShaper?: boolean;
+  /**
+   * Also build every glyph the font's GSUB can reach from the text's
+   * characters (as the CLI's bundles have), not only the ones the renderer
+   * draws — for the variable font, which the browser shapes a span at a time
+   * and so gives other forms (Arabic split into spans takes its plain joining
+   * forms). The renderer doesn't need them; building them takes longer.
+   */
+  closure?: boolean;
+}
+
+/**
+ * The glyphs GSUB can reach from `text`'s characters that `drawn` lacks, as
+ * refs the variant loop builds: each character grows from the first subset
+ * that maps it, as the shaper picks.
+ */
+function closureGlyphs(fontInfo: ParsedFontInfo, text: string, drawn: readonly ShapedGlyphRef[]): ShapedGlyphRef[] {
+  const fonts = [fontInfo.font, ...(fontInfo.extraFonts ?? [])];
+  const chars = [...new Set(text)].filter((c) => !/\s/u.test(c));
+  const seen = new Set(drawn.map((g) => g.key));
+  const out: ShapedGlyphRef[] = [];
+  fonts.forEach((font, subsetIdx) => {
+    const own = chars.filter((c) => fonts.findIndex((f) => f.charToGlyphIndex(c) !== 0) === subsetIdx);
+    if (own.length === 0) return;
+    for (const v of enumerateVariantGlyphIds(font, own).values()) {
+      const key = subsetIdx === 0 ? String(v.gid) : `${subsetIdx}:${v.gid}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const letters = v.components?.map((c) => c.letter);
+      const ligature = letters?.every((l) => l !== undefined) ? letters.join('') : undefined;
+      out.push({
+        key,
+        subsetIdx,
+        gid: v.gid,
+        char: v.clusterChar,
+        ...(v.letter !== undefined ? { letter: v.letter } : {}),
+        ...(v.letter === undefined && ligature ? { ligature } : {}),
+      });
+    }
+  });
+  return out;
 }
 
 export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPreviewProps>(function TegakiTextPreview(
@@ -151,6 +194,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     resultsCache,
     onReady,
     useShaper = true,
+    closure = false,
   },
   ref,
 ) {
@@ -275,8 +319,9 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
         geoKey,
         normalizedText,
         letterSpaced,
+        closure,
       ]),
-    [fontUrl, extraFontUrls, enabledFeatures, fontInfo, options, geometry, geoKey, normalizedText, letterSpaced],
+    [fontUrl, extraFontUrls, enabledFeatures, fontInfo, options, geometry, geoKey, normalizedText, letterSpaced, closure],
   );
   useEffect(() => {
     if (!variantShaper) return;
@@ -293,9 +338,9 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       }
       const optionsKey = `${fontCacheId(fontInfo)}:${JSON.stringify(options)}`;
       const variants: Record<string, TegakiGlyphData> = {};
-      for (const { key: variantKey, subsetIdx, gid, char: clusterChar, letter, ligature } of collectShapedGlyphs(shaper, normalizedText, {
-        letterSpaced,
-      })) {
+      const shaped = collectShapedGlyphs(shaper, normalizedText, { letterSpaced });
+      const glyphs = closure && enabledFeatures.length > 0 ? [...shaped, ...closureGlyphs(fontInfo, normalizedText, shaped)] : shaped;
+      for (const { key: variantKey, subsetIdx, gid, char: clusterChar, letter, ligature } of glyphs) {
         // Process every glyph the shaper emits, including nominal forms
         // (where gid === font.charToGlyph(clusterChar).index). For Latin
         // clusters the nominal glyph is also reachable via glyphData[char],
@@ -378,6 +423,8 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     geoCache,
     prepareGeometry,
     variantWanted,
+    closure,
+    enabledFeatures,
   ]);
 
   // The bundle for the current inputs — null until every async part (geometry
@@ -385,6 +432,8 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // bundle never mixes, say, the new font's outline with the old font's strokes.
   const geoCurrent = !geometry || geoGlyphs?.key === geoWanted;
   const variants = !variantShaper ? NO_VARIANTS : variantData?.key === variantWanted ? variantData.data : null;
+  // Variants are only current for the `closure` they were built with.
+  const bundleClosure = closure || !variantShaper || enabledFeatures.length === 0;
   const fontBundle = useMemo<TegakiBundle | null>(() => {
     if (!geoCurrent || !variants) return null;
     const glyphData: TegakiBundle['glyphData'] = {};
@@ -442,17 +491,17 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // replaces it once its font faces and shaper are loaded, so switching font,
   // text or settings goes straight from one finished frame to the next — no
   // blank frame, no frame drawn with the old state's glyphs or unshaped.
-  const [shown, setShown] = useState<{ text: string; bundle: TegakiBundle } | null>(null);
+  const [shown, setShown] = useState<{ text: string; bundle: TegakiBundle; closure: boolean } | null>(null);
   useEffect(() => {
     if (!fontBundle) return;
     let cancelled = false;
     TegakiEngine.preload(fontBundle).then(() => {
-      if (!cancelled) setShown({ text, bundle: fontBundle });
+      if (!cancelled) setShown({ text, bundle: fontBundle, closure: bundleClosure });
     });
     return () => {
       cancelled = true;
     };
-  }, [fontBundle, text]);
+  }, [fontBundle, text, bundleClosure]);
 
   const liveUrls = useRef(new Set<string>());
   useEffect(() => {
@@ -476,6 +525,8 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // every change to `fontBundle` would force the engine option to re-bind.
   const bundleRef = useRef(shown?.bundle);
   bundleRef.current = shown?.bundle;
+  const closureRef = useRef(false);
+  closureRef.current = !!shown?.closure;
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
 
@@ -491,7 +542,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   bundleCurrentRef.current = !!shown && shown.bundle === fontBundle && shown.text === text;
   const handleTimelineChange = useCallback((timeline: Timeline) => {
     if (!bundleCurrentRef.current || !bundleRef.current) return;
-    onReadyRef.current?.({ bundle: bundleRef.current, totalDuration: timeline.totalDuration });
+    onReadyRef.current?.({ bundle: bundleRef.current, totalDuration: timeline.totalDuration, closure: closureRef.current });
   }, []);
 
   if (!shown) return null;

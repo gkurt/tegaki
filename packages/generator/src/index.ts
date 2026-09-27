@@ -58,6 +58,7 @@ export {
   summarizeStrokeOrderReports,
 } from './commands/stroke-order-report.ts';
 export { DEFAULT_CHARS, EXAMPLE_FONTS, type SkeletonMethod } from './constants.ts';
+export { enumerateVariantGlyphIds, type VariantGlyph } from './font/enumerate-variants.ts';
 export {
   buildGsubGraph,
   type FindExamplesOptions,
@@ -78,6 +79,7 @@ export {
   type ProgressFontInput,
   progressAt,
   progressDuration,
+  readSourceFont,
 } from './font/progress-font.ts';
 export { subsetUnicodeRanges } from './font/unicode-range.ts';
 export { initStraightSkeleton, isStraightSkeletonReady } from './geometry/face-straight-skeleton.ts';

@@ -8,6 +8,11 @@
 // out of its near edge while the pen crosses it — two tent regions per
 // segment (hold collapsed, then ramp), so the size is linear in the points.
 // Dots, round caps and sharp joins are small discs grown from their centre.
+//
+// Given the font the strokes came from, it keeps that font's glyph ids,
+// advances and cmap and copies its GSUB / GPOS / GDEF as they are (they only
+// name glyph ids), so it shapes like the source: ligatures, alternates,
+// positional forms, marks and kerning.
 
 import type { TegakiGlyphData } from 'tegaki';
 
@@ -23,17 +28,31 @@ export interface ProgressFontInput {
   /** Glyphs by character, as in a bundle's `glyphData` (y down from the baseline). */
   glyphData: Record<string, TegakiGlyphData>;
   lineCap?: 'round' | 'butt' | 'square';
-  /** Advance of the space, in font units. Default: a quarter em. */
+  /** Advance of the space, in font units, when there is no `source`. Default: a quarter em. */
   spaceAdvance?: number;
   /** Each stroke's draw progress easing, baked into when the pen reaches each point. Default: ease-out quad (the renderer's). */
   strokeEasing?: (t: number) => number;
+  /**
+   * The TrueType / OpenType file the glyph data was generated from — a
+   * bundle's font (its primary subset). The font then keeps its glyph ids,
+   * advances and cmap, and its GSUB / GPOS / GDEF, so it shapes as the source
+   * does. Characters of `glyphData` the source doesn't map are added after
+   * its glyphs, unshaped.
+   */
+  source?: Uint8Array | ArrayBuffer;
+  /** Glyphs by id in `source`, as in a bundle's `glyphDataById` (keys of other subsets, `"1:42"`, are skipped). */
+  glyphDataById?: Record<string, TegakiGlyphData>;
 }
 
 export interface ProgressFont {
   /** The font file (TrueType, `glyf` + `fvar` + `gvar`). */
   buffer: Uint8Array<ArrayBuffer>;
-  /** Characters with outlines, in glyph id order from 2 (0 is .notdef, 1 the space). */
+  /** Characters the cmap maps to a glyph with outlines, in code point order. */
   chars: string[];
+  /** Glyphs with outlines, variants (alternates, ligatures, positional forms) included. */
+  glyphs: number;
+  /** Layout tables copied from `source` — none without one, or when it is itself a variable font. */
+  layout: string[];
 }
 
 /** Most tuples a glyph's variation data can hold (`tupleVariationCount` has 12 bits). */
@@ -503,14 +522,14 @@ function nameTable(family: string): Uint8Array {
 }
 
 /** cmap with a format 4 (BMP) and a format 12 subtable, over runs of consecutive code points with consecutive glyph ids. */
-function cmapTable(codepoints: number[]): Uint8Array {
-  // codepoints[i] maps to glyph i + 1 (glyph 0 is .notdef); they arrive sorted.
+function cmapTable(mapping: [cp: number, gid: number][]): Uint8Array {
+  // Sorted by code point.
   const runs: { start: number; end: number; gid: number }[] = [];
-  codepoints.forEach((cp, i) => {
+  for (const [cp, gid] of mapping) {
     const last = runs[runs.length - 1];
-    if (last && cp === last.end + 1) last.end = cp;
-    else runs.push({ start: cp, end: cp, gid: i + 1 });
-  });
+    if (last && cp === last.end + 1 && gid === last.gid + (cp - last.start)) last.end = cp;
+    else runs.push({ start: cp, end: cp, gid });
+  }
 
   const bmp = runs.filter((r) => r.start <= 0xfffe).map((r) => ({ ...r, end: Math.min(r.end, 0xfffe) }));
   const segs = [...bmp, { start: 0xffff, end: 0xffff, gid: 0 }];
@@ -588,36 +607,224 @@ function assemble(tables: Record<string, Uint8Array>): Uint8Array<ArrayBuffer> {
   return w.data();
 }
 
+// --- Reading the source font ------------------------------------------------
+
+/** ZWNJ and ZWJ, mapped in every font made from a source. */
+const JOINERS = [0x200c, 0x200d];
+
+/** Tables copied from the source as they are: they refer to glyphs only by id. */
+const LAYOUT_TABLES = ['GDEF', 'GPOS', 'GSUB'] as const;
+
+interface SourceFont {
+  numGlyphs: number;
+  /** Advance per glyph id. */
+  advances: number[];
+  /** Code point → glyph id. */
+  cmap: Map<number, number>;
+  /** Glyph ids whose outline is empty (known for `glyf` fonts only; spaces and invisible characters are mapped regardless). */
+  blank: Set<number> | null;
+  layout: Partial<Record<(typeof LAYOUT_TABLES)[number], Uint8Array>>;
+  variable: boolean;
+}
+
+/** The parts of a TrueType / OpenType file the progress font takes from it. */
+export function readSourceFont(file: Uint8Array | ArrayBuffer): SourceFont {
+  const bytes = file instanceof Uint8Array ? file : new Uint8Array(file);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const version = view.getUint32(0);
+  if (version !== 0x00010000 && version !== 0x4f54544f && version !== 0x74727565) {
+    throw new Error('The source must be a TrueType or OpenType font file (not a collection, WOFF or WOFF2)');
+  }
+  const tables = new Map<string, { offset: number; length: number }>();
+  for (let i = 0, n = view.getUint16(4); i < n; i++) {
+    const at = 12 + i * 16;
+    const tag = String.fromCharCode(...bytes.subarray(at, at + 4));
+    tables.set(tag, { offset: view.getUint32(at + 8), length: view.getUint32(at + 12) });
+  }
+  const table = (tag: string) => {
+    const t = tables.get(tag);
+    if (!t) throw new Error(`The source font has no ${tag} table`);
+    return t;
+  };
+
+  const numGlyphs = view.getUint16(table('maxp').offset + 4);
+  const numberOfHMetrics = view.getUint16(table('hhea').offset + 34);
+  const hmtx = table('hmtx').offset;
+  const advances: number[] = [];
+  for (let gid = 0; gid < numGlyphs; gid++) advances.push(view.getUint16(hmtx + 4 * Math.min(gid, numberOfHMetrics - 1)));
+
+  // Unicode subtables: format 4 (BMP) first, so a format 12 fills in the rest and wins.
+  const cmap = new Map<number, number>();
+  const cmapAt = table('cmap').offset;
+  const subtables: { offset: number; format: number }[] = [];
+  for (let i = 0, n = view.getUint16(cmapAt + 2); i < n; i++) {
+    const platform = view.getUint16(cmapAt + 4 + i * 8);
+    const encoding = view.getUint16(cmapAt + 6 + i * 8);
+    if (platform !== 0 && !(platform === 3 && (encoding === 1 || encoding === 10))) continue;
+    const offset = cmapAt + view.getUint32(cmapAt + 8 + i * 8);
+    subtables.push({ offset, format: view.getUint16(offset) });
+  }
+  for (const { offset, format } of subtables.sort((a, b) => a.format - b.format)) {
+    if (format === 4) {
+      const segX2 = view.getUint16(offset + 6);
+      const ends = offset + 14;
+      const starts = ends + segX2 + 2;
+      const deltas = starts + segX2;
+      const rangeOffsets = deltas + segX2;
+      for (let s = 0; s < segX2; s += 2) {
+        const end = view.getUint16(ends + s);
+        const start = view.getUint16(starts + s);
+        const delta = view.getInt16(deltas + s);
+        const rangeOffset = view.getUint16(rangeOffsets + s);
+        for (let cp = start; cp <= end && cp !== 0xffff; cp++) {
+          let gid: number;
+          if (rangeOffset === 0) gid = (cp + delta) & 0xffff;
+          else {
+            const g = view.getUint16(rangeOffsets + s + rangeOffset + 2 * (cp - start));
+            gid = g === 0 ? 0 : (g + delta) & 0xffff;
+          }
+          if (gid !== 0 && gid < numGlyphs) cmap.set(cp, gid);
+        }
+      }
+    } else if (format === 12) {
+      for (let i = 0, n = view.getUint32(offset + 12); i < n; i++) {
+        const at = offset + 16 + i * 12;
+        const start = view.getUint32(at);
+        const end = view.getUint32(at + 4);
+        const gid = view.getUint32(at + 8);
+        for (let cp = start; cp <= end; cp++) if (gid + (cp - start) < numGlyphs) cmap.set(cp, gid + (cp - start));
+      }
+    }
+  }
+
+  let blank: Set<number> | null = null;
+  const loca = tables.get('loca');
+  if (tables.has('glyf') && loca) {
+    const long = view.getInt16(table('head').offset + 50) === 1;
+    const at = (gid: number) => (long ? view.getUint32(loca.offset + 4 * gid) : view.getUint16(loca.offset + 2 * gid) * 2);
+    blank = new Set();
+    for (let gid = 0; gid < numGlyphs; gid++) if (at(gid + 1) === at(gid)) blank.add(gid);
+  }
+
+  const layout: SourceFont['layout'] = {};
+  for (const tag of LAYOUT_TABLES) {
+    const t = tables.get(tag);
+    if (t) layout[tag] = bytes.slice(t.offset, t.offset + t.length);
+  }
+  return { numGlyphs, advances, cmap, blank, layout, variable: tables.has('fvar') };
+}
+
 /**
- * Build the self-writing variable font for `input.glyphData`: its characters
- * (one code point each — clusters need shaping this font doesn't carry) plus
- * a space, no GSUB / GPOS.
+ * The usual hollow box for .notdef, the same at every axis value. It also
+ * keeps `glyf` from being empty when no character has ink, which browsers
+ * reject.
+ */
+function notdefOutline(advance: number, ascender: number): GlyphOutline {
+  const x0 = round(advance * 0.1);
+  const x1 = Math.max(x0 + 4, round(advance * 0.9));
+  const y1 = Math.max(4, round(ascender * 0.7));
+  const t = Math.max(1, round((x1 - x0) / 10));
+  const box = (a: number, b: number, c: number, d: number, reverse: boolean): Growing => {
+    const corners: [number, number][] = [
+      [a, b],
+      [a, d],
+      [c, d],
+      [c, b],
+    ];
+    const points = (reverse ? corners.reverse() : corners).map(([x, y]) => ({ x, y, on: true }));
+    return { points, from: points.map(({ x, y }) => ({ x, y })), t0: 0, t1: 0 };
+  };
+  // Clockwise outside and counter-clockwise inside (y up): a frame.
+  return { contours: [box(x0, 0, x1, y1, false), box(x0 + t, t, x1 - t, y1 - t, true)], duration: 1 };
+}
+
+/** A glyph to build: its strokes (none for a blank glyph) and its advance. */
+interface GlyphSlot {
+  data: TegakiGlyphData | null;
+  advance: number;
+}
+
+/** Glyph ids from 0 (.notdef), the cmap, and the layout tables of the font to build. */
+function glyphSet(input: ProgressFontInput): { slots: GlyphSlot[]; cmap: [number, number][]; layout: Record<string, Uint8Array> } {
+  const single = Object.keys(input.glyphData)
+    .filter((c) => [...c].length === 1)
+    .sort((a, b) => a.codePointAt(0)! - b.codePointAt(0)!);
+
+  if (!input.source) {
+    const spaceAdvance = round(input.spaceAdvance ?? input.unitsPerEm / 4);
+    const chars = [...new Set([' ', ...single])].sort((a, b) => a.codePointAt(0)! - b.codePointAt(0)!);
+    const slots: GlyphSlot[] = [{ data: null, advance: round(input.unitsPerEm / 2) }];
+    for (const c of chars) {
+      const data = c === ' ' ? null : input.glyphData[c]!;
+      slots.push({ data, advance: data ? round(data.w) : spaceAdvance });
+    }
+    return { slots, cmap: chars.map((c, i) => [c.codePointAt(0)!, i + 1]), layout: {} };
+  }
+
+  const source = readSourceFont(input.source);
+  const charOf = new Map<number, string>();
+  for (const [cp, gid] of [...source.cmap].sort((a, b) => a[0] - b[0])) if (!charOf.has(gid)) charOf.set(gid, String.fromCodePoint(cp));
+  const slots: GlyphSlot[] = source.advances.map((advance, gid) => {
+    const byChar = charOf.get(gid);
+    const data =
+      (gid === 0 ? undefined : input.glyphDataById?.[String(gid)]) ?? (byChar === undefined ? undefined : input.glyphData[byChar]);
+    return { data: data ?? null, advance };
+  });
+
+  // Mapped: characters drawn here, ones the source leaves blank, and spaces and invisible
+  // characters (ZWJ, ZWNJ, direction marks — some fonts give them an outline, which isn't
+  // drawn). Browsers put joiners around Arabic split across styles, and one taken from another
+  // font breaks the run. Any other character is left out, so the browser draws it from a
+  // fallback font rather than as nothing.
+  const cmap: [number, number][] = [];
+  for (const [cp, gid] of source.cmap) {
+    const char = String.fromCodePoint(cp);
+    const invisible = /[\s\p{Default_Ignorable_Code_Point}]/u.test(char);
+    if (slots[gid]!.data || input.glyphData[char] || source.blank?.has(gid) || invisible) cmap.push([cp, gid]);
+  }
+  // Characters the source doesn't map get glyphs of their own after its glyphs, unshaped.
+  for (const c of single) {
+    const cp = c.codePointAt(0)!;
+    if (source.cmap.has(cp)) continue;
+    cmap.push([cp, slots.length]);
+    slots.push({ data: input.glyphData[c]!, advance: round(input.glyphData[c]!.w) });
+  }
+  // A subset often lacks the joiners: an empty, zero-width glyph for them.
+  for (const cp of JOINERS) {
+    if (source.cmap.has(cp)) continue;
+    cmap.push([cp, slots.length]);
+    slots.push({ data: null, advance: 0 });
+  }
+  cmap.sort((a, b) => a[0] - b[0]);
+  // A variable source's GDEF / GPOS / GSUB can hold variation data for its own axes, which would read ours.
+  return { slots, cmap, layout: source.variable ? {} : source.layout };
+}
+
+/**
+ * Build the self-writing variable font for `input.glyphData` (and, with a
+ * `source`, `input.glyphDataById` and the source's layout tables). Without a
+ * source it has the single code point characters plus a space, no GSUB / GPOS.
  */
 export function buildProgressFont(input: ProgressFontInput): ProgressFont {
   const { unitsPerEm, ascender, descender, lineCap = 'round' } = input;
   const ease = input.strokeEasing ?? easeOutQuad;
-  const spaceAdvance = round(input.spaceAdvance ?? unitsPerEm / 4);
 
-  const chars = Object.keys(input.glyphData)
-    .filter((c) => [...c].length === 1 && c !== ' ')
-    .sort((a, b) => a.codePointAt(0)! - b.codePointAt(0)!);
-  const order = [' ', ...chars].sort((a, b) => a.codePointAt(0)! - b.codePointAt(0)!);
-  const glyphs: EncodedGlyph[] = [encodeGlyph(null, round(unitsPerEm / 2))];
-  for (const c of order) {
-    if (c === ' ') glyphs.push(encodeGlyph(null, spaceAdvance));
-    else {
-      const glyph = input.glyphData[c]!;
-      glyphs.push(encodeGlyph(glyphOutline(glyph, lineCap, ease), round(glyph.w)));
-    }
-  }
+  const set = glyphSet(input);
+  if (set.slots.length > 0xffff) throw new Error(`The font needs ${set.slots.length} glyphs (at most 65535)`);
+  const glyphs = set.slots.map((s, gid) =>
+    encodeGlyph(gid === 0 ? notdefOutline(s.advance, ascender) : s.data ? glyphOutline(s.data, lineCap, ease) : null, s.advance),
+  );
   const numGlyphs = glyphs.length;
   const inked = glyphs.filter((g) => g.contours > 0);
+  // Loops, not spreads: a source font can have more glyphs than a call takes arguments.
+  const least = (values: number[]) => values.reduce((a, b) => Math.min(a, b), Infinity);
+  const most = (values: number[]) => values.reduce((a, b) => Math.max(a, b), -Infinity);
   const bbox = inked.length
     ? {
-        xMin: Math.min(...inked.map((g) => g.xMin)),
-        yMin: Math.min(...inked.map((g) => g.yMin)),
-        xMax: Math.max(...inked.map((g) => g.xMax)),
-        yMax: Math.max(...inked.map((g) => g.yMax)),
+        xMin: least(inked.map((g) => g.xMin)),
+        yMin: least(inked.map((g) => g.yMin)),
+        xMax: most(inked.map((g) => g.xMax)),
+        yMax: most(inked.map((g) => g.yMax)),
       }
     : { xMin: 0, yMin: 0, xMax: 0, yMax: 0 };
 
@@ -662,14 +869,9 @@ export function buildProgressFont(input: ProgressFontInput): ProgressFont {
 
   const advances = glyphs.map((g) => g.advance);
   const hhea = new Writer();
-  hhea
-    .u32(0x00010000)
-    .i16(ascender)
-    .i16(descender)
-    .i16(0)
-    .u16(Math.max(...advances));
-  hhea.i16(inked.length ? Math.min(...inked.map((g) => g.xMin)) : 0);
-  hhea.i16(inked.length ? Math.min(...inked.map((g) => g.advance - g.xMax)) : 0);
+  hhea.u32(0x00010000).i16(ascender).i16(descender).i16(0).u16(most(advances));
+  hhea.i16(inked.length ? bbox.xMin : 0);
+  hhea.i16(inked.length ? least(inked.map((g) => g.advance - g.xMax)) : 0);
   hhea.i16(bbox.xMax).i16(1).i16(0).i16(0).i16(0).i16(0).i16(0).i16(0).i16(0).u16(numGlyphs);
 
   const hmtx = new Writer();
@@ -677,10 +879,10 @@ export function buildProgressFont(input: ProgressFontInput): ProgressFont {
 
   const maxp = new Writer();
   maxp.u32(0x00010000).u16(numGlyphs);
-  maxp.u16(Math.max(0, ...glyphs.map((g) => g.points))).u16(Math.max(0, ...glyphs.map((g) => g.contours)));
+  maxp.u16(most([0, ...glyphs.map((g) => g.points)])).u16(most([0, ...glyphs.map((g) => g.contours)]));
   maxp.u16(0).u16(0).u16(2).u16(0).u16(0).u16(0).u16(0).u16(0).u16(0).u16(0).u16(0);
 
-  const codepoints = order.map((c) => c.codePointAt(0)!);
+  const codepoints = set.cmap.length ? set.cmap.map(([cp]) => cp) : [0x20];
   const winAscent = Math.max(ascender, bbox.yMax);
   const winDescent = Math.max(-descender, -bbox.yMin);
   const os2 = new Writer();
@@ -737,7 +939,7 @@ export function buildProgressFont(input: ProgressFontInput): ProgressFont {
 
   const buffer = assemble({
     'OS/2': os2.data(),
-    cmap: cmapTable(codepoints),
+    cmap: cmapTable(set.cmap),
     fvar: fvar.data(),
     glyf: glyf.data(),
     gvar: gvar.data(),
@@ -748,6 +950,9 @@ export function buildProgressFont(input: ProgressFontInput): ProgressFont {
     maxp: maxp.data(),
     name: nameTable(input.family),
     post: post.data(),
+    ...set.layout,
   });
-  return { buffer, chars };
+  const chars = set.cmap.filter(([, gid]) => glyphs[gid]!.contours > 0).map(([cp]) => String.fromCodePoint(cp));
+  const drawn = glyphs.filter((g, gid) => gid > 0 && g.contours > 0).length;
+  return { buffer, chars, glyphs: drawn, layout: Object.keys(set.layout).sort() };
 }

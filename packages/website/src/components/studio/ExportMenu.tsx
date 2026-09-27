@@ -172,7 +172,8 @@ export function ExportMenu({
           <span className="text-[11px] text-zinc-400">{onDownloadProgressFont ? 'prototype' : 'Text mode only'}</span>
         </div>
         <Hint>
-          The text's glyphs as a .ttf that writes itself: animate <code>font-variation-settings: 'PROG'</code> from 0 to 100 per character.
+          The text's glyphs as a .ttf that writes itself, shaped like the font: animate <code>font-variation-settings: 'PROG'</code> from 0
+          to 100 per character (a ligature or a letter with its marks is one).
         </Hint>
         <div className={cx('flex flex-col gap-2', !onDownloadProgressFont && 'pointer-events-none opacity-40')}>
           <DialScope className="flex flex-col gap-1.5">
@@ -183,7 +184,7 @@ export function ExportMenu({
             onClick={() => onDownloadProgressFont?.()}
             className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-zinc-200 text-[13px] font-medium text-zinc-900 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
           >
-            <DownloadIcon size={14} /> Download .ttf
+            <DownloadIcon size={14} /> Download font
           </button>
         </div>
       </div>

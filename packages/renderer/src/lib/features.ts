@@ -43,3 +43,10 @@ export function toCssFeatureSettings(enabled: readonly string[]): string {
  * engine disables them on the overlay explicitly, so every browser agrees.
  */
 export const LETTER_SPACED_OFF_FEATURES: readonly string[] = ['liga', 'clig', 'dlig', 'hlig', 'calt'];
+
+/**
+ * Features the overlay switches off when the shaper is: every one that makes
+ * variant glyphs (ligatures, alternates, Arabic positional forms), since the
+ * renderer then draws each character's nominal glyph.
+ */
+export const UNSHAPED_OFF_FEATURES: readonly string[] = ['liga', 'calt', 'clig', 'rlig', 'dlig', 'init', 'medi', 'fina', 'isol'];

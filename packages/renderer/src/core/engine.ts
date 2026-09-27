@@ -11,7 +11,7 @@ import {
 import { drawFallbackGlyph, fallbackTextStyle } from '../lib/drawFallbackGlyph.ts';
 import { findEffect, globalGradientGeometry, type ResolvedEffect, resolveEffects } from '../lib/effects.ts';
 import { fallbackRuns } from '../lib/fallbackRuns.ts';
-import { LETTER_SPACED_OFF_FEATURES, toCssFeatureSettings } from '../lib/features.ts';
+import { LETTER_SPACED_OFF_FEATURES, toCssFeatureSettings, UNSHAPED_OFF_FEATURES } from '../lib/features.ts';
 import { ensureFont, ensureFontFace, fontDataUri } from '../lib/font.ts';
 import { type CanvasOverflow, glyphInkBounds, inkOverflow, NO_OVERFLOW } from '../lib/inkBounds.ts';
 import { paintStroke } from '../lib/paintStroke.ts';
@@ -1175,7 +1175,7 @@ export class TegakiEngine {
     // spaced letters (see LETTER_SPACED_OFF_FEATURES); disable them outright so
     // a browser that would keep some of them still draws what the shaper does.
     this._overlayEl.style.fontFeatureSettings = !this._shaperEnabled
-      ? "'liga' 0, 'calt' 0, 'clig' 0, 'rlig' 0, 'dlig' 0, 'init' 0, 'medi' 0, 'fina' 0, 'isol' 0"
+      ? UNSHAPED_OFF_FEATURES.map((tag) => `'${tag}' 0`).join(', ')
       : this._letterSpacing !== 0
         ? LETTER_SPACED_OFF_FEATURES.map((tag) => `'${tag}' 0`).join(', ')
         : '';

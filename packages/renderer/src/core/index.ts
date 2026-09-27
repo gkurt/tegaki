@@ -1,5 +1,6 @@
 export { paragraphDirection } from '../lib/bidi.ts';
 export { findEffect, findEffects, type ResolvedEffect, resolveEffects } from '../lib/effects.ts';
+export { LETTER_SPACED_OFF_FEATURES, toCssFeatureSettings, UNSHAPED_OFF_FEATURES } from '../lib/features.ts';
 export { ensureFontFace } from '../lib/font.ts';
 export { type InkStyle, paintStroke, type StrokePaint } from '../lib/paintStroke.ts';
 export { seededRandom } from '../lib/random.ts';

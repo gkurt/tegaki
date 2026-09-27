@@ -3,7 +3,7 @@ import type { TegakiBundle, TegakiRendererHandle, TimeControlProp } from 'tegaki
 import type { PipelineResult } from 'tegaki-generator';
 import { createShowcasePlugins } from '../plugins/index.ts';
 import { TEXT_PRESETS } from '../preview/constants.ts';
-import { TegakiTextPreview } from '../preview/TegakiTextPreview.tsx';
+import { TegakiTextPreview, type TegakiTextPreviewReadyInfo } from '../preview/TegakiTextPreview.tsx';
 import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
 import type { UrlState } from '../url-state.ts';
 import { fontHasChar } from './charsets.ts';
@@ -31,9 +31,10 @@ export function TextWorkspace({
   resultsCache,
   rendererRef,
   playbackRef,
-  bundleRef,
   showVariableFont,
   onCloseVariableFont,
+  downloadVariableFont,
+  onVariableFontDownloaded,
 }: {
   font: LoadedFont | null;
   settings: UrlState;
@@ -41,11 +42,12 @@ export function TextWorkspace({
   resultsCache: RefObject<Map<string, PipelineResult>>;
   rendererRef: RefObject<TegakiRendererHandle | null>;
   playbackRef: RefObject<TextPlaybackHandle | null>;
-  /** The bundle the renderer last drew — what Export's variable font is built from. */
-  bundleRef: RefObject<TegakiBundle | null>;
   /** Draw the text in its variable font under the canvas too (switched on from Export). */
   showVariableFont: boolean;
   onCloseVariableFont: () => void;
+  /** Export asked for the variable font: download it once it's built. */
+  downloadVariableFont: boolean;
+  onVariableFontDownloaded: () => void;
 }) {
   const { timeMode, animSpeed, previewText: text } = settings;
   const fontInfo = font?.info ?? null;
@@ -98,6 +100,8 @@ export function TextWorkspace({
   const timeRef = useRef(settings.currentTime);
   const [bundleReady, setBundleReady] = useState(false);
   const [bundle, setBundle] = useState<TegakiBundle | null>(null);
+  // Whether `bundle` has every form the font's GSUB reaches — what the variable font needs.
+  const [bundleClosure, setBundleClosure] = useState(false);
   const [totalDuration, setTotalDuration] = useState(0);
 
   playbackRef.current = { pause: () => setPlaying(false) };
@@ -125,7 +129,7 @@ export function TextWorkspace({
   // (e.g. `ct`); each later font replays from the start.
   const drawnFontUrl = useRef<string | null>(null);
   const handleReady = useCallback(
-    (info: { bundle: TegakiBundle; totalDuration: number }) => {
+    (info: TegakiTextPreviewReadyInfo) => {
       if (drawnFontUrl.current !== info.bundle.fontUrl) {
         if (drawnFontUrl.current !== null) {
           timeRef.current = 0;
@@ -136,7 +140,7 @@ export function TextWorkspace({
       }
       setBundleReady(true);
       setBundle(info.bundle);
-      bundleRef.current = info.bundle;
+      setBundleClosure(info.closure);
       setTotalDuration(info.totalDuration);
       setTimelineVersion((v) => v + 1);
       // Mirror the renderer's engine onto `window.__tegakiEngine` so an attached
@@ -146,7 +150,7 @@ export function TextWorkspace({
       // affordance — does not affect rendering.
       (window as Window & { __tegakiEngine?: unknown }).__tegakiEngine = rendererRef.current?.engine ?? null;
     },
-    [rendererRef, bundleRef],
+    [rendererRef],
   );
 
   const prevTotalRef = useRef(totalDuration);
@@ -311,6 +315,8 @@ export function TextWorkspace({
                     resultsCache={resultsCache}
                     onReady={handleReady}
                     useShaper={settings.useShaper}
+                    // Every form the variable font's spans can take, while it's shown.
+                    closure={showVariableFont}
                   />
                 </GlyphPicker>
               </TextFrame>
@@ -318,7 +324,7 @@ export function TextWorkspace({
             {font && showVariableFont && (
               <TextFrame width={settings.frameWidth} onWidthChange={(w) => set('frameWidth', w)} autoClassName="w-full max-w-3xl">
                 <VariableFontPreview
-                  bundle={bundle}
+                  bundle={bundleClosure ? bundle : null}
                   fontInfo={font.info}
                   entries={timelineEntries}
                   text={text}
@@ -328,6 +334,9 @@ export function TextWorkspace({
                   fontSizePx={settings.fontSizePx}
                   lineHeightRatio={settings.lineHeightRatio}
                   letterSpacingPx={settings.letterSpacingPx}
+                  shaped={settings.useShaper}
+                  download={downloadVariableFont}
+                  onDownloaded={onVariableFontDownloaded}
                   onClose={onCloseVariableFont}
                 />
               </TextFrame>
