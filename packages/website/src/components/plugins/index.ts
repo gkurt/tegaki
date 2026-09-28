@@ -28,6 +28,7 @@ import { grainPlugin } from './grain.ts';
 import { graphitePlugin } from './graphite.ts';
 import { hapticsPlugin } from './haptics.ts';
 import { hatchPlugin } from './hatch.ts';
+import { ink3dPlugin } from './ink3d.ts';
 import { joinsPlugin } from './joins.ts';
 import { karaokePlugin } from './karaoke.ts';
 import { laserPlugin } from './laser.ts';
@@ -71,7 +72,9 @@ export interface ShowcasePlugin {
 // Hatching, Embroidery) and the ones that bring their own (Graphite, Chalk,
 // Foil, Burn, Neon, Laser) after Colors, and the ones that decide what shows when
 // (Typewriter, Eraser) ahead of the painters, and the Segment after them
-// and before the painters, so they paint the stretch it passes on; in the ink hooks, the glows
+// and before the painters, so they paint the stretch it passes on; 3D ink
+// last of the painters, since it keeps the colors the ones before it set and
+// paints nothing flat for the ones after; in the ink hooks, the glows
 // and grain before the shadow is cast, then the cathode tube over all of
 // it, and the screen shake last, moving everything drawn before it.
 export const SHOWCASE_PLUGINS: readonly ShowcasePlugin[] = [
@@ -107,6 +110,7 @@ export const SHOWCASE_PLUGINS: readonly ShowcasePlugin[] = [
   { id: 'laser', factory: laserPlugin },
   { id: 'brush', factory: brushPlugin },
   { id: 'echo', factory: echoPlugin },
+  { id: '3d', factory: ink3dPlugin },
   { id: 'grain', factory: grainPlugin },
   { id: 'bleed', factory: bleedPlugin },
   { id: 'shadow', factory: shadowPlugin },

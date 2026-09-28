@@ -1,6 +1,7 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
 import { clearance, type PlacedStroke, type StrokeFrame, StrokePath, type TegakiFrame } from 'tegaki/core';
+import { PerspectiveCamera, Vector3 } from 'three';
 import { skipPieces } from './ballpoint.ts';
 import { bristles, brushWidth, splashes } from './brush.ts';
 import { burnColor, puffAt, puffs } from './burn.ts';
@@ -15,6 +16,7 @@ import { graphiteGray, smudges, splinters } from './graphite.ts';
 import { hapticFor } from './haptics.ts';
 import { hatchLines, inkOutline } from './hatch.ts';
 import { createShowcasePlugins, normalizePluginOptions, SHOWCASE_PLUGINS } from './index.ts';
+import { DEPTH_KEY, fitCamera, projectPoint, reachBox, tubeMesh } from './ink3d.ts';
 import { joinPath, joinProgress, joinTimes, planJoins } from './joins.ts';
 import { ballAt, landings } from './karaoke.ts';
 import { cooled, emitterAt } from './laser.ts';
@@ -987,5 +989,86 @@ describe('burn', () => {
     expect(b.dy).toBeLessThan(a.dy);
     expect(b.alpha).toBeLessThan(a.alpha);
     expect(puffAt(p!, p!.life + 1)).toBeNull();
+  });
+});
+
+describe('3D ink', () => {
+  const shape = { thickness: 1, depth: 1, lift: 0, radial: 8, caps: 3 };
+  const gray = () => [0.5, 0.5, 0.5] as const;
+  const straight = line(0, 100, 50, 10).points;
+
+  test('a tube is a ring per point and a rounded end each side, its normals facing out', () => {
+    const m = tubeMesh(straight, { x: 0, y: 0 }, shape, gray);
+    expect(m.positions.length / 3).toBe((straight.length + 2 * shape.caps) * shape.radial);
+    // Each vertex of a middle ring lies out from its point along its normal.
+    const ring = (shape.caps + 5) * shape.radial;
+    for (let j = 0; j < shape.radial; j++) {
+      const v = (ring + j) * 3;
+      const [x, y, z] = [m.positions[v]!, m.positions[v + 1]!, m.positions[v + 2]!];
+      const out = [x - 50, y + 50, z - 5];
+      expect(out[0]! * m.normals[v]! + out[1]! * m.normals[v + 1]! + out[2]! * m.normals[v + 2]!).toBeGreaterThan(0);
+    }
+  });
+
+  test('the tube stands on the page, lifted, and rides its points’ depth', () => {
+    const lifted = tubeMesh(straight, { x: 0, y: 0 }, { ...shape, lift: 3 }, gray);
+    const zs = Array.from({ length: lifted.positions.length / 3 }, (_, i) => lifted.positions[i * 3 + 2]!);
+    expect(Math.min(...zs)).toBeCloseTo(3, 6);
+    const high = straight.map((p) => ({ ...p, data: { [DEPTH_KEY]: 20 } }));
+    const risen = tubeMesh(high, { x: 0, y: 0 }, shape, gray);
+    expect(Math.min(...Array.from({ length: risen.positions.length / 3 }, (_, i) => risen.positions[i * 3 + 2]!))).toBeCloseTo(20, 6);
+  });
+
+  test('its triangles face out: wound counter-clockwise seen from outside', () => {
+    const m = tubeMesh(straight, { x: 0, y: 0 }, shape, gray);
+    const at = (i: number) => new Vector3(m.positions[i * 3]!, m.positions[i * 3 + 1]!, m.positions[i * 3 + 2]!);
+    // A triangle on the tube's middle, and where the tube's axis is there.
+    const t = ((shape.caps + 4) * shape.radial + 2) * 6;
+    const [a, b, c] = [at(m.indices[t]!), at(m.indices[t + 1]!), at(m.indices[t + 2]!)];
+    const facing = b.clone().sub(a).cross(c.clone().sub(a));
+    const centre = a.clone().add(b).add(c).divideScalar(3);
+    expect(facing.dot(centre.sub(new Vector3(centre.x, -50, 5)))).toBeGreaterThan(0);
+  });
+
+  test('a dot is a bead', () => {
+    const m = tubeMesh([{ x: 10, y: 10, width: 6, t: 0 }], { x: 0, y: 0 }, shape, gray);
+    expect(m.positions.length / 3).toBe((1 + 2 * shape.caps) * shape.radial);
+    expect(m.indices.length).toBeGreaterThan(0);
+  });
+
+  const cam = { x: 200, y: 50, distance: 1000 };
+  const flat = { tilt: 0, turn: 0 };
+
+  test('an unturned page lands where the canvas lays it out; what stands off it comes nearer and grows', () => {
+    expect(projectPoint(30, 70, 0, flat, cam)).toEqual({ x: 30, y: 70 });
+    const up = projectPoint(300, 50, 100, flat, cam);
+    expect(up.x).toBeGreaterThan(300);
+  });
+
+  test('three’s camera sees the page as projectPoint does, whatever the turn', () => {
+    const view = { width: 1600, height: 400, k: 2, e: 40, f: 20 };
+    const camera = new PerspectiveCamera();
+    fitCamera(camera, view, cam, { x: 0, y: 0, w: view.width, h: view.height });
+    const turn = { tilt: 0.5, turn: -0.3 };
+    const [x, y, z] = [320, 90, 15];
+    // The point as the page turns it (about the pivot, y up, a YXZ Euler).
+    const local = new Vector3(x - cam.x, cam.y - y, z).applyEuler(
+      new (camera.rotation.constructor as any)(-turn.tilt, turn.turn, 0, 'YXZ'),
+    );
+    const ndc = local.add(new Vector3(cam.x, -cam.y, 0)).project(camera);
+    const px = ((ndc.x + 1) / 2) * view.width;
+    const py = ((1 - ndc.y) / 2) * view.height;
+    const p = projectPoint(x, y, z, turn, cam);
+    expect(px).toBeCloseTo(p.x * view.k + view.e, 3);
+    expect(py).toBeCloseTo(p.y * view.k + view.f, 3);
+  });
+
+  test('the reach holds the turned ink and the shadow the light casts from it', () => {
+    const box = { minX: 0, minY: 0, maxX: 400, maxY: 100 };
+    const fromLeft = reachBox(box, 50, [flat], cam, [-1, 0, 1]);
+    expect(fromLeft.maxX).toBeGreaterThanOrEqual(450);
+    expect(fromLeft.minX).toBeLessThanOrEqual(0);
+    const leaned = reachBox(box, 0, [{ tilt: 1, turn: 0 }], cam, [0, 0, 1]);
+    expect(leaned.maxY - leaned.minY).toBeLessThan(100);
   });
 });
