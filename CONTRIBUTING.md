@@ -26,7 +26,7 @@ Three workspaces under `packages/`:
 
 - **`packages/renderer`** ([`tegaki`](https://www.npmjs.com/package/tegaki)) — the published, framework-agnostic renderer with per-framework adapters.
 - **`packages/generator`** (`tegaki-generator`) — internal CLI + library that turns a font into a Tegaki bundle.
-- **`packages/website`** (`@tegaki/website`) — Astro + Starlight site hosting the docs and the interactive generator at `/tegaki/generator/`.
+- **`packages/website`** (`@tegaki/website`) — Astro + Starlight site hosting the docs and the interactive studio at `/studio/`.
 
 See [AGENTS.md](AGENTS.md) for the full architecture, pipeline stages, and file-by-file breakdown.
 
@@ -36,7 +36,7 @@ Run these from the repo root. They are wired up as Bun workspace scripts — **d
 
 ```bash
 bun start          # Run the generator CLI
-bun dev            # Start the website dev server (http://localhost:4321/tegaki/)
+bun dev            # Start the website dev server (http://localhost:4321/)
 bun run test       # Run tests across all packages
 bun typecheck      # TypeScript checks
 bun check          # Biome lint + format check
@@ -151,7 +151,7 @@ Keep the subject under ~72 characters. The body (optional) explains the *why*.
 
 Open an issue on [GitHub](https://github.com/gkurt/tegaki/issues). For bugs, include:
 
-- A minimal repro (a short URL to the [interactive generator](https://gkurt.com/tegaki/generator/) with URL state is often ideal — see the "Testing the preview app via URL state" section of [AGENTS.md](AGENTS.md))
+- A minimal repro (a short URL to the [studio](https://tegaki.ink/studio/) with URL state is often ideal — see the "Testing the preview app via URL state" section of [AGENTS.md](AGENTS.md))
 - Expected vs. actual behavior
 - Browser / OS / Bun version if relevant
 

@@ -6,7 +6,7 @@ head:
     content: 'TegakiRenderer API Reference | Tegaki'
 ---
 
-The renderer component is available for every supported framework. See the [framework guides](/tegaki/frameworks/react/) for import paths.
+The renderer component is available for every supported framework. See the [framework guides](/frameworks/react/) for import paths.
 
 ## Import
 
@@ -114,7 +114,7 @@ Style object or string applied to the container. Use `fontSize` to control the t
 
 **Type:** `boolean` · **Default:** `true`
 
-Whether this instance uses the globally-registered harfbuzz shaper. Set to `false` to opt one renderer out of shaping (e.g. side-by-side comparisons) without unregistering the shaper for the whole process. Has no effect when no shaper is registered. See [Text Shaping](/tegaki/guides/shaping/).
+Whether this instance uses the globally-registered harfbuzz shaper. Set to `false` to opt one renderer out of shaping (e.g. side-by-side comparisons) without unregistering the shaper for the whole process. Has no effect when no shaper is registered. See [Text Shaping](/guides/shaping/).
 
 ### `fallbackFont`
 
@@ -149,7 +149,7 @@ import harfbuzzShaper from 'tegaki/shaper-harfbuzz';
 TegakiEngine.registerShaper(harfbuzzShaper);
 ```
 
-See [Text Shaping](/tegaki/guides/shaping/) for the full setup, bundle requirements, and SSR behavior.
+See [Text Shaping](/guides/shaping/) for the full setup, bundle requirements, and SSR behavior.
 
 ### `TegakiEngine.registerBundle(bundle)`
 
@@ -623,7 +623,7 @@ const plugins = [captionPlugin({ cues: JSON.stringify(words) })];
 | `lead` | `0` | Seconds the writing runs behind the voice (negative: ahead of it). |
 | `wpm` | `70` | Words a minute for words with no cue, and for all of them when there are none. |
 
-A word is the glyphs between spaces on one line, so text without spaces (Chinese, Japanese) takes one cue per line. `parseCues(text)` reads a cue list the way the plugin does. In Remotion, drive the renderer with the time in seconds, as in the [Remotion guide](/tegaki/frameworks/remotion/), so the writing stays in step with the audio.
+A word is the glyphs between spaces on one line, so text without spaces (Chinese, Japanese) takes one cue per line. `parseCues(text)` reads a cue list the way the plugin does. In Remotion, drive the renderer with the time in seconds, as in the [Remotion guide](/frameworks/remotion/), so the writing stays in step with the audio.
 
 ## Helper functions
 

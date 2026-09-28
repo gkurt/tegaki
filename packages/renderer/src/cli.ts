@@ -7,7 +7,7 @@
  *
  * SVG is the only format emitted: it's the one the renderer can produce with
  * zero native dependencies (no canvas, no headless browser). Raster/video
- * export (PNG/GIF/WebM) lives in the browser studio at gkurt.com/tegaki/studio.
+ * export (PNG/GIF/WebM) lives in the browser studio at tegaki.ink/studio.
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';

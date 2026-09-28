@@ -5,7 +5,7 @@
 Tegaki (手書き) turns any font into animated handwriting.
 No manual path authoring. No native dependencies. Just pick a font.
 
-**[Website & docs](https://gkurt.com/tegaki/)** · **[Try it in the studio](https://gkurt.com/tegaki/studio/)**
+**[Website & docs](https://tegaki.ink/)** · **[Try it in the studio](https://tegaki.ink/studio/)**
 
 [![npm](https://img.shields.io/npm/v/tegaki)](https://www.npmjs.com/package/tegaki)
 [![license](https://img.shields.io/npm/l/tegaki)](https://github.com/gkurt/tegaki/blob/main/LICENSE)
@@ -60,7 +60,7 @@ npx tegaki "مرحبا بالعالم" --font amiri --stroke-easing ease-in-out-
 npx tegaki "Glow" --effects '{"glow":{"radius":10,"color":"#f0a"}}'
 ```
 
-`--mode` is `loop` (repeats forever, the default), `once` (draws itself a single time), or `static` (finished artwork). The CLI shapes text with harfbuzz (bundled as WASM) the way the renderer does, so ligatures, Arabic joining, Devanagari and right-to-left text come out right, and it clips strokes to the letter outlines as the studio does. Run `npx tegaki --help` for every option and `--list-fonts` for the bundled fonts. The CLI emits SVG only — for PNG, GIF, or WebM use the [interactive studio](https://gkurt.com/tegaki/studio/).
+`--mode` is `loop` (repeats forever, the default), `once` (draws itself a single time), or `static` (finished artwork). The CLI shapes text with harfbuzz (bundled as WASM) the way the renderer does, so ligatures, Arabic joining, Devanagari and right-to-left text come out right, and it clips strokes to the letter outlines as the studio does. Run `npx tegaki --help` for every option and `--list-fonts` for the bundled fonts. The CLI emits SVG only — for PNG, GIF, or WebM use the [interactive studio](https://tegaki.ink/studio/).
 
 ## Framework Support
 
@@ -100,16 +100,16 @@ Several handwriting fonts are bundled and ready to use:
 - **Atma** — `tegaki/fonts/atma` _(Bengali + Latin)_
 - **LXGW WenKai** — `tegaki/fonts/lxgw-wenkai` _(Simplified Chinese: the 1000 most frequent hanzi + Latin)_
 
-For other fonts, use the [interactive studio](https://gkurt.com/tegaki/studio/) to create a custom bundle.
+For other fonts, use the [interactive studio](https://tegaki.ink/studio/) to create a custom bundle.
 
 ## Documentation
 
-Visit **[gkurt.com/tegaki](https://gkurt.com/tegaki)** for full documentation:
+Visit **[tegaki.ink](https://tegaki.ink)** for full documentation:
 
-- [Getting Started](https://gkurt.com/tegaki/getting-started/)
-- [Framework Guides](https://gkurt.com/tegaki/frameworks/react/) (React, Svelte, Vue, SolidJS, Astro, Web Components, Vanilla)
-- [Generating Fonts](https://gkurt.com/tegaki/guides/generating/)
-- [API Reference](https://gkurt.com/tegaki/api/renderer/)
+- [Getting Started](https://tegaki.ink/getting-started/)
+- [Framework Guides](https://tegaki.ink/frameworks/react/) (React, Svelte, Vue, SolidJS, Astro, Web Components, Vanilla)
+- [Generating Fonts](https://tegaki.ink/guides/generating/)
+- [API Reference](https://tegaki.ink/api/renderer/)
 
 ## Integrations
 

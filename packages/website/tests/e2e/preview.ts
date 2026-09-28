@@ -1,9 +1,9 @@
 import type { Page } from '@playwright/test';
 
-// Helpers shared by the /tegaki/preview/ specs. Not an `.e2e.ts` file, so
+// Helpers shared by the /preview/ specs. Not an `.e2e.ts` file, so
 // Playwright loads it only through the specs' imports.
 
-const PAGE = '/tegaki/preview/';
+const PAGE = '/preview/';
 
 /** URL params fed to the standalone text preview (see url-state.ts for the keys). */
 export type PreviewParams = Record<string, string | number>;

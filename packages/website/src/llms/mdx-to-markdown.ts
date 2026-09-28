@@ -10,7 +10,7 @@
  *   bold `X` label, its content dedented to the `<Tabs>` indent.
  * - `:::note` / `:::caution[Title]` asides become blockquotes.
  * - `<video>` blocks become a link to their source.
- * - Root-relative links (`](/tegaki/…)`) become absolute, so the text stands on its own.
+ * - Root-relative links (`](/studio/…)`) become absolute, so the text stands on its own.
  *
  * Code fences pass through untouched, apart from that dedent inside a tab.
  */

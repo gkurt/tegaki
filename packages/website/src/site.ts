@@ -2,9 +2,8 @@
 // heads (meta tags, JSON-LD) and the agent-facing files (llms.txt, the .md
 // mirrors, skill.md), so a rename or a new page updates all of them at once.
 
-export const SITE = 'https://gkurt.com';
-export const BASE = '/tegaki';
-export const SITE_URL = `${SITE}${BASE}/`;
+export const SITE = 'https://tegaki.ink';
+export const SITE_URL = `${SITE}/`;
 
 export const NAME = 'Tegaki';
 export const REPO_URL = 'https://github.com/gkurt/tegaki';

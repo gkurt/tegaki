@@ -128,7 +128,7 @@ If the pre-built font bundles don't work in your environment, or you want to loa
 </script>
 ```
 
-This is also useful for loading custom font bundles generated with the [studio](/tegaki/studio/).
+This is also useful for loading custom font bundles generated with the [studio](/studio/).
 
 ### Full standalone example
 
@@ -265,7 +265,7 @@ Use `time="css"` to drive the animation from CSS custom properties:
 </tegaki-renderer>
 ```
 
-See the [Rendering Animations](/tegaki/guides/rendering/#css-time-mode) guide for details.
+See the [Rendering Animations](/guides/rendering/#css-time-mode) guide for details.
 
 ## Custom tag name
 
@@ -289,12 +289,12 @@ registerTegakiElement('my-handwriting');
 | `speed` | `number` | Playback speed multiplier (default `1`). |
 | `playing` | `"true" \| "false"` | Whether animation is playing (default `true`). |
 | `loop` | _boolean attribute_ | Loop animation when it finishes. |
-| `reduced-motion` | `"never" \| "user" \| "always"` | Whether to honour reduced motion by showing the text finished (default `"never"`; see [`reducedMotion`](/tegaki/api/renderer/#reducedmotion)). |
+| `reduced-motion` | `"never" \| "user" \| "always"` | Whether to honour reduced motion by showing the text finished (default `"never"`; see [`reducedMotion`](/api/renderer/#reducedmotion)). |
 | `pixel-ratio` | `number` | Supersampling factor on top of devicePixelRatio (shortcut for `quality.pixelRatio`). |
 | `segment-size` | `number` | Max drawn segment length in CSS pixels (shortcut for `quality.segmentSize`). |
-| `seed` | `number \| "random"` | What random choices come from: wobble, gradients, plugins (default `0`; see [`seed`](/tegaki/api/renderer/#seed)). The element's `engine.seed` is the number it drew with. |
+| `seed` | `number \| "random"` | What random choices come from: wobble, gradients, plugins (default `0`; see [`seed`](/api/renderer/#seed)). The element's `engine.seed` is the number it drew with. |
 | `show-overlay` | _boolean attribute_ | Show debug text overlay. |
-| `fallback-font` | `string` | CSS font-family list for characters the bundle has no stroke data for (see [`fallbackFont`](/tegaki/api/renderer/#fallbackfont)). |
+| `fallback-font` | `string` | CSS font-family list for characters the bundle has no stroke data for (see [`fallbackFont`](/api/renderer/#fallbackfont)). |
 
 ## Properties reference
 
@@ -309,4 +309,4 @@ These properties are set via JavaScript and support object values that can't be 
 | `onComplete` | `() => void` | Callback when animation completes. |
 | `engine` | `TegakiEngine` _(read-only)_ | The underlying engine instance. |
 
-For the full options reference, see the [TegakiRenderer API docs](/tegaki/api/renderer/).
+For the full options reference, see the [TegakiRenderer API docs](/api/renderer/).

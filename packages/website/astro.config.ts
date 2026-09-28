@@ -15,16 +15,15 @@ import { defineConfig, fontProviders } from 'astro/config';
 import starlightThemeNova from 'starlight-theme-nova';
 import tegaki from 'tegaki/astro/integration';
 import { SHARED_HEAD_LINKS } from './src/seo.ts';
-import { BASE, CARD_IMAGE, DOCS_DESCRIPTION, REPO_URL, SIDEBAR, SITE, TWITTER_URL } from './src/site.ts';
+import { CARD_IMAGE, DOCS_DESCRIPTION, REPO_URL, SIDEBAR, SITE, TWITTER_URL } from './src/site.ts';
 
 EventEmitter.defaultMaxListeners = 12;
 
 const site = SITE;
-const base = BASE;
 
 // Pages kept out of search results: /preview renders only what its URL state
 // asks for (blank without it), and /generator is a redirect to /studio.
-const UNINDEXED_PAGES = ['/preview/', '/generator/'].map((path) => `${site}${base}${path}`);
+const UNINDEXED_PAGES = ['/preview/', '/generator/'].map((path) => `${site}${path}`);
 
 /**
  * The sources behind each page, for the sitemap's <lastmod>: a docs page is
@@ -33,7 +32,7 @@ const UNINDEXED_PAGES = ['/preview/', '/generator/'].map((path) => `${site}${bas
 const root = fileURLToPath(new URL('./', import.meta.url));
 
 function pageSources(url: string): string[] {
-  const path = url.slice(`${site}${base}/`.length).replace(/\/$/, '');
+  const path = url.slice(`${site}/`.length).replace(/\/$/, '');
   if (path === '') return ['src/pages/index.astro', 'src/components/home', 'src/site.ts'];
   if (path === 'studio') return ['src/pages/studio.astro', 'src/components/studio', 'src/components/preview'];
   return [`src/content/docs/${path}.mdx`, `src/content/docs/${path}.md`].filter((file) => existsSync(`${root}${file}`));
@@ -71,7 +70,6 @@ const singleSitemap: AstroIntegration = {
 
 export default defineConfig({
   site,
-  base,
   integrations: [
     // Font bundles' URLs as public assets on the server too, where tegaki/astro serializes them.
     tegaki(),

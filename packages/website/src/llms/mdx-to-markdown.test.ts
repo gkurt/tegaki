@@ -51,12 +51,12 @@ describe('mdxToMarkdown', () => {
   });
 
   test('replaces a video with a link to its source', () => {
-    const source = '<video controls>\n  <source src="/tegaki/videos/a.mp4" type="video/mp4" />\n</video>';
-    expect(md(source)).toBe('[Watch the video (a.mp4)](https://example.com/tegaki/videos/a.mp4)');
+    const source = '<video controls>\n  <source src="/videos/a.mp4" type="video/mp4" />\n</video>';
+    expect(md(source)).toBe('[Watch the video (a.mp4)](https://example.com/videos/a.mp4)');
   });
 
   test('makes root-relative links absolute, but not inside code', () => {
-    expect(md('See [docs](/tegaki/x/#y) and `[a](/b)`.')).toBe('See [docs](https://example.com/tegaki/x/#y) and `[a](/b)`.');
+    expect(md('See [docs](/x/#y) and `[a](/b)`.')).toBe('See [docs](https://example.com/x/#y) and `[a](/b)`.');
     expect(md('```md\n[a](/b)\n```')).toBe('```md\n[a](/b)\n```');
   });
 

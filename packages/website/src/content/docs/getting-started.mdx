@@ -30,10 +30,10 @@ Tegaki generates stroke data from any font and renders it as handwriting animati
    Built-in fonts: `caveat`, `italianno`, `tangerine`, `parisienne` (Latin), `suez-one` (Hebrew), `amiri` (Arabic), `tillana` (Devanagari), `klee-one` (Japanese), `nanum-pen-script` (Korean), `lxgw-wenkai` (Simplified Chinese).
 
    :::caution[Bundle size]
-   Each bundle ships the full source TTF as a fallback for characters outside the generated subset. The browser downloads it only when the text contains such a character. The Latin bundles are small (~250–400 KB), but Hebrew/Arabic/Japanese reflect their source fonts' size: `klee-one` is around 7 MB because Klee One's font contains thousands of kanji. `lxgw-wenkai` is the exception: LXGW WenKai's full font is 25 MB, so it ships only the generated subset. Pick a font for the characters outside it with [`fallbackFont`](/tegaki/api/renderer/#fallbackfont). Bundles are only loaded when you `import` them, but if you need a tighter footprint use the [studio](/tegaki/studio/) to produce a custom bundle with just the characters you need.
+   Each bundle ships the full source TTF as a fallback for characters outside the generated subset. The browser downloads it only when the text contains such a character. The Latin bundles are small (~250–400 KB), but Hebrew/Arabic/Japanese reflect their source fonts' size: `klee-one` is around 7 MB because Klee One's font contains thousands of kanji. `lxgw-wenkai` is the exception: LXGW WenKai's full font is 25 MB, so it ships only the generated subset. Pick a font for the characters outside it with [`fallbackFont`](/api/renderer/#fallbackfont). Bundles are only loaded when you `import` them, but if you need a tighter footprint use the [studio](/studio/) to produce a custom bundle with just the characters you need.
    :::
 
-   Want a different font? Use the [studio](/tegaki/studio/) to create stroke data for any Google Font, then import the downloaded bundle instead:
+   Want a different font? Use the [studio](/studio/) to create stroke data for any Google Font, then import the downloaded bundle instead:
 
    ```tsx
    import bundle from './output/my-font/bundle';
@@ -126,7 +126,7 @@ Tegaki generates stroke data from any font and renders it as handwriting animati
        />
        ```
 
-       Also add `tegaki()` from `tegaki/astro/integration` to your config's `integrations`, so the font loads on server-rendered pages. See the [Astro guide](/tegaki/frameworks/astro/).
+       Also add `tegaki()` from `tegaki/astro/integration` to your config's `integrations`, so the font loads on server-rendered pages. See the [Astro guide](/frameworks/astro/).
      </TabItem>
      <TabItem label="Web Components">
        ```html
@@ -164,14 +164,14 @@ Tegaki generates stroke data from any font and renders it as handwriting animati
    </Tabs>
 
    :::caution[Using Vite 7 or earlier?]
-   Vite's dev pre-bundler breaks the font bundle's `.ttf` URL, so the text is laid out but never draws. Add `optimizeDeps: { exclude: ['tegaki'] }` to `vite.config.ts` and restart the dev server. See [Bundler Setup](/tegaki/guides/bundlers/#vite).
+   Vite's dev pre-bundler breaks the font bundle's `.ttf` URL, so the text is laid out but never draws. Add `optimizeDeps: { exclude: ['tegaki'] }` to `vite.config.ts` and restart the dev server. See [Bundler Setup](/guides/bundlers/#vite).
    :::
 
 </Steps>
 
 ## What's next?
 
-- [Framework guides](/tegaki/frameworks/react/): React, Svelte, Vue, SolidJS, Astro, Web Components, and vanilla JS
-- [Generating Font Data](/tegaki/guides/generating/): the pipelines and their options
-- [Rendering Animations](/tegaki/guides/rendering/): timing, effects, and time modes
-- [Studio](/tegaki/studio/): generate a bundle for any font in the browser
+- [Framework guides](/frameworks/react/): React, Svelte, Vue, SolidJS, Astro, Web Components, and vanilla JS
+- [Generating Font Data](/guides/generating/): the pipelines and their options
+- [Rendering Animations](/guides/rendering/): timing, effects, and time modes
+- [Studio](/studio/): generate a bundle for any font in the browser

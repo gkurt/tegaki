@@ -49,9 +49,6 @@ jobs:
       - name: Build docs
         run: bun run build
         working-directory: ./packages/website
-        env:
-          # Pass the base path from Pages configuration
-          BASE_PATH: ${{ steps.pages.outputs.base_path }}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4

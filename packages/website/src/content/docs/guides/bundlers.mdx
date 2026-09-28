@@ -42,7 +42,7 @@ Production builds (Rollup) need no setting; this only affects `vite dev` and `vi
 
 ## Astro
 
-Vite turns a bundle's font URLs into public asset URLs only in client code. On the server it leaves `new URL('./font.ttf', import.meta.url)` as it stands, and that evaluates to a `file://` path on the build machine. The [`tegaki/astro`](/tegaki/frameworks/astro/) component renders on the server and passes that bundle to the browser, which refuses to load a local file: the handwriting still draws, but in a fallback font's widths. The Tegaki integration makes Vite emit the fonts and resolve their URLs on the server as well:
+Vite turns a bundle's font URLs into public asset URLs only in client code. On the server it leaves `new URL('./font.ttf', import.meta.url)` as it stands, and that evaluates to a `file://` path on the build machine. The [`tegaki/astro`](/frameworks/astro/) component renders on the server and passes that bundle to the browser, which refuses to load a local file: the handwriting still draws, but in a fallback font's widths. The Tegaki integration makes Vite emit the fonts and resolve their URLs on the server as well:
 
 ```js
 // astro.config.mjs

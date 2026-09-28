@@ -68,7 +68,7 @@ export interface AgentPromptInput {
   };
   /** Glyph mode: the inspected glyph (and form, when not its default glyph) and its geometry-pipeline warnings. */
   glyph: { char: string; form?: string; warnings: string[] } | null;
-  /** Origin + base path of the site, e.g. `https://gkurt.com/tegaki`. */
+  /** Origin + base path of the site, e.g. `https://tegaki.ink`. */
   siteUrl: string;
 }
 

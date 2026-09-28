@@ -3,7 +3,7 @@ import { DEFAULT_GEOMETRY_OPTIONS, DEFAULT_OPTIONS, KOREAN_CHARS } from 'tegaki-
 import { URL_DEFAULTS, type UrlState } from '../url-state.ts';
 import { type AgentPromptInput, agentUrls, buildAgentPrompt, nonDefaultFlags } from './agent-prompt.ts';
 
-const SITE = 'https://example.com/tegaki';
+const SITE = 'https://example.com';
 
 function input(overrides: Partial<AgentPromptInput> = {}, settings: Partial<UrlState> = {}): AgentPromptInput {
   return {

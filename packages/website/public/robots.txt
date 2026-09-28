@@ -1,10 +1,8 @@
-# Tegaki, a handwriting animation library. Crawlers read robots.txt only at the
-# domain root (https://gkurt.com/robots.txt); this copy states the same policy
-# for the /tegaki/ docs, for tools that look here.
+# Tegaki, a handwriting animation library.
 User-agent: *
 Content-Signal: search=yes, ai-input=yes, ai-train=yes
 Allow: /
 
-Sitemap: https://gkurt.com/tegaki/sitemap.xml
+Sitemap: https://tegaki.ink/sitemap.xml
 
-# For AI agents and LLMs: https://gkurt.com/tegaki/llms.txt
+# For AI agents and LLMs: https://tegaki.ink/llms.txt

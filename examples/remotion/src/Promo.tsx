@@ -326,7 +326,7 @@ const Outro: React.FC<{ duration: number }> = ({ duration }) => {
             opacity: urlOpacity,
           }}
         >
-          gkurt.com/tegaki
+          tegaki.ink
         </div>
       </div>
     </SceneBox>

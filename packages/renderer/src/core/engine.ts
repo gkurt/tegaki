@@ -217,7 +217,7 @@ export function warnFontLoadFailure(
   console.warn(
     `[tegaki] Failed to load font "${face.family}" from ${face.url}. ` +
       `Rendering with the fallback font's layout, so spacing may be off.${viteHint} ` +
-      'See https://gkurt.com/tegaki/guides/bundlers/',
+      'See https://tegaki.ink/guides/bundlers/',
     error,
   );
 }
