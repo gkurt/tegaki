@@ -1,27 +1,16 @@
 import { type Box, createPlugin, expandBox, type InkStyle, type PathPoint, type StrokePath, unionBoxes } from 'tegaki/core';
-import {
-  ACESFilmicToneMapping,
-  BufferAttribute,
+import type {
   BufferGeometry,
-  Color,
   DirectionalLight,
   Group,
-  type Material,
+  Material,
   Mesh,
-  MeshPhysicalMaterial,
-  MeshStandardMaterial,
-  NeutralToneMapping,
-  PCFShadowMap,
   PerspectiveCamera,
-  PlaneGeometry,
-  PMREMGenerator,
   Scene,
   ShadowMaterial,
-  SRGBColorSpace,
-  type Texture,
+  Texture,
   WebGLRenderer,
 } from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { canvasColor } from './color.ts';
 
 /**
@@ -55,12 +44,66 @@ export interface TubeMesh {
   indices: Uint32Array;
 }
 
+const EMPTY_MESH: TubeMesh = {
+  positions: new Float32Array(),
+  normals: new Float32Array(),
+  colors: new Float32Array(),
+  indices: new Uint32Array(),
+};
+
+/** The point `reach` px along `pts` from the `i`th, forward (`dir` 1) or back, or the end it runs into first. */
+function walk(pts: readonly PathPoint[], i: number, dir: 1 | -1, reach: number): PathPoint {
+  let j = i;
+  let run = 0;
+  while (j + dir >= 0 && j + dir < pts.length && run < reach) {
+    run += Math.hypot(pts[j + dir]!.x - pts[j]!.x, pts[j + dir]!.y - pts[j]!.y);
+    j += dir;
+  }
+  return pts[j]!;
+}
+
+/** How far a stroke turns at its `i`th point, seen a radius either side: the cosine of the turn, 1 straight on, -1 doubling back. */
+function turnAt(pts: readonly PathPoint[], i: number, r: number): number {
+  const p = pts[i]!;
+  const a = walk(pts, i, -1, r);
+  const b = walk(pts, i, 1, r);
+  const ax = p.x - a.x;
+  const ay = p.y - a.y;
+  const bx = b.x - p.x;
+  const by = b.y - p.y;
+  const len = Math.hypot(ax, ay) * Math.hypot(bx, by);
+  return len > 0 ? (ax * bx + ay * by) / len : 1;
+}
+
+/**
+ * Whether the `i`th point is a hairline inside a much fatter point's tube —
+ * where a pen lifting off tapers to nothing, or a tip it flicks out to and
+ * back. Painted, those are the finest of lines; as a tube, a spike.
+ */
+function buried(pts: readonly PathPoint[], i: number, radius: (p: PathPoint) => number, reach: number): boolean {
+  const p = pts[i]!;
+  const r = radius(p);
+  for (const dir of [-1, 1]) {
+    let run = 0;
+    for (let j = i + dir; j >= 0 && j < pts.length && run <= reach; j += dir) {
+      const q = pts[j]!;
+      run += Math.hypot(q.x - pts[j - dir]!.x, q.y - pts[j - dir]!.y);
+      if (r < 0.4 * radius(q) && Math.hypot(q.x - p.x, q.y - p.y) < radius(q)) return true;
+    }
+  }
+  return false;
+}
+
+/** A turn sharper than this (100°) is a corner: the tube ends there, rounded, and the next one starts — a ring can't turn it without folding. */
+const CORNER = Math.cos((100 * Math.PI) / 180);
+
 /**
  * A stroke's points as a tube, in 3D px about `origin` with y up and z off
  * the page: each point a ring (an ellipse `depth` as tall as it is wide,
  * standing on the page `lift` px up, plus the point's own {@link DEPTH_KEY}),
- * both ends rounded off, so a dot is a bead. `colorAt(t)` colors each ring
- * by its draw progress, as linear RGB. Triangles face outward.
+ * both ends rounded off, so a dot is a bead — and so is every sharp corner,
+ * where the stroke is two tubes meeting. `colorAt(t)` colors each ring by
+ * its draw progress, as linear RGB. Triangles face outward.
  */
 export function tubeMesh(
   points: readonly PathPoint[],
@@ -68,14 +111,83 @@ export function tubeMesh(
   shape: TubeShape,
   colorAt: (t: number) => readonly [number, number, number],
 ): TubeMesh {
+  // A tube can't follow a turn tighter than itself (a hook at a stroke's end
+  // would fold it over), so its points are a third of its radius apart at
+  // least, the stroke's end kept.
+  const radius = (p: PathPoint) => (p.width / 2) * shape.thickness;
+  let widest = 0;
+  for (const p of points) widest = Math.max(widest, radius(p));
+  const solid = points.filter((_, i) => !buried(points, i, radius, 2 * widest));
   const pts: PathPoint[] = [];
-  for (const p of points) {
+  solid.forEach((p, i) => {
     const last = pts[pts.length - 1];
-    if (last && Math.hypot(p.x - last.x, p.y - last.y) < 0.25) pts[pts.length - 1] = { ...p, t: p.t };
-    else pts.push(p);
+    const gap = last ? Math.hypot(p.x - last.x, p.y - last.y) : Infinity;
+    if (gap >= Math.max(0.25, radius(p) / 3)) pts.push(p);
+    else if (i === solid.length - 1 && gap > 0.25) {
+      if (pts.length > 1) pts[pts.length - 1] = p;
+      else pts.push(p);
+    }
+  });
+  if (pts.length === 0) return EMPTY_MESH;
+
+  // Split at the corners. Every point within a radius of one turns sharply
+  // (a pen doubling back reads as turning right round all along), so each
+  // run of them splits at its tip: the point farthest out from where the run
+  // comes in and goes out.
+  const pieces: PathPoint[][] = [];
+  let from = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    if (turnAt(pts, i, radius(pts[i]!)) >= CORNER) continue;
+    const first = i;
+    while (i + 1 < pts.length - 1 && turnAt(pts, i + 1, radius(pts[i + 1]!)) < CORNER) i++;
+    const mx = (pts[first - 1]!.x + pts[i + 1]!.x) / 2;
+    const my = (pts[first - 1]!.y + pts[i + 1]!.y) / 2;
+    let corner = first;
+    for (let k = first + 1; k <= i; k++) {
+      if (Math.hypot(pts[k]!.x - mx, pts[k]!.y - my) > Math.hypot(pts[corner]!.x - mx, pts[corner]!.y - my)) corner = k;
+    }
+    pieces.push(pts.slice(from, corner + 1));
+    from = corner;
   }
-  if (pts.length === 0)
-    return { positions: new Float32Array(), normals: new Float32Array(), colors: new Float32Array(), indices: new Uint32Array() };
+  pieces.push(pts.slice(from));
+  if (pieces.length === 1) return tubePiece(pts, origin, shape, colorAt);
+  return mergeMeshes(pieces.map((piece) => tubePiece(piece, origin, shape, colorAt)));
+}
+
+function mergeMeshes(meshes: readonly TubeMesh[]): TubeMesh {
+  let vertices = 0;
+  let triangles = 0;
+  for (const m of meshes) {
+    vertices += m.positions.length;
+    triangles += m.indices.length;
+  }
+  const out: TubeMesh = {
+    positions: new Float32Array(vertices),
+    normals: new Float32Array(vertices),
+    colors: new Float32Array(vertices),
+    indices: new Uint32Array(triangles),
+  };
+  let v = 0;
+  let i = 0;
+  for (const m of meshes) {
+    out.positions.set(m.positions, v);
+    out.normals.set(m.normals, v);
+    out.colors.set(m.colors, v);
+    for (let k = 0; k < m.indices.length; k++) out.indices[i + k] = m.indices[k]! + v / 3;
+    v += m.positions.length;
+    i += m.indices.length;
+  }
+  return out;
+}
+
+/** One tube, end to end, of points already spaced out. */
+function tubePiece(
+  pts: readonly PathPoint[],
+  origin: { x: number; y: number },
+  shape: TubeShape,
+  colorAt: (t: number) => readonly [number, number, number],
+): TubeMesh {
+  const radius = (p: PathPoint) => (p.width / 2) * shape.thickness;
 
   interface Ring {
     p: PathPoint;
@@ -89,9 +201,11 @@ export function tubeMesh(
   const rings: Ring[] = [];
   let tx = 1;
   let ty = 0;
+  // Each ring faces along the stroke about a radius either side of it, so
+  // wiggles smaller than the tube don't twist it.
   const tangents = pts.map((p, i) => {
-    const a = pts[Math.max(0, i - 1)]!;
-    const b = pts[Math.min(pts.length - 1, i + 1)]!;
+    const a = walk(pts, i, -1, radius(p));
+    const b = walk(pts, i, 1, radius(p));
     // y up: the page's y runs down.
     const dx = b.x - a.x;
     const dy = a.y - b.y;
@@ -284,54 +398,121 @@ export function fitCamera(camera: PerspectiveCamera, view: CanvasView, cam: Page
 }
 
 // ---------------------------------------------------------------------------
-// One WebGL renderer for every instance
+// One WebGL renderer for every instance, loaded while one is attached
 // ---------------------------------------------------------------------------
 
+type Three = typeof import('three');
+
 interface Gl {
+  three: Three;
   renderer: WebGLRenderer;
   environment: Texture;
 }
 
 // Browsers keep only a few WebGL contexts alive at once, so every instance —
 // every renderer on the page with the plugin on — draws with this one, each
-// its own scene, and copies the picture onto its own canvas.
+// its own scene, and copies the picture onto its own canvas. Three.js is
+// loaded when the first instance is attached (so a page doesn't carry it
+// until the plugin is on), and the context is given back when the last one
+// is detached. `undefined` while it loads; `null` without WebGL.
 let shared: Gl | null | undefined;
+let loading: Promise<void> | null = null;
+/** Instances attached to a renderer, across the page. */
+let attachedTotal = 0;
 
-function gl(): Gl | null {
-  if (shared !== undefined) return shared;
-  try {
-    const renderer = new WebGLRenderer({
-      canvas: document.createElement('canvas'),
-      alpha: true,
-      antialias: true,
-      premultipliedAlpha: true,
-    });
-    renderer.setPixelRatio(1);
-    renderer.setClearColor(0x000000, 0);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = PCFShadowMap;
-    renderer.outputColorSpace = SRGBColorSpace;
-    const pmrem = new PMREMGenerator(renderer);
-    const environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    pmrem.dispose();
-    shared = { renderer, environment };
-  } catch {
-    shared = null;
+function loadGl(): Promise<void> {
+  loading ??= Promise.all([import('three'), import('three/examples/jsm/environments/RoomEnvironment.js')]).then(
+    ([three, { RoomEnvironment }]) => {
+      // Detached while it loaded, nothing to make the context for; or a load
+      // started after that one (attached again meanwhile) made it first.
+      if (attachedTotal === 0 || shared !== undefined) return;
+      try {
+        const renderer = new three.WebGLRenderer({
+          canvas: document.createElement('canvas'),
+          alpha: true,
+          antialias: true,
+          premultipliedAlpha: true,
+        });
+        renderer.setPixelRatio(1);
+        renderer.setClearColor(0x000000, 0);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = three.PCFShadowMap;
+        renderer.outputColorSpace = three.SRGBColorSpace;
+        const pmrem = new three.PMREMGenerator(renderer);
+        const environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+        pmrem.dispose();
+        shared = { three, renderer, environment };
+      } catch {
+        shared = null;
+      }
+    },
+    () => {
+      shared = null;
+    },
+  );
+  return loading;
+}
+
+/** One instance fewer attached: the last gives the WebGL context back. */
+function releaseGl(): void {
+  if (--attachedTotal > 0) return;
+  if (shared) {
+    shared.environment.dispose();
+    shared.renderer.dispose();
+    shared.renderer.forceContextLoss();
   }
-  return shared;
+  shared = undefined;
+  loading = null;
 }
 
 // ---------------------------------------------------------------------------
 // The plugin
 // ---------------------------------------------------------------------------
 
-const MATERIALS = {
-  gloss: () => new MeshPhysicalMaterial({ vertexColors: true, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.08 }),
-  satin: () => new MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }),
-  metal: () => new MeshStandardMaterial({ vertexColors: true, metalness: 1, roughness: 0.26 }),
-  clay: () => new MeshStandardMaterial({ vertexColors: true, roughness: 1 }),
-};
-type MaterialName = keyof typeof MATERIALS;
+type MaterialName = 'gloss' | 'satin' | 'metal' | 'clay';
+
+function inkMaterial(three: Three, name: MaterialName): Material {
+  if (name === 'gloss')
+    return new three.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.08 });
+  if (name === 'metal') return new three.MeshStandardMaterial({ vertexColors: true, metalness: 1, roughness: 0.26 });
+  return new three.MeshStandardMaterial({ vertexColors: true, roughness: name === 'clay' ? 1 : 0.55 });
+}
+
+/** An instance's scene: the page it turns, the ink on it, the light and the floor its shadow falls on. */
+interface World {
+  scene: Scene;
+  camera: PerspectiveCamera;
+  page: Group;
+  content: Group;
+  sun: DirectionalLight;
+  floor: Mesh<BufferGeometry, ShadowMaterial>;
+  material: Material;
+}
+
+function makeWorld(three: Three, shadow: number, material: MaterialName): World {
+  const scene = new three.Scene();
+  const page = new three.Group();
+  const content = new three.Group();
+  const sun = new three.DirectionalLight(0xffffff, 1.6);
+  const floor = new three.Mesh(new three.PlaneGeometry(1, 1), new three.ShadowMaterial({ opacity: shadow }));
+  sun.castShadow = shadow > 0;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.0005;
+  sun.shadow.radius = 3;
+  sun.shadow.normalBias = 0.5;
+  floor.receiveShadow = true;
+  floor.visible = shadow > 0;
+  page.add(content, sun, sun.target, floor);
+  scene.add(page);
+  return { scene, camera: new three.PerspectiveCamera(), page, content, sun, floor, material: inkMaterial(three, material) };
+}
+
+function disposeWorld(world: World): void {
+  world.floor.geometry.dispose();
+  world.floor.material.dispose();
+  world.material.dispose();
+  world.sun.dispose();
+}
 
 const RAD = Math.PI / 180;
 /** Drawings in a sway, 30 a second: one swing there and back every 8 seconds. */
@@ -348,12 +529,15 @@ const SWAY_STEPS = 240;
  * gives the points a height off the page, on `PathPoint.data`, so the text
  * can ride a wave or an arch; the sway runs on `steps` (paint-only: the
  * strokes aren't placed again per step) with `idle` so it keeps swinging.
+ * `attach` loads Three.js and asks for a redraw once it's here, and what it
+ * returns gives the tubes, the scene and — with the last instance — the
+ * WebGL context back.
  */
 export const ink3dPlugin = createPlugin({
   name: 'ink3d',
   label: '3D ink',
   description:
-    'The ink as lit tubes in 3D on a page you can tilt and turn, rendered with Three.js inside the canvas. geometry (depth on point data) + paint + ink + steps.',
+    'The ink as lit tubes in 3D on a page you can tilt and turn, rendered with Three.js inside the canvas. geometry (depth on point data) + paint + ink + steps + attach (loads Three.js).',
   params: {
     tilt: {
       type: 'number',
@@ -469,23 +653,9 @@ export const ink3dPlugin = createPlugin({
     Arch: { surface: 'arch', rise: 1.2, tilt: 58, turn: 0, lift: 0.05 },
   },
   setup: ({ tilt, turn, sway, material, thickness, depth, lift, surface, rise, shadow, light, own, color }) => {
-    const scene = new Scene();
-    const camera = new PerspectiveCamera();
-    const page = new Group();
-    const content = new Group();
-    const sun = new DirectionalLight(0xffffff, 1.6);
-    const floor = new Mesh(new PlaneGeometry(1, 1), new ShadowMaterial({ opacity: shadow }));
-    sun.castShadow = shadow > 0;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.bias = -0.0005;
-    sun.shadow.radius = 3;
-    sun.shadow.normalBias = 0.5;
-    floor.receiveShadow = true;
-    floor.visible = shadow > 0;
-    page.add(content, sun, sun.target, floor);
-    scene.add(page);
-    const inkMaterial: Material = MATERIALS[material as MaterialName]();
-
+    // Renderers this instance is attached to, and its scene once Three.js is there.
+    let attachments = 0;
+    let world: World | null = null;
     // The tube of every finished stroke, by its path (the same object until
     // the layout changes), with the colors it was built in and the render it
     // was last drawn in.
@@ -493,9 +663,6 @@ export const ink3dPlugin = createPlugin({
     let renders = 0;
     // Each stroke's style, as `paint` saw it this frame.
     const styles = new Map<string, InkStyle>();
-    // No hook tells a plugin it's been dropped, so a dropped instance's tubes
-    // are let go of once it's collected — `styles` lives as long as its hooks.
-    finalizer.register(styles, tubes);
     let colorCtx: CanvasRenderingContext2D | null = null;
     const parsed = new Map<string, readonly [number, number, number]>();
     const shape: TubeShape = { thickness, depth, lift: 0, radial: 14, caps: 5 };
@@ -506,6 +673,14 @@ export const ink3dPlugin = createPlugin({
     });
     // The sway's extremes and the way there, for the box the canvas must hold.
     const turns = sway > 0 ? [-1, -0.5, 0, 0.5, 1].map((f) => ({ tilt: tilt * RAD, turn: (turn + sway * f) * RAD })) : [turnAt(0)];
+
+    /** Everything this instance made on the GPU, given back. */
+    const release = () => {
+      for (const { mesh } of tubes.values()) mesh.geometry.dispose();
+      tubes.clear();
+      if (world) disposeWorld(world);
+      world = null;
+    };
 
     /**
      * The page the strokes lie on: the pivot (the middle of all the ink, drawn
@@ -534,7 +709,8 @@ export const ink3dPlugin = createPlugin({
       let rgb = parsed.get(css);
       if (!rgb) {
         const c = (colorCtx && canvasColor(colorCtx, css)) ?? [0, 0, 0, 1];
-        const lin = new Color().setRGB(c[0] / 255, c[1] / 255, c[2] / 255, SRGBColorSpace);
+        const three = shared!.three;
+        const lin = new three.Color().setRGB(c[0] / 255, c[1] / 255, c[2] / 255, three.SRGBColorSpace);
         rgb = [lin.r, lin.g, lin.b];
         parsed.set(css, rgb);
       }
@@ -554,19 +730,30 @@ export const ink3dPlugin = createPlugin({
       origin: { x: number; y: number },
       colorAt: (t: number) => readonly [number, number, number],
     ) => {
+      const { three } = shared!;
       const m = tubeMesh(points, origin, shape, colorAt);
-      const geometry = new BufferGeometry();
-      geometry.setAttribute('position', new BufferAttribute(m.positions, 3));
-      geometry.setAttribute('normal', new BufferAttribute(m.normals, 3));
-      geometry.setAttribute('color', new BufferAttribute(m.colors, 3));
-      geometry.setIndex(new BufferAttribute(m.indices, 1));
-      const mesh = new Mesh(geometry, inkMaterial);
+      const geometry = new three.BufferGeometry();
+      geometry.setAttribute('position', new three.BufferAttribute(m.positions, 3));
+      geometry.setAttribute('normal', new three.BufferAttribute(m.normals, 3));
+      geometry.setAttribute('color', new three.BufferAttribute(m.colors, 3));
+      geometry.setIndex(new three.BufferAttribute(m.indices, 1));
+      const mesh = new three.Mesh(geometry, world!.material);
       mesh.castShadow = shadow > 0;
       return mesh;
     };
 
     return {
       steps: sway > 0 ? { count: SWAY_STEPS, fps: 30, idle: true, paintOnly: true } : undefined,
+      attach({ redraw }) {
+        attachments++;
+        attachedTotal++;
+        // The first frames come before Three.js does: draw again once it's here.
+        if (shared === undefined) void loadGl().then(redraw);
+        return () => {
+          if (--attachments === 0) release();
+          releaseGl();
+        };
+      },
       bounds: ({ strokes, fontSize }) => layout(strokes, fontSize)?.reach ?? null,
       geometry(path, g) {
         if (surface === 'flat' || rise === 0) return path;
@@ -580,14 +767,17 @@ export const ink3dPlugin = createPlugin({
         return path.map((p) => ({ ...p, data: { ...p.data, [DEPTH_KEY]: (p.data?.[DEPTH_KEY] ?? 0) + z(p.x) } }));
       },
       paint(s, next) {
-        // Without WebGL, the ink stays flat.
-        if (!gl()) return next(s);
+        // Without WebGL, or run without an engine (drawGlyph), the ink stays flat.
+        if (shared === null || attachments === 0) return next(s);
+        // Otherwise nothing flat: the ink hook draws it, once Three.js is here.
         styles.set(s.stroke.id, s.style);
       },
       ink({ ctx, frame, fontSize, color: ink, step }) {
-        const g = gl();
-        const page3d = g && layout(frame.strokes, fontSize);
+        const g = shared;
+        const page3d = g && attachments > 0 ? layout(frame.strokes, fontSize) : null;
         if (!g || !page3d) return;
+        world ??= makeWorld(g.three, shadow, material as MaterialName);
+        const { scene, camera, page, content, sun, floor } = world;
         const { cam } = page3d;
         colorCtx ??= document.createElement('canvas').getContext('2d');
         renders++;
@@ -653,19 +843,14 @@ export const ink3dPlugin = createPlugin({
         const region: Region = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
         fitCamera(camera, view, cam, region);
         const r = g.renderer;
-        r.toneMapping = material === 'metal' ? ACESFilmicToneMapping : NeutralToneMapping;
+        r.toneMapping = material === 'metal' ? g.three.ACESFilmicToneMapping : g.three.NeutralToneMapping;
         r.setSize(region.w, region.h, false);
         r.render(scene, camera);
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.drawImage(r.domElement, region.x, region.y);
         for (const mesh of fresh) mesh.geometry.dispose();
-        // Nothing left in the scene keeps the tubes, so the finalizer can let them go.
         content.clear();
       },
     };
   },
-});
-
-const finalizer = new FinalizationRegistry<Map<StrokePath, { mesh: Mesh }>>((tubes) => {
-  for (const { mesh } of tubes.values()) mesh.geometry.dispose();
 });
