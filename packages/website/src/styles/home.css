@@ -1215,6 +1215,16 @@ dd code {
     radial-gradient(ellipse at 70% 30%, rgb(255 255 255 / 0.7), transparent 60%), #f7f0e0;
 }
 
+/* A photo studio's paper sweep, lit from above, for letters blown up in 3D. */
+.plug-ink3d {
+  --fg: #2b2440;
+  grid-column: span 12;
+  min-height: 340px;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 18%, rgb(255 255 255 / 0.9), transparent 70%),
+    linear-gradient(to bottom, #efe9f6 0%, #f7f3fb 58%, #e6def0 100%);
+}
+
 /* A plugin's source, and what it draws. */
 .own {
   display: grid;

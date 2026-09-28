@@ -5,6 +5,7 @@ import { REPO_URL } from '../../site.ts';
 import { burnPlugin } from '../plugins/burn.ts';
 import { colorsPlugin } from '../plugins/colors.ts';
 import { foilPlugin } from '../plugins/foil.ts';
+import { ink3dPlugin } from '../plugins/ink3d.ts';
 import { neonPlugin } from '../plugins/neon.ts';
 import { paperPlugin } from '../plugins/paper.ts';
 import { penPlugin } from '../plugins/pen.ts';
@@ -180,6 +181,21 @@ const SHOWPIECES: Showpiece[] = [
     ],
     duration: 6.5,
     hold: 1.5,
+  },
+  {
+    id: 'ink3d',
+    title: '3D ink',
+    uses: [demo('colors'), demo('ink3d')],
+    font: 'Caveat',
+    text: 'Happy birthday!',
+    size: 'clamp(56px, 8vw, 124px)',
+    // Colors picks each letter's balloon; 3D ink blows it up with Three.js, loaded as the card attaches.
+    plugins: () => [
+      colorsPlugin({ palette: 'sunset', by: 'glyph' }),
+      ink3dPlugin({ ...ink3dPlugin.presets.Balloon, own: false, tilt: 16, turn: -14, sway: 10, lift: 0.22 }),
+    ],
+    duration: 3.6,
+    hold: 6,
   },
 ];
 
