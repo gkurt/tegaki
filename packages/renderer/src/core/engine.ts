@@ -50,6 +50,7 @@ import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
 import { effectPlugins } from './effectPlugins.ts';
 import {
+  type Attachment,
   allPluginSteps,
   outlineWith,
   type PluginSteps,
@@ -58,6 +59,7 @@ import {
   reshapeWith,
   shapeSteps,
   steppedPlugins,
+  syncAttachments,
   timingWith,
 } from './plugins.ts';
 import { buildChildren, buildRootProps, canvasBoxStyle, domCreateElement } from './render-elements.ts';
@@ -65,6 +67,7 @@ import { getShaperForBundle, registerShaper, settledShaperForBundle } from './sh
 import type {
   CreateElementFn,
   ReducedMotionProp,
+  TegakiAttachContext,
   TegakiEngineOptions,
   TegakiPaintContext,
   TegakiPlugin,
@@ -385,6 +388,10 @@ export class TegakiEngine {
   private _loopGapRemaining = 0;
   private _lastTs: number | null = null;
   private _rafId = 0;
+  /** The plugins attached to this engine (see `TegakiPlugin.attach`). */
+  private _attached = new Map<TegakiPlugin, Attachment>();
+  /** A redraw a plugin asked for, waiting for the next frame. */
+  private _redrawRafId = 0;
   private _prevCompleted = false;
   /** The OS `prefers-reduced-motion` setting — honoured only when `_reducedMotion` is `'user'`. */
   private _prefersReducedMotion = false;
@@ -986,6 +993,7 @@ export class TegakiEngine {
 
     if ('plugins' in options && (options.plugins ?? []) !== this._plugins) {
       this._plugins = options.plugins ?? [];
+      syncAttachments(this._attached, this._plugins, this._attachContext, this._reportPluginError);
       dirtyRender = true;
     }
 
@@ -1037,6 +1045,9 @@ export class TegakiEngine {
 
   destroy(): void {
     this._destroyed = true;
+    syncAttachments(this._attached, [], this._attachContext, this._reportPluginError);
+    if (this._redrawRafId) cancelAnimationFrame(this._redrawRafId);
+    this._redrawRafId = 0;
     this._stopLoop();
     this._updateIdleLoop();
     this._resizeObserver.disconnect();
@@ -2049,6 +2060,18 @@ export class TegakiEngine {
   }
 
   /** Report a plugin hook that threw — once per plugin and hook, not every frame. */
+  /** What an attached plugin's `attach` gets: a redraw that stops working once it's detached. */
+  private _attachContext = (attachment: Attachment): TegakiAttachContext => ({
+    redraw: () => {
+      if (!attachment.live || this._destroyed || this._redrawRafId) return;
+      this._redrawRafId = requestAnimationFrame(() => {
+        this._redrawRafId = 0;
+        // The playback loop draws every frame anyway.
+        if (!this._destroyed && !this._rafId) this._render();
+      });
+    },
+  });
+
   private _reportPluginError = (plugin: TegakiPlugin, hook: keyof TegakiPlugin, error: unknown): void => {
     const key = `${plugin.name}:${hook}`;
     if (this._pluginErrors.has(key)) return;

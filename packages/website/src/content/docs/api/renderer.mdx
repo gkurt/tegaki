@@ -206,6 +206,7 @@ A plugin is an object with a `name` and any of these hooks:
 | `bounds({ strokes, fontSize })` | when the layout changes | reserving room for what you paint outside the ink |
 | `outline(contour, ctx)` | once per glyph, with clip-to-text on | reshaping the letter shapes the ink is clipped to, in step with `geometry` |
 | `svg(svg)` | once per `toSVG` / `exportSVG` | what the plugin paints, in the exported SVG (see [In an exported SVG](#in-an-exported-svg-svg)) |
+| `attach({ redraw })` | when a renderer starts running the plugin; what it returns, when it stops | setting up and releasing what the plugin needs: a WebGL context, a worker, a library to load (see [Setting up and releasing](#setting-up-and-releasing-attach)) |
 | `steps: { count, fps, idle?, paintOnly? }` | not a hook: a setting | redrawing the ink a few ways in turn, over time (see [Drawings over time](#drawings-over-time-steps)) |
 
 The built-in [effects](#effects) are plugins too, and run first, so each hook of yours sees what they made: `geometry` gets the path after pressure width, taper and wobble, and `paint` gets the gradient as its `style`.
@@ -401,6 +402,51 @@ const shadow: TegakiPlugin = {
 ```
 
 If the plugin has `bounds`, a cropped export takes them in. Only the first drawing of any [`steps`](#drawings-over-time-steps) is drawn.
+
+### Setting up and releasing: `attach`
+
+A plugin that holds something the page must give back (a WebGL context, a worker, an event listener) sets it up in `attach` and returns the function that releases it. The engine calls `attach` when it starts running the plugin: when the plugin appears in `plugins`, once per renderer. It calls what `attach` returned when it stops: when `plugins` no longer holds the plugin, or when the renderer unmounts. A plugin shared by two renderers is attached to each, so keep what it holds until the last one lets it go.
+
+The other hooks may run before an asynchronous setup is done. Paint nothing or a fallback until it is, then call `redraw()`: paused or controlled time draws only when something changes, so the frame on screen is drawn again for you. Several calls before the next animation frame draw once, and a detached plugin's `redraw` does nothing.
+
+```ts
+import type { TegakiPlugin } from 'tegaki/core';
+
+/** A stamp at every pen, from an image loaded while a renderer runs the plugin. */
+function stamped(url: string): TegakiPlugin {
+  let stamp: ImageBitmap | null = null;
+  // One per renderer the plugin is attached to.
+  const redraws = new Set<() => void>();
+  return {
+    name: 'stamped',
+    attach({ redraw }) {
+      redraws.add(redraw);
+      if (redraws.size === 1) {
+        fetch(url)
+          .then((r) => r.blob())
+          .then(createImageBitmap)
+          .then((image) => {
+            if (redraws.size === 0) return image.close();
+            stamp = image;
+            for (const r of redraws) r();
+          });
+      }
+      return () => {
+        redraws.delete(redraw);
+        if (redraws.size > 0) return;
+        stamp?.close();
+        stamp = null;
+      };
+    },
+    overlay({ ctx, frame }) {
+      if (!stamp) return;
+      for (const s of frame.active) ctx.drawImage(stamp, s.head.x - 12, s.head.y - 12, 24, 24);
+    },
+  };
+}
+```
+
+`drawGlyph()` draws one glyph without an engine, so it doesn't attach: set up what the plugin needs before calling it.
 
 ### Plugins with options: `createPlugin(definition)`
 

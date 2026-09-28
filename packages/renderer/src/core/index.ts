@@ -93,6 +93,7 @@ export type { ShaperFactory } from './shaper-registry.ts';
 export type {
   CreateElementFn,
   ReducedMotionProp,
+  TegakiAttachContext,
   TegakiBoundsContext,
   TegakiEngineOptions,
   TegakiGeometryContext,

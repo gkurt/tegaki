@@ -2,6 +2,7 @@ import { paintStroke } from '../lib/paintStroke.ts';
 import type { StrokePath } from '../lib/strokePath.ts';
 import type { PlacedStroke, StrokeGeometryContext } from '../lib/strokeTimeline.ts';
 import type {
+  TegakiAttachContext,
   TegakiGeometryContext,
   TegakiOutlineContext,
   TegakiPlugin,
@@ -15,6 +16,49 @@ import type {
 // is reported and skipped, so one broken plugin can't stop the render.
 
 export type PluginErrorHandler = (plugin: TegakiPlugin, hook: keyof TegakiPlugin, error: unknown) => void;
+
+/** A plugin an engine has attached: what its `attach` returned to release it, and whether it's still attached (what its `redraw` asks). */
+export interface Attachment {
+  detach: (() => void) | undefined;
+  live: boolean;
+}
+
+/**
+ * Bring `attached` in step with `plugins`: the attached plugins it no longer
+ * holds are detached (in the order they were attached), then the ones with
+ * an `attach` hook it holds that aren't yet are attached (in list order) — a
+ * plugin listed twice once. An empty list detaches every one, as a destroyed
+ * engine does. `context` makes each attachment its `attach` context.
+ */
+export function syncAttachments(
+  attached: Map<TegakiPlugin, Attachment>,
+  plugins: readonly TegakiPlugin[],
+  context: (attachment: Attachment) => TegakiAttachContext,
+  onError: PluginErrorHandler,
+): void {
+  const keep = new Set(plugins);
+  for (const [plugin, attachment] of attached) {
+    if (keep.has(plugin)) continue;
+    attached.delete(plugin);
+    attachment.live = false;
+    try {
+      attachment.detach?.();
+    } catch (error) {
+      onError(plugin, 'attach', error);
+    }
+  }
+  for (const plugin of plugins) {
+    if (!plugin.attach || attached.has(plugin)) continue;
+    const attachment: Attachment = { detach: undefined, live: true };
+    attached.set(plugin, attachment);
+    try {
+      const detach = plugin.attach(context(attachment));
+      if (typeof detach === 'function') attachment.detach = detach;
+    } catch (error) {
+      onError(plugin, 'attach', error);
+    }
+  }
+}
 
 /** Which drawing of each plugin with steps to show — plugins not in it show their first. */
 export type PluginSteps = ReadonlyMap<TegakiPlugin, number>;

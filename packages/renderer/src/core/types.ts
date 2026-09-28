@@ -277,6 +277,18 @@ export interface TegakiInkContext extends TegakiPluginContext {
   frame: TegakiFrame;
 }
 
+/** What an {@link TegakiPlugin.attach} hook gets from the engine it's attached to. */
+export interface TegakiAttachContext {
+  /**
+   * Draw the frame on screen again, at the same time — once something the
+   * plugin paints with is ready (a library loaded, an image decoded), since
+   * paused or controlled time draws only when something changes. Several
+   * calls before the next animation frame draw once; after the plugin is
+   * detached, it does nothing.
+   */
+  redraw(): void;
+}
+
 /** What a plugin sizes its {@link TegakiPlugin.bounds} from. */
 export interface TegakiBoundsContext {
   /** Every placed stroke, drawn yet or not. */
@@ -414,6 +426,17 @@ export interface TegakiPlugin {
    * and time. A plugin with `bounds` has the crop take them in.
    */
   svg?(svg: TegakiSvgContext): void;
+  /**
+   * Called when an engine starts running the plugin — it's in the `plugins`
+   * the engine was given — once per engine (a plugin two renderers share is
+   * attached to each). Set up what the plugin needs for as long as it runs —
+   * a WebGL context, a worker, a listener, a library or an image to load —
+   * and return the function that releases it: it's called when that engine
+   * stops running the plugin, because `plugins` no longer holds it or the
+   * engine is destroyed. Hooks may run before an asynchronous setup is done;
+   * call `ctx.redraw()` once it is. `drawGlyph()` doesn't attach.
+   */
+  attach?(ctx: TegakiAttachContext): undefined | void | (() => void);
   /**
    * Redraw the ink as a cycle of drawings over time. `geometry` and
    * `outline` are called once per drawing per layout, told which one in
