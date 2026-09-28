@@ -9,7 +9,7 @@ head:
 import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 import InstallTabs from '../../components/InstallTabs.astro';
 
-Tegaki generates stroke data from any font and renders beautiful handwriting animations. It works with React, Svelte, Vue, SolidJS, Astro, Web Components, or vanilla JavaScript.
+Tegaki generates stroke data from any font and renders it as handwriting animation. It works with React, Svelte, Vue, SolidJS, Astro, Web Components, or vanilla JavaScript.
 
 ## Installation
 
@@ -30,7 +30,7 @@ Tegaki generates stroke data from any font and renders beautiful handwriting ani
    Built-in fonts: `caveat`, `italianno`, `tangerine`, `parisienne` (Latin), `suez-one` (Hebrew), `amiri` (Arabic), `tillana` (Devanagari), `klee-one` (Japanese), `nanum-pen-script` (Korean), `lxgw-wenkai` (Simplified Chinese).
 
    :::caution[Bundle size]
-   Each bundle ships the full source TTF as a fallback for characters outside the generated subset. The browser downloads it only when the text contains such a character. The Latin bundles are small (~250–400 KB), but Hebrew/Arabic/Japanese reflect their source fonts' size — `klee-one` is around 7 MB because Klee One's font contains thousands of kanji. `lxgw-wenkai` is the exception: LXGW WenKai's full font is 25 MB, so it ships only the generated subset. Pick a font for the characters outside it with [`fallbackFont`](/tegaki/api/renderer/#fallbackfont). Bundles are only loaded when you `import` them, but if you need a tighter footprint use the [studio](/tegaki/studio/) to produce a custom bundle with just the characters you need.
+   Each bundle ships the full source TTF as a fallback for characters outside the generated subset. The browser downloads it only when the text contains such a character. The Latin bundles are small (~250–400 KB), but Hebrew/Arabic/Japanese reflect their source fonts' size: `klee-one` is around 7 MB because Klee One's font contains thousands of kanji. `lxgw-wenkai` is the exception: LXGW WenKai's full font is 25 MB, so it ships only the generated subset. Pick a font for the characters outside it with [`fallbackFont`](/tegaki/api/renderer/#fallbackfont). Bundles are only loaded when you `import` them, but if you need a tighter footprint use the [studio](/tegaki/studio/) to produce a custom bundle with just the characters you need.
    :::
 
    Want a different font? Use the [studio](/tegaki/studio/) to create stroke data for any Google Font, then import the downloaded bundle instead:
@@ -126,7 +126,7 @@ Tegaki generates stroke data from any font and renders beautiful handwriting ani
        />
        ```
 
-       Also add `tegaki()` from `tegaki/astro/integration` to your config's `integrations`, so the font loads on server-rendered pages — see the [Astro guide](/tegaki/frameworks/astro/).
+       Also add `tegaki()` from `tegaki/astro/integration` to your config's `integrations`, so the font loads on server-rendered pages. See the [Astro guide](/tegaki/frameworks/astro/).
      </TabItem>
      <TabItem label="Web Components">
        ```html
@@ -171,7 +171,7 @@ Tegaki generates stroke data from any font and renders beautiful handwriting ani
 
 ## What's next?
 
-- [Framework guides](/tegaki/frameworks/react/) — detailed usage for React, Svelte, Vue, SolidJS, Astro, Web Components, and vanilla JS
-- [Generating Font Data](/tegaki/guides/generating/) — learn about pipeline options and customization
-- [Rendering Animations](/tegaki/guides/rendering/) — control timing, effects, and rendering modes
-- [Studio](/tegaki/studio/) — try the interactive studio
+- [Framework guides](/tegaki/frameworks/react/): React, Svelte, Vue, SolidJS, Astro, Web Components, and vanilla JS
+- [Generating Font Data](/tegaki/guides/generating/): the pipelines and their options
+- [Rendering Animations](/tegaki/guides/rendering/): timing, effects, and time modes
+- [Studio](/tegaki/studio/): generate a bundle for any font in the browser

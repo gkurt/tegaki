@@ -32,7 +32,7 @@ export default defineConfig({
 
 After changing this, fully restart the dev server (and consider deleting `node_modules/.vite/deps/` once) so Vite re-runs its pre-bundling pass against the new config.
 
-Production builds (Rollup) handle Tegaki out of the box; this only affects `vite dev` and `vite preview`.
+Production builds (Rollup) need no setting; this only affects `vite dev` and `vite preview`.
 
 ### Symptoms this fixes
 
@@ -60,4 +60,4 @@ export default defineConfig({
 
 ## Other bundlers
 
-Webpack, Rollup, Parcel, and esbuild's standalone build mode all handle `with { type: 'url' }` natively in the configurations Tegaki has been tested with. Open an issue if you hit something — the maintainer welcomes bundler-specific notes here.
+Webpack, Rollup, Parcel, and esbuild's standalone build mode all handle `with { type: 'url' }` natively in the configurations Tegaki has been tested with. If one breaks, open an issue and its notes can go here.

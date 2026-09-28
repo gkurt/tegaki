@@ -59,7 +59,7 @@ export const neonPlugin = createPlugin({
   name: 'neon',
   label: 'Neon',
   description:
-    'Glass tubes of lit gas that sputter on and hum, the odd letter stuttering. steps + paint + ink + timing — best on a dark background.',
+    'Glass tubes of lit gas that sputter on and hum, the odd letter stuttering. Best on a dark background. steps + paint + ink + timing.',
   params: {
     color: { type: 'color', label: 'Color', default: '#ff2bd6' },
     tube: {

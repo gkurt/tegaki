@@ -48,7 +48,7 @@ export function sweepTimes(order: readonly number[], across: number, draw: numbe
 export const sweepPlugin = createPlugin({
   name: 'sweep',
   label: 'Sweep',
-  description: 'Strokes drawn by where they are — a wipe, a rise, from the middle, scattered or all at once. timing.',
+  description: 'Strokes drawn by where they are: a wipe, a rise, from the middle, scattered or all at once. timing.',
   params: {
     mode: {
       type: 'select',

@@ -88,7 +88,7 @@ export function TypeIt() {
             editable
             onTextChange={setText}
             spellCheck={false}
-            aria-label="Handwritten text — click to edit"
+            aria-label="Handwritten text, click to edit"
             time={{ mode: 'uncontrolled', speed: 2, catchUp: 0.8, playing: visible }}
             quality={QUALITY}
           />

@@ -8,11 +8,11 @@ head:
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-Tegaki can animate text as it arrives from a streaming API, making it perfect for AI chat interfaces.
+Tegaki can animate text as it arrives from a streaming API, as in an AI chat interface.
 
 ## Approach
 
-Use uncontrolled mode — it automatically tracks the growing text and animates new characters as they arrive. The `catchUp` option gently speeds up playback when there's buffered text, so the animation stays close to the stream without jumping.
+Use uncontrolled mode: it follows the growing text and writes new characters as they arrive. The `catchUp` option speeds up playback when there's buffered text, so the animation stays close to the stream without jumping.
 
 <Tabs>
   <TabItem label="React">
@@ -76,12 +76,12 @@ Use uncontrolled mode — it automatically tracks the growing text and animates 
   </TabItem>
 </Tabs>
 
-Update `text` as chunks arrive from your API — Tegaki handles the rest.
+Update `text` as chunks arrive from your API. The renderer writes whatever is new.
 
 ### Tuning
 
-- **`speed`** — base playback speed multiplier (default `1`). Higher values write faster.
-- **`catchUp`** — how aggressively the animation speeds up to close the gap when text arrives faster than it can be drawn. `0` disables catch-up (default). Typical range: `0.2` – `2`.
+- **`speed`**: base playback speed multiplier (default `1`). Higher values write faster.
+- **`catchUp`**: how hard the animation speeds up to close the gap when text arrives faster than it can be drawn. `0` disables catch-up (default). Typical range: `0.2` to `2`.
 
 ## Live demo
 

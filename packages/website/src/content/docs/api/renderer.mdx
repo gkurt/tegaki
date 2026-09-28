@@ -23,7 +23,7 @@ import { TegakiEngine } from 'tegaki/core';      // Vanilla JS
 
 ### `font`
 
-**Type:** `TegakiBundle` — **Required**
+**Type:** `TegakiBundle` · **Required**
 
 The font bundle containing glyph components, metrics, and timing data.
 
@@ -82,7 +82,7 @@ Effects configuration:
 }
 ```
 
-The effects are [plugins](#plugins) built into the renderer, run ahead of your own: pressure width, taper and wobble reshape each stroke (`geometry`), the gradients choose its paint (`paint`), and glow draws a blurred copy under each stroke (`paint`) — or, with clip-to-text on, lights up the clipped ink as a whole (`ink`), since the clip would cut the copies away.
+The effects are [plugins](#plugins) built into the renderer, run ahead of your own: pressure width, taper and wobble reshape each stroke (`geometry`), the gradients choose its paint (`paint`), and glow draws a blurred copy under each stroke (`paint`) or, with clip-to-text on, lights up the clipped ink as a whole (`ink`), since the clip would cut the copies away.
 
 ### `plugins`
 
@@ -112,7 +112,7 @@ Style object or string applied to the container. Use `fontSize` to control the t
 
 ### `shaper`
 
-**Type:** `boolean` — default `true`
+**Type:** `boolean` · **Default:** `true`
 
 Whether this instance uses the globally-registered harfbuzz shaper. Set to `false` to opt one renderer out of shaping (e.g. side-by-side comparisons) without unregistering the shaper for the whole process. Has no effect when no shaper is registered. See [Text Shaping](/tegaki/guides/shaping/).
 
@@ -637,7 +637,7 @@ import { computeTimeline } from 'tegaki';
 const { totalDuration } = computeTimeline('Hello', bundle);
 ```
 
-Pass the same `timing` the renderer gets, and — when a shaper is registered — the shaper (`await createHarfbuzzShaper(bundle)` from `tegaki/shaper-harfbuzz`), so the duration matches what is drawn.
+Pass the same `timing` the renderer gets and, when a shaper is registered, the shaper (`await createHarfbuzzShaper(bundle)` from `tegaki/shaper-harfbuzz`), so the duration matches what is drawn.
 
 ### `strokeInstances(timeline, font)`
 

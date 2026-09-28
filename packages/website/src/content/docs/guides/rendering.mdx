@@ -75,12 +75,12 @@ Tegaki handles text layout, line wrapping, and animation playback. See the [fram
 
 ## Styling
 
-Tegaki reads its typography from the container's own CSS — set `font-size`,
+Tegaki reads its typography from the container's own CSS. Set `font-size`,
 `line-height`, `color`, and `letter-spacing` however you normally would (inline
 style, a class, a CSS variable) and the renderer picks them up, re-measuring
 when they change. `letter-spacing` is applied to the animated strokes just as
 the browser would space static text, so spacing, line wrapping, and the drawn
-glyphs stay in sync. `line-height: normal` gives the font's own line spacing —
+glyphs stay in sync. `line-height: normal` gives the font's own line spacing:
 it differs from font to font (Tangerine sets lines 1em apart, Amiri 1.76em) and
 is measured from the browser, so the strokes land where the text would. Most
 pages inherit a fixed `line-height` (Tailwind's base styles set 1.5), which is
@@ -104,10 +104,10 @@ time: { mode: 'uncontrolled', speed: 2, loop: true }
 ```
 
 Options:
-- **`speed`** — playback speed multiplier (default `1`)
-- **`loop`** — restart when animation completes (default `false`)
-- **`playing`** — pause/resume (default `true`)
-- **`catchUp`** — speed up when buffered text is ahead (for streaming)
+- **`speed`**: playback speed multiplier (default `1`)
+- **`loop`**: restart when animation completes (default `false`)
+- **`playing`**: pause/resume (default `true`)
+- **`catchUp`**: speed up when buffered text is ahead (for streaming)
 
 ### Controlled
 

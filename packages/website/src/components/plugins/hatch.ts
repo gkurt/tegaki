@@ -61,7 +61,7 @@ export function inkOutline(path: StrokePath): { x: number; y: number }[] | null 
 export const hatchPlugin = createPlugin({
   name: 'hatch',
   label: 'Hatching',
-  description: 'Each stroke filled with fine ruled lines — hatched or cross-hatched — like an engraving. paint — best with Clip to text.',
+  description: 'Each stroke filled with fine ruled lines, hatched or cross-hatched, like an engraving. Best with Clip to text. paint.',
   params: {
     spacing: {
       type: 'number',

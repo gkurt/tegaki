@@ -99,8 +99,8 @@ function App() {
 
 The handle exposes:
 
-- `ref.current.engine` — the `TegakiEngine` instance (or `null` before mount)
-- `ref.current.element` — the container `HTMLDivElement`
+- `ref.current.engine`: the `TegakiEngine` instance (or `null` before mount)
+- `ref.current.element`: the container `HTMLDivElement`
 
 ## Effects
 
@@ -127,7 +127,7 @@ The handle exposes:
 
 ## Streaming text
 
-Perfect for AI chat interfaces where text arrives incrementally:
+For AI chat interfaces, where text arrives a chunk at a time:
 
 ```tsx
 function StreamingMessage({ text }) {

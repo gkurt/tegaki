@@ -6,9 +6,9 @@ import { Hint, Section } from '../ui.tsx';
 import { DialScope, ToggleGroup } from './dial.tsx';
 
 const TIME_MODE_HINTS: Record<TimeMode, string> = {
-  controlled: 'The studio drives the time prop — play, pause and scrub from the transport bar.',
+  controlled: 'The studio drives the time prop: play, pause and scrub from the transport bar.',
   uncontrolled: 'The engine runs its own clock, as a page would use it by default.',
-  css: 'Progress comes from a CSS scroll timeline — scroll the bar under the canvas.',
+  css: 'Progress comes from a CSS scroll timeline. Scroll the bar under the canvas.',
 };
 
 const easingOptions = (defaultLabel: string) =>

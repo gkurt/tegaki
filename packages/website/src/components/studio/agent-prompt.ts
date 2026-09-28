@@ -21,7 +21,7 @@ const GOAL_TEXT: Record<AgentGoal, string> = {
     'Generate a Tegaki font bundle (stroke data + font) for this font that I can drop into the tegaki renderer, with settings that make it animate well. Check the result visually before handing it over.',
   optimize:
     'Improve how this font animates: strokes that cover all the ink with nothing doubled or missing, natural stroke order and direction, and pleasant timing. Try settings, compare the results visually, and tell me the settings (URL params and CLI flags) that work best.',
-  fix: 'Help me fix a problem with how this font is extracted, rendered or animated. Reproduce it, find the cause (settings or pipeline), and fix it — or tell me which settings avoid it.',
+  fix: 'Help me fix a problem with how this font is extracted, rendered or animated. Reproduce it, find the cause (settings or pipeline), and fix it, or tell me which settings avoid it.',
   plugin:
     "Write a plugin for Tegaki's renderer that does what I describe below: a `TegakiPlugin`, made with `createPlugin` from `tegaki/core` so its options are typed params a UI can build controls from, with presets worth trying. Use only the hooks it needs, draw its randomness from `random(key)` (not `Math.random`) so every frame and every load agree, and check the result visually in my project before handing it over.",
 };
@@ -124,7 +124,7 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
   if (note) out.push('', `In my words: ${note}`);
 
   out.push('', '## Font', '');
-  out.push(font?.fileName ? `- ${family} — a local file (\`${font.fileName}\`), not from Google Fonts` : `- ${family} (Google Fonts)`);
+  out.push(font?.fileName ? `- ${family}: a local file (\`${font.fileName}\`), not from Google Fonts` : `- ${family} (Google Fonts)`);
   if (font) {
     out.push(`- ${font.style} · ${font.unitsPerEm} units per em · ${font.lineCap} line caps`);
     out.push(`- OpenType features: ${font.features.length ? font.features.join(', ') : 'none'}`);
@@ -148,7 +148,7 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
     out.push('', `## Glyph I'm looking at: “${glyph.char}” (${codepoint(glyph.char)})`, '');
     if (glyph.form)
       out.push(
-        `Specifically its form \`${glyph.form}\` (a ligature or alternate the font substitutes in context — \`gv=<glyph id>\` in the studio URL).`,
+        `Specifically its form \`${glyph.form}\` (a ligature or alternate the font substitutes in context; \`gv=<glyph id>\` in the studio URL).`,
         '',
       );
     if (glyph.warnings.length) {
@@ -176,7 +176,7 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
     '- In /preview, wait for `body[data-tegaki-ready="true"]` before taking a screenshot. `tm=controlled&ct=<seconds>` pauses on a frame, a `ct` past the end shows the finished text, and `w=…&h=…` fix the canvas size in pixels. Change the text with `t=`.',
   );
   out.push(
-    '- In /studio, `m=glyph&g=<char>` inspects one glyph (`gv=<glyph id>` one of its forms — alternates, ligatures). `gs=<stage>` (geometry) or `s=<stage>` (raster) picks the pipeline stage, from the outline through the extracted strokes to `final`, the glyph as the renderer draws it.',
+    '- In /studio, `m=glyph&g=<char>` inspects one glyph (`gv=<glyph id>` one of its forms: alternates, ligatures). `gs=<stage>` (geometry) or `s=<stage>` (raster) picks the pipeline stage, from the outline through the extracted strokes to `final`, the glyph as the renderer draws it.',
   );
   const chars = charset.allInFont
     ? ' -c true'
@@ -253,7 +253,7 @@ function buildPluginPrompt(input: AgentPromptInput): string {
 
   out.push('', "## What I'm starting from", '');
   if (bundled) {
-    out.push(`- Font: ${family}, shipped with the package — \`import bundle from 'tegaki/fonts/${bundled}'\``);
+    out.push(`- Font: ${family}, shipped with the package: \`import bundle from 'tegaki/fonts/${bundled}'\``);
   } else {
     const source = font?.fileName ? `a local file (\`${font.fileName}\`)` : 'from Google Fonts';
     out.push(
@@ -286,7 +286,7 @@ function buildPluginPrompt(input: AgentPromptInput): string {
     '- `geometry` / `outline` reshape the ink and the letters it is clipped to, once per layout; `timing` decides when each stroke draws; `paint` draws every stroke on every frame (pending ones too) through `next`, the rest of the chain; `ink` works on the finished ink; `underlay` / `overlay` draw under / over it; `onFrame` runs after each frame; `bounds` grows the canvas for what is drawn outside the ink; `steps` cycles a few drawings over time; `svg` puts what the plugin paints into an exported SVG.',
   );
   out.push(
-    `- Examples to start from: the studio's demo plugins (${DEMO_SOURCE} — brushes, textures, a pen at the tip, a typewriter, neon, stroke-order arrows, …) and the ones shipped in \`tegaki/core\` (${REPO}/tree/main/packages/renderer/src/plugins). Pick the closest one.`,
+    `- Examples to start from: the studio's demo plugins (${DEMO_SOURCE}: brushes, textures, a pen at the tip, a typewriter, neon, stroke-order arrows, …) and the ones shipped in \`tegaki/core\` (${REPO}/tree/main/packages/renderer/src/plugins). Pick the closest one.`,
   );
 
   out.push('', '## How to try it', '');

@@ -819,7 +819,7 @@ function CharsetPicker({
         <button
           type="button"
           onClick={() => onChange(rec.chars)}
-          title={`Recommended for ${fontInfo?.family} — ${rec.covered}/${rec.total} mapped`}
+          title={`Recommended for ${fontInfo?.family} (${rec.covered}/${rec.total} mapped)`}
           className="h-6 shrink-0 truncate rounded-md bg-amber-100 px-1.5 text-[11px] font-medium text-amber-700 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:hover:bg-amber-500/25"
         >
           ★ {rec.name}

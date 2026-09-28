@@ -153,7 +153,7 @@ export const joinsPlugin = createPlugin({
   name: 'joins',
   label: 'Cursive joins',
   description:
-    'The pen stays down between letters, drawing a hairline join from each to the next. timing + paint + svg — best in a script font.',
+    'The pen stays down between letters, drawing a hairline join from each to the next. Best in a script font. timing + paint + svg.',
   params: {
     reach: { type: 'number', label: 'Reach', description: 'The farthest a join runs, in ems.', default: 0.7, min: 0.1, max: 2, step: 0.05 },
     weight: {

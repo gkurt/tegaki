@@ -97,7 +97,7 @@ export const eraserPlugin = createPlugin({
   name: 'eraser',
   label: 'Eraser',
   description:
-    'An eraser rubs the text out stroke by stroke, leaving a ghost and crumbs — or writes it, then erases it. timing + paint + overlay.',
+    'An eraser rubs the text out stroke by stroke, leaving a ghost and crumbs, or writes it and then erases it. timing + paint + overlay.',
   params: {
     mode: {
       type: 'select',

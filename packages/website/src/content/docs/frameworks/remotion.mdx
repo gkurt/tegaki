@@ -52,15 +52,15 @@ export const RemotionRoot: React.FC = () => {
 };
 ```
 
-The `unit: 'progress'` option interprets `value` as a `0–1` ratio of the total animation duration, so you don't need to know Tegaki's computed timeline length — Remotion's composition length drives the mapping directly.
+The `unit: 'progress'` option interprets `value` as a `0–1` ratio of the total animation duration, so you don't need to know Tegaki's computed timeline length: Remotion's composition length drives the mapping directly.
 
 ## Loading fonts
 
-Tegaki's font bundles (`tegaki/fonts/caveat`, `tegaki/fonts/italianno`, etc.) handle font loading automatically: the engine creates a `FontFace` and registers it with `document.fonts`. Remotion waits on `document.fonts.ready` before capturing each frame, so **no `loadFont` call is required** — just pass the bundle to `TegakiRenderer`.
+Tegaki's font bundles (`tegaki/fonts/caveat`, `tegaki/fonts/italianno`, etc.) load their own font: the engine creates a `FontFace` and registers it with `document.fonts`. Remotion waits on `document.fonts.ready` before capturing each frame, so **no `loadFont` call is required**. Pass the bundle to `TegakiRenderer`.
 
 ## Webpack override for Remotion Studio
 
-If you render directly with `remotion render`, everything works out of the box. However, **Remotion Studio's dev server serves the TTF URL incorrectly** because the bundled path escapes the studio's root (webpack emits `../../node_modules/tegaki/fonts/caveat/caveat.ttf`, which the SPA catch-all intercepts and returns HTML).
+Rendering with `remotion render` needs no setup, but **Remotion Studio's dev server serves the TTF URL incorrectly** because the bundled path escapes the studio's root (webpack emits `../../node_modules/tegaki/fonts/caveat/caveat.ttf`, which the SPA catch-all intercepts and returns HTML).
 
 The fix is to tell webpack to inline `.ttf` files as data URLs. Add a `remotion.config.ts` at the root of your Remotion project:
 
@@ -95,7 +95,7 @@ This works in both the studio and in render/build mode. The bundled font is ~60�
 
 By default, `progress = frame / durationInFrames` spreads the handwriting animation across the entire composition. Two common variations:
 
-**Finish drawing before the end of the composition** — e.g. hold the finished text for the last second:
+**Finish drawing before the end of the composition**, e.g. to hold the finished text for the last second:
 
 ```tsx
 const { fps, durationInFrames } = useVideoConfig();
@@ -162,11 +162,11 @@ export const RemotionRoot: React.FC = () => (
 );
 ```
 
-Pass `computeTimeline` the same `timing` you give the renderer (as its third argument), or the durations won't match. The timeline's `entries` also give each character's start and duration, and [`strokeInstances`](/tegaki/api/renderer/#strokeinstancestimeline-font) each stroke's — for syncing sound effects or cuts to the pen.
+Pass `computeTimeline` the same `timing` you give the renderer (as its third argument), or the durations won't match. The timeline's `entries` also give each character's start and duration, and [`strokeInstances`](/tegaki/api/renderer/#strokeinstancestimeline-font) each stroke's, for syncing sound effects or cuts to the pen.
 
 ## Arabic, Devanagari and other complex scripts
 
-Shaping is opt-in. Fonts that need it (joining, ligatures, reordering — `amiri`, `tillana`, `atma`, `suez-one`) need the harfbuzz shaper registered once, and a composition sized from the **shaped** timeline, which can differ from the unshaped one by a third:
+Shaping is opt-in. Fonts that need it (joining, ligatures, reordering: `amiri`, `tillana`, `atma`, `suez-one`) need the harfbuzz shaper registered once, and a composition sized from the **shaped** timeline, which can differ from the unshaped one by a third:
 
 ```tsx
 import { computeTimeline, TegakiEngine } from 'tegaki';

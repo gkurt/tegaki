@@ -20,7 +20,7 @@ export const markdownUrl = (slug: string) => `${SITE_URL}${slug}.md`;
 
 export const STUDIO_URL = `${SITE_URL}studio/`;
 const STUDIO_SUMMARY =
-  'Tegaki Studio — a free handwriting animation generator in the browser: pick any Google Font or upload a .ttf/.otf, tune the strokes and timing, then export PNG, GIF, WebM, animated SVG, or a font bundle for your app.';
+  'Tegaki Studio, a free handwriting animation generator in the browser: pick any Google Font or upload a .ttf/.otf, tune the strokes and timing, then export PNG, GIF, WebM, animated SVG, or a font bundle for your app.';
 
 /** Docs in sidebar order; pages missing from the sidebar go last. */
 export function orderDocs(docs: DocPage[]): DocPage[] {
@@ -117,13 +117,13 @@ export function llmsFullTxt(docs: DocPage[]): string {
 /** /index.md — the home page as Markdown. */
 export function homeMarkdown(): string {
   return [
-    `# ${NAME} — handwriting animation library and generator for any font`,
+    `# ${NAME}: handwriting animation library and generator for any font`,
     '',
     `> ${TAGLINE}`,
     '',
     `Source: ${SITE_URL}`,
     '',
-    'Tegaki (手書き, Japanese for "handwriting") extracts the strokes of every glyph in a font — their order, direction and width — and draws them on a canvas over real, selectable text. Text is written stroke by stroke in the order a hand would write it, in any font — Latin, right-to-left, Indic and CJK scripts alike.',
+    'Tegaki (手書き, Japanese for "handwriting") extracts the strokes of every glyph in a font (their order, direction and width) and draws them on a canvas over real, selectable text. Text is written stroke by stroke in the order a hand would write it, in any font: Latin, right-to-left, Indic and CJK scripts alike.',
     '',
     '## Features',
     '',
@@ -205,7 +205,7 @@ export function skillMd(): string {
     '|---|---|---|',
     ...fonts,
     '',
-    `For any other font, open Tegaki Studio (${STUDIO_URL}), choose a Google Font or upload a .ttf/.otf, and use Download Bundle; import the downloaded \`bundle.ts\` in place of \`tegaki/fonts/…\`. Keep the text inside the bundle's character set — other characters show in the fallback font without animation.`,
+    `For any other font, open Tegaki Studio (${STUDIO_URL}), choose a Google Font or upload a .ttf/.otf, and use Download Bundle; import the downloaded \`bundle.ts\` in place of \`tegaki/fonts/…\`. Keep the text inside the bundle's character set; other characters show in the fallback font without animation.`,
     '',
     '## 3. Render it',
     '',

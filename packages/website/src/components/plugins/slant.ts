@@ -15,7 +15,7 @@ export function leanAbout(p: { x: number; y: number }, place: GlyphPlacement, sh
 export const slantPlugin = createPlugin({
   name: 'slant',
   label: 'Slant',
-  description: 'Every glyph leant over about its baseline — italic, or backhand. geometry + outline.',
+  description: 'Every glyph leant over about its baseline: italic, or backhand. geometry + outline.',
   params: {
     angle: {
       type: 'number',

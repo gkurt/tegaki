@@ -10,7 +10,7 @@ import InstallTabs from '../../../components/InstallTabs.astro';
 import LiveDemo from '../../../components/wc/LiveDemo.astro';
 import LiveDemoControlled from '../../../components/wc/LiveDemoControlled.astro';
 
-Tegaki provides a `<tegaki-renderer>` custom element that works in any browser — no framework required.
+Tegaki has a `<tegaki-renderer>` custom element that works in any browser, without a framework.
 
 ## Installation
 
@@ -33,11 +33,11 @@ registerTegakiElement();
 
 ## Using via CDN
 
-You can use Tegaki directly from a CDN without any build tools or package manager. This is the fastest way to get started — just add a `<script>` tag to any HTML page.
+You can use Tegaki directly from a CDN without any build tools or package manager. Add a `<script>` tag to any HTML page.
 
 ### esm.sh (recommended)
 
-[esm.sh](https://esm.sh) serves npm packages as ES modules and bundles dependencies automatically:
+[esm.sh](https://esm.sh) serves npm packages as ES modules, with their dependencies bundled:
 
 ```html
 <tegaki-renderer font="Caveat" text="Hello from a CDN!" loop style="font-size: 48px">
@@ -74,7 +74,7 @@ import caveat from 'https://esm.sh/tegaki@0.8.0/fonts/caveat';
 ```
 
 :::note
-`esm.run` is jsDelivr's ESM-specific domain. It resolves package exports and bundles dependencies automatically, just like esm.sh.
+`esm.run` is jsDelivr's ESM-specific domain. Like esm.sh, it resolves package exports and bundles dependencies.
 :::
 
 ### Import maps
@@ -132,7 +132,7 @@ This is also useful for loading custom font bundles generated with the [studio](
 
 ### Full standalone example
 
-Here's a complete HTML file you can save and open directly in a browser:
+A complete HTML file you can save and open in a browser:
 
 ```html
 <!DOCTYPE html>
@@ -166,7 +166,7 @@ Here's a complete HTML file you can save and open directly in a browser:
 
 <LiveDemo text="Hello World" />
 
-The element uses Shadow DOM internally. Style the host element with `font-size` and `color` as usual — the renderer inherits them.
+The element uses Shadow DOM internally. Style the host element with `font-size` and `color` as usual; the renderer inherits them.
 
 ## Text content
 

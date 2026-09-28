@@ -1,4 +1,4 @@
-# Tegaki — handwriting animation library. Crawlers read robots.txt only at the
+# Tegaki, a handwriting animation library. Crawlers read robots.txt only at the
 # domain root (https://gkurt.com/robots.txt); this copy states the same policy
 # for the /tegaki/ docs, for tools that look here.
 User-agent: *

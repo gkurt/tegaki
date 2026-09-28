@@ -154,7 +154,7 @@ export function ExportMenu({
             {charCount} chars · {pipeline}
           </span>
         </div>
-        <Hint>Stroke data + font as a .zip — import its bundle.ts into any Tegaki renderer.</Hint>
+        <Hint>Stroke data + font as a .zip. Import its bundle.ts into any Tegaki renderer.</Hint>
         <button
           type="button"
           disabled={!canDownloadBundle || bundleBusy}
@@ -229,12 +229,12 @@ export function ExportMenu({
               ? !animated
                 ? 'Static final artwork (every stroke fully drawn).'
                 : loop
-                  ? 'Loops via CSS keyframes — ideal for a README hero or embed.'
+                  ? 'Loops via CSS keyframes, for a README header or an embed.'
                   : 'Draws itself once on load, then stays complete.'
               : format === 'png'
                 ? 'Exports the current frame. Seek or pause first to pick the moment.'
                 : noAlpha
-                  ? 'White background — the format has no alpha.'
+                  ? 'White background, since the format has no alpha.'
                   : null}
             {format !== 'png' && (format !== 'svg' || animated) && speed !== 1 && ` Plays at ${speed}× (Motion › Speed).`}
           </Hint>

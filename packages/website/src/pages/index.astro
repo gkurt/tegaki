@@ -18,7 +18,7 @@ import logo from '../assets/tegaki.svg';
 import '../styles/home.css';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
-const title = 'Tegaki — Handwriting Animation Library & Generator for Any Font';
+const title = 'Tegaki: Handwriting Animation Library & Generator for Any Font';
 const description =
   'Open-source handwriting animation library and generator: any font, written stroke by stroke in natural stroke order. React, Svelte, Vue, Solid, Astro, Web Components, Remotion.';
 // FAQ answers are written in Markdown for llms.txt; here only their `code` spans need rendering.
@@ -45,7 +45,7 @@ const codeSpans = (text: string) => text.split('`').map((part, i) => ({ part, co
     <meta property="og:image" content={`${SITE_URL}tegaki-card.png`} />
     <meta property="og:image:width" content="1280" />
     <meta property="og:image:height" content="640" />
-    <meta property="og:image:alt" content="Tegaki — handwriting animation for any font" />
+    <meta property="og:image:alt" content="Tegaki, handwriting animation for any font" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@gkurttech" />
     <meta name="twitter:creator" content="@gkurttech" />
@@ -107,7 +107,7 @@ const codeSpans = (text: string) => text.split('`').map((part, i) => ({ part, co
 
     <main>
       <section class="hero">
-        <p class="eyebrow"><span lang="ja">手書き</span> <i>tegaki</i> — Japanese for “handwriting”</p>
+        <p class="eyebrow"><span lang="ja">手書き</span> <i>tegaki</i>, Japanese for “handwriting”</p>
         <h1 class="sr-only">Every font, written by hand: Tegaki, the handwriting animation library and generator.</h1>
         <Hero client:load />
         <p class="lede">
@@ -163,7 +163,7 @@ const codeSpans = (text: string) => text.split('`').map((part, i) => ({ part, co
           <span class="chapter-num">03</span>
           <h2><em>Plugins</em></h2>
           <p>
-            A plugin reshapes the strokes, retimes them, or paints them — under the ink, over it, or instead of it — and composes with the
+            A plugin reshapes the strokes, retimes them, or paints them (under the ink, over it, or instead of it) and composes with the
             others in order. The built-in effects (glow, wobble, gradients, taper) are plugins too. Each card below runs one or a few of the
             Studio's demo plugins, written against the same public API.
           </p>

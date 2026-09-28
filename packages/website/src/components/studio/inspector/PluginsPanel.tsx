@@ -40,16 +40,16 @@ export function PluginsPanel({ settings, set }: { settings: UrlState; set: SetSe
         Demos of the{' '}
         <a className="underline hover:text-zinc-900 dark:hover:text-zinc-100" href={DOCS} target="_blank" rel="noreferrer">
           plugin API
-        </a>{' '}
-        — each is made with <code>createPlugin</code>, and its controls come from the params it declares. They're here to show what plugins
+        </a>
+        . Each is made with <code>createPlugin</code>, and its controls come from the params it declares. They're here to show what plugins
         can do, so Export and Ask an agent leave them out.
       </Hint>
       <DialScope className="mt-2 flex flex-col gap-1.5">
         <div className="flex flex-col gap-1">
           <SeedControl value={settings.seed} onChange={(v) => set('seed', v)} />
           <Hint>
-            What Variation, Boil, Annotate's marks and the random demos — Brush, Ballpoint, Shaky hand, Graphite, Chalk, Spray, Burn, Neon,
-            Sparkles, shuffled Colors — draw by: the same seed draws the same every time.
+            The randomness in Variation, Boil, Annotate's marks and the random demos (Brush, Ballpoint, Shaky hand, Graphite, Chalk, Spray,
+            Burn, Neon, Sparkles, shuffled Colors). The same seed draws the same every time.
           </Hint>
         </div>
         {SHOWCASE_PLUGINS.map((p) => (
@@ -64,7 +64,7 @@ export function PluginsPanel({ settings, set }: { settings: UrlState; set: SetSe
         ))}
       </DialScope>
       <Hint>
-        Stroke order, Brush (try its Scroll preset) and Practice paper's 田字格 / 米字格 suit kanji best — try Klee One with 永 or 書. Neon,
+        Stroke order, Brush (try its Scroll preset) and Practice paper's 田字格 / 米字格 suit kanji best. Try Klee One with 永 or 書. Neon,
         Laser and Cathode tube shine on the dark theme. Sound starts once you've clicked on the page; Haptics buzz on Android phones.
       </Hint>
     </Section>

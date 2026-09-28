@@ -152,12 +152,12 @@ export function formStatus(form: GlyphForm, example: FormExample | undefined, di
   if (example) return `Drawn in “${example.text}”`;
   const off = form.features.filter((f) => disabledFeatures.includes(f));
   if (off.length) return `Not drawn: ${off.join(', ')} ${off.length > 1 ? 'are' : 'is'} off in Pipeline › Features`;
-  return 'Not drawn by the renderer — no text tried brings it up (the shaper may not apply this feature to this script)';
+  return 'Not drawn by the renderer: no text tried brings it up (the shaper may not apply this feature to this script)';
 }
 
 export function formTitle(form: GlyphForm): string {
   const features = form.features.length ? ` (${form.features.join(', ')}${form.contextual ? ', contextual' : ''})` : '';
-  return `${form.name} — ${KIND_LABEL[form.kind]}${features}`;
+  return `${form.name}: ${KIND_LABEL[form.kind]}${features}`;
 }
 
 /** The glyph's outline, drawn from the font (a form has no character of its own to type). */

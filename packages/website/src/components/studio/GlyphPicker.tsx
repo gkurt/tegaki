@@ -199,7 +199,7 @@ export function GlyphPicker({
               !inspectable
                 ? `“${pickedChar}” isn't in this font`
                 : formLabel
-                  ? `Drawn as ${formLabel} — inspect it in Glyphs`
+                  ? `Drawn as ${formLabel}. Inspect it in Glyphs`
                   : `Inspect “${pickedChar}” in Glyphs`
             }
             aria-label={formLabel ? `Inspect ${formLabel} of “${pickedChar}” in Glyphs` : `Inspect “${pickedChar}” in Glyphs`}

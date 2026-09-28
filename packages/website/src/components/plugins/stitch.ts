@@ -102,7 +102,7 @@ function linenTile(color: Rgba): HTMLCanvasElement {
 export const stitchPlugin = createPlugin({
   name: 'stitch',
   label: 'Embroidery',
-  description: 'Each stroke sewn in thread — satin, running or cross stitch — shaded and shadowed, on linen. paint + underlay.',
+  description: 'Each stroke sewn in thread (satin, running or cross stitch), shaded and shadowed, on linen. paint + underlay.',
   params: {
     style: {
       type: 'select',

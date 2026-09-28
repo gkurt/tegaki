@@ -29,7 +29,7 @@ export const hapticsPlugin = createPlugin({
   name: 'haptics',
   label: 'Haptics',
   description:
-    'A tap on the phone as each stroke touches down, a buzz while it writes. onFrame — Android only, once you’ve tapped the page.',
+    'A tap on the phone as each stroke touches down, a buzz while it writes. Android only, once you’ve tapped the page. onFrame.',
   params: {
     tap: { type: 'number', label: 'Tap', description: 'Milliseconds a touch-down buzzes for.', default: 14, min: 0, max: 60, step: 1 },
     buzz: { type: 'boolean', label: 'Buzz while writing', default: false },

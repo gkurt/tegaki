@@ -42,7 +42,7 @@ export function dimAt(seed: number, step: number, flicker: number): number {
 export const crtPlugin = createPlugin({
   name: 'crt',
   label: 'Cathode tube',
-  description: 'Phosphor glow, scanlines, color fringes, flicker, a rolling bar and signal tears. steps + ink — best on a dark background.',
+  description: 'Phosphor glow, scanlines, color fringes, flicker, a rolling bar and signal tears. Best on a dark background. steps + ink.',
   params: {
     phosphor: {
       type: 'select',

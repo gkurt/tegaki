@@ -444,13 +444,13 @@ export function PipelinePanel({
               <span className="text-amber-500">★</span> {rec.name} is recommended for {fontInfo.family} ({rec.covered}/{rec.total} mapped)
               {settings.chars !== rec.chars && (
                 <>
-                  {' — '}
+                  {'. '}
                   <button
                     type="button"
                     className="font-medium text-zinc-900 underline dark:text-zinc-100"
                     onClick={() => set('chars', rec.chars)}
                   >
-                    use it
+                    Use it
                   </button>
                 </>
               )}
