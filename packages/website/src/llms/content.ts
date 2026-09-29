@@ -1,7 +1,9 @@
 // The agent-facing text files: llms.txt (llmstxt.org), llms-full.txt, the home
-// page's index.md, sitemap.md and skill.md. Pure functions over the docs, so the
-// endpoints under src/pages only load the collection and hand it over.
+// page's index.md, sitemap.md, skill.md and the Agent Skills discovery index.
+// Pure functions over the docs, so the endpoints under src/pages only load the
+// collection and hand it over.
 
+import { createHash } from 'node:crypto';
 import { FRAMEWORKS } from '../components/home/snippets.ts';
 import { BUNDLED_FONTS, DOC_SLUGS, FAQ, NAME, NPM_URL, REPO_URL, SIDEBAR, SITE, SITE_URL, TAGLINE } from '../site.ts';
 import { mdxToMarkdown } from './mdx-to-markdown.ts';
@@ -180,12 +182,16 @@ export function sitemapMd(docs: DocPage[]): string {
  * /skill.md — an Agent Skill (agentskills.io format): what a coding agent needs
  * to add a handwriting animation to a project without reading the whole docs.
  */
+const SKILL_NAME = 'tegaki-handwriting-animation';
+const SKILL_DESCRIPTION =
+  'Add a handwriting animation (text that writes itself stroke by stroke) to a web app or video with the tegaki npm package. Use when asked for animated handwriting, a handwritten text effect, a signature or "writing" animation, or animating text streamed from an LLM, in React, Next.js, Svelte, Vue, Nuxt, SolidJS, Astro, Web Components, vanilla JS or Remotion.';
+
 export function skillMd(): string {
   const fonts = BUNDLED_FONTS.map(([id, font, script]) => `| \`tegaki/fonts/${id}\` | ${font} | ${script} |`);
   return [
     '---',
-    'name: tegaki-handwriting-animation',
-    'description: Add a handwriting animation (text that writes itself stroke by stroke) to a web app or video with the tegaki npm package. Use when asked for animated handwriting, a handwritten text effect, a signature or "writing" animation, or animating text streamed from an LLM, in React, Next.js, Svelte, Vue, Nuxt, SolidJS, Astro, Web Components, vanilla JS or Remotion.',
+    `name: ${SKILL_NAME}`,
+    `description: ${SKILL_DESCRIPTION}`,
     'license: MIT',
     '---',
     '',
@@ -238,4 +244,23 @@ export function skillMd(): string {
     `- Source: ${REPO_URL}`,
     '',
   ].join('\n');
+}
+
+/**
+ * /.well-known/agent-skills/index.json — Agent Skills discovery (agentskills.io):
+ * the skill above, with the sha256 of the bytes /skill.md serves.
+ */
+export function agentSkillsIndex() {
+  return {
+    $schema: 'https://schemas.agentskills.io/discovery/0.2.0/schema.json',
+    skills: [
+      {
+        name: SKILL_NAME,
+        type: 'skill-md',
+        description: SKILL_DESCRIPTION,
+        url: `${SITE_URL}skill.md`,
+        digest: `sha256:${createHash('sha256').update(skillMd(), 'utf8').digest('hex')}`,
+      },
+    ],
+  };
 }

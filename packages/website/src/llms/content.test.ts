@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { DOC_SLUGS, SITE_URL } from '../site.ts';
-import { type DocPage, docMarkdown, llmsFullTxt, llmsTxt, orderDocs, sitemapMd, skillMd } from './content.ts';
+import { agentSkillsIndex, type DocPage, docMarkdown, llmsFullTxt, llmsTxt, orderDocs, sitemapMd, skillMd } from './content.ts';
 
 const docs: DocPage[] = DOC_SLUGS.map((slug) => ({
   slug,
@@ -58,4 +58,13 @@ test('skill.md has the Agent Skills frontmatter', () => {
   expect(open).toBe('---');
   expect(name).toMatch(/^name: [a-z0-9-]+$/);
   expect(description?.startsWith('description: ')).toBe(true);
+});
+
+test('the Agent Skills index names skill.md by its URL and the digest of its bytes', async () => {
+  const [skill] = agentSkillsIndex().skills;
+  const bytes = new TextEncoder().encode(skillMd());
+  const hex = Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex');
+  expect(skill?.url).toBe(`${SITE_URL}skill.md`);
+  expect(skill?.digest).toBe(`sha256:${hex}`);
+  expect(skillMd()).toContain(`name: ${skill?.name}`);
 });

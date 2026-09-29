@@ -50,10 +50,18 @@ jobs:
         run: bun run build
         working-directory: ./packages/website
 
+      # What actions/upload-pages-artifact does, minus its `--exclude=".[^/]*"`,
+      # which would drop /.well-known/ (the Agent Skills index).
+      - name: Archive site
+        run: tar --dereference --hard-dereference --directory ./packages/website/dist -cvf "$RUNNER_TEMP/artifact.tar" .
+
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-artifact@v4
         with:
-          path: ./packages/website/dist
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
 
   deploy:
     environment:
