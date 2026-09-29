@@ -1,0 +1,59 @@
+---
+title: Command Line
+description: Generate an animated handwriting SVG from the terminal with `npx tegaki`, no code or build step, in any bundled font and script.
+---
+
+The `tegaki` package ships a command that writes text as an animated SVG file. It needs no project setup, so it suits READMEs, slides, static sites and scripts (including coding agents) that just want a file.
+
+```sh
+npx tegaki "Tegaki is awesome"
+```
+
+This writes `tegaki-is-awesome.svg` in the current directory: the text, self-drawing and repeating forever, in Caveat.
+
+## Examples
+
+```sh
+# Draw once and stay finished, in another bundled font
+npx tegaki "Hello World" --font tangerine --mode once -o hello.svg
+
+# Overlap the letters, bigger and darker
+npx tegaki "ABC" --stagger 80% --size 140 --color "#222"
+
+# Right-to-left text is shaped and joined correctly
+npx tegaki "مرحبا بالعالم" --font amiri --mode once
+
+# Effects use the same options as the renderer
+npx tegaki "Glow" --effects '{"glow":{"radius":10,"color":"#f0a"}}'
+
+# Write to stdout, for piping
+npx tegaki "Hi" -o - > hi.svg
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o, --output <file>` | `<slug>.svg` | Output path; `-` writes to stdout |
+| `-f, --font <name>` | `caveat` | A bundled font; `--list-fonts` prints them |
+| `-m, --mode <mode>` | `loop` | `loop` (repeats forever), `once` (draws itself once, then stays complete) or `static` (finished artwork, no animation) |
+| `--size <px>` | `100` | Font size |
+| `--color <css>` | `#1a1a1a` | Stroke color |
+| `--line-height <px>` | font metrics | Line height |
+| `--stagger <advance>` | off | Overlap glyphs instead of drawing them in sequence, e.g. `80%` or `0.3` (seconds) |
+| `--speed <x>` | `1` | Playback speed multiplier |
+| `--loop-hold <s>` | `1.5` | In `loop` mode, seconds the finished text holds before fading |
+| `--letter-spacing <px>` | `0` | Extra space after each character |
+| `--stroke-easing`, `--glyph-easing` | `ease-out-quad`, `linear` | Easing of each stroke and of each glyph's time |
+| `--pressure <0-1>` | `1` | Variable stroke width |
+| `--clip <scale>` / `--no-clip` | `1.2` | Clip strokes to the letter outlines |
+| `--effects <json>` | none | Renderer effects: glow, wobble, taper, strokeGradient, globalGradient |
+| `--seed <n>` | `0` | Seed for wobble and gradient variation |
+| `--no-shaping` | off | One glyph per character, no ligatures, joining or bidi |
+
+Run `npx tegaki --help` for the full list.
+
+## What it does not do
+
+- The text must fit the character set of the chosen font. See [Getting Started](/getting-started/) for the bundled fonts.
+- It writes SVG only. For PNG, GIF or WebM, use [Tegaki Studio](/studio/); for an app, use the [renderer](/api/renderer/).

@@ -74,6 +74,7 @@ export const SIDEBAR: SidebarGroup[] = [
       { label: 'Streaming Text', slug: 'guides/streaming' },
       { label: 'Text Shaping', slug: 'guides/shaping' },
       { label: 'Bundler Setup', slug: 'guides/bundlers' },
+      { label: 'Command Line', slug: 'guides/cli' },
     ],
   },
   {

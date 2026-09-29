@@ -57,6 +57,7 @@ function keyFacts(): string[] {
     `- Package: \`tegaki\` on npm (${NPM_URL}), MIT licensed. Install with \`npm i tegaki\`. Source: ${REPO_URL}`,
     `- Entry points: ${importPaths.join(', ')}. Remotion uses the React component directly.`,
     `- Bundled fonts (import from \`tegaki/fonts/<name>\`): ${BUNDLED_FONTS.map(([id, font, script]) => `\`${id}\` (${font}, ${script})`).join(', ')}.`,
+    '- CLI: `npx tegaki "Hello" -o hello.svg` writes an animated SVG (`--font`, `--mode loop|once|static`, `--size`, `--color`, `--effects`) with no project setup.',
     `- Any other font: generate a bundle in Tegaki Studio (${STUDIO_URL}) and import its \`bundle.ts\`.`,
     '- Rendering: a canvas draws the strokes over real DOM text, so the text stays selectable, copyable and readable by screen readers.',
     "- Time: uncontrolled (plays on its own, `speed`, `loop`, `catchUp` for streaming text), controlled (seconds or `'50%'`), or `'css'` (reads the `--tegaki-progress` custom property, e.g. from a scroll timeline).",
@@ -91,6 +92,7 @@ function whenToUse(): string[] {
     '- Reach for it when text should visibly write itself by hand: hero headlines, signatures, greetings, captions timed to speech, LLM output streamed as handwriting, or handwriting in a Remotion video.',
     '- Reach for it when the script matters: right-to-left, Indic and CJK text follow real stroke order, which a stroke-dashoffset trick on outlines cannot do.',
     `- To use it, run \`npm i tegaki\` and follow the [agent skill](${SITE_URL}skill.md); for a font that is not bundled, generate a bundle in [Tegaki Studio](${STUDIO_URL}).`,
+    '- Need only a file, not an app? `npx tegaki "text" -o out.svg` writes an animated SVG from the terminal.',
     '- Do not use it for body copy that must render instantly, or for a plain fade or typewriter reveal; a CSS animation is enough there.',
     '',
   ];
@@ -255,6 +257,7 @@ export function skillMd(): string {
     `- Rendering guide (timing, effects): ${markdownUrl('guides/rendering')}`,
     `- Streaming guide: ${markdownUrl('guides/streaming')}`,
     `- Bundler setup: ${markdownUrl('guides/bundlers')}`,
+    `- Command line (animated SVG files): ${markdownUrl('guides/cli')}`,
     `- Source: ${REPO_URL}`,
     '',
   ].join('\n');
