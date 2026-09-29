@@ -3,6 +3,16 @@ import { canvasColor, mix, type Rgba, rgba } from './color.ts';
 import { settle } from './settle.ts';
 
 const WHITE: Rgba = [255, 255, 255, 1];
+const BLACK: Rgba = [0, 0, 0, 1];
+
+/**
+ * The paper under `ink`, which it dries toward: white under dark ink, black
+ * under light ink (the dark theme's), so dry ink is always the fainter.
+ */
+export function paperUnder(ink: Rgba): Rgba {
+  const luma = (0.299 * ink[0] + 0.587 * ink[1] + 0.114 * ink[2]) / 255;
+  return luma > 0.5 ? BLACK : WHITE;
+}
 
 const smooth = (f: number) => f * f * (3 - 2 * f);
 
@@ -61,14 +71,14 @@ export function poolFactors(points: readonly PathPoint[], pool: number): number[
  * a trail of drying ink behind it. A `paint` plugin: it paints the stroke
  * in a color that changes along it with the time since the pen passed each
  * point (the frame's `time` against the stroke's `start` and `duration`), then the
- * sheen over the part still wet. Dry ink is mixed toward white, so it's
- * lighter on light paper. With `pool`, a `geometry` hook swells the ink
+ * sheen over the part still wet. Dry ink is mixed toward the paper
+ * ({@link paperUnder}), so it's fainter on light paper and dark alike. With `pool`, a `geometry` hook swells the ink
  * where the pen slows — touching down, lifting off, turning sharply.
  */
 export const wetPlugin = createPlugin({
   name: 'wet',
   label: 'Wet ink',
-  description: 'Fresh ink dark and glossy, drying lighter behind the pen. paint + timing.',
+  description: 'Fresh ink dark and glossy, drying fainter behind the pen. paint + timing.',
   params: {
     dry: { type: 'number', label: 'Drying time', description: 'Seconds the ink takes to dry.', default: 1.5, min: 0.2, max: 6, step: 0.1 },
     fade: { type: 'number', label: 'Fade', description: 'How much lighter dry ink is.', default: 0.3, min: 0, max: 0.8, step: 0.05 },
@@ -117,18 +127,21 @@ export const wetPlugin = createPlugin({
         // A gradient or a pattern: nothing to dry.
         if (!ink) return next(s);
         const age = (t: number) => inkAge(stroke, t, time);
-        // Opaque colors, mixed toward white: a stroke of varying width is painted a
+        // Opaque colors, mixed toward the paper: a stroke of varying width is painted a
         // segment at a time, and see-through segments would darken where they overlap.
-        const tone = (toward: number) => rgba(mix(ink, WHITE, toward));
+        const paper = paperUnder(ink);
+        const body = (toward: number) => mix(ink, paper, toward);
+        const tone = (toward: number) => rgba(body(toward));
         const dried = tone(fade);
         const allDry = age(stroke.progress) >= dry;
         // All dry: one flat color, painted in one go.
         next({ ...s, style: allDry ? dried : (t) => tone(fade * dryness(age(t), dry)) });
         // The gloss goes before the color settles: it's on the ink nearest the pen.
         if (sheen <= 0 || age(stroke.progress) >= dry / 2 || stroke.path.points.length < 2) return;
+        // Light on the ink as it is there, toward white on either paper.
         const gloss = (t: number) => {
           const wet = 1 - dryness(age(t), dry / 2);
-          return tone(fade * dryness(age(t), dry) + (1 - fade) * sheen * 0.6 * wet);
+          return rgba(mix(body(fade * dryness(age(t), dry)), WHITE, sheen * 0.6 * wet));
         };
         next({ ...s, style: gloss, stroke: { ...stroke, path: sheenOf(stroke.path), nibs: [] } });
       },

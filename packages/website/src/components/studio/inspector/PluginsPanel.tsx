@@ -1,15 +1,19 @@
 import { ColorControl, SelectControl, Slider, TextControl, Toggle } from 'dialkit';
+import { useState } from 'react';
 import type { TegakiPluginParam, TegakiPluginParams } from 'tegaki/core';
 import { normalizePluginIds, type PluginOptions, SHOWCASE_PLUGINS, type ShowcasePlugin } from '../../plugins/index.ts';
 import type { UrlState } from '../../url-state.ts';
-import { ResetIcon } from '../icons.tsx';
+import { ChevronDownIcon, GithubIcon, ResetIcon } from '../icons.tsx';
 import type { SetSetting } from '../state.ts';
 import { Chip, Hint, Section } from '../ui.tsx';
-import { DialScope, SeedControl, SmallIconButton, ToggleGroup } from './dial.tsx';
+import { DialScope, SeedControl, SmallIconButton, SmallIconLink, ToggleGroup } from './dial.tsx';
 
 const DOCS = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api/renderer/#plugins`;
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+const FEATURED = SHOWCASE_PLUGINS.filter((p) => p.featured);
+const MORE = SHOWCASE_PLUGINS.filter((p) => !p.featured);
 
 /**
  * Demo plugins: what the renderer's plugin API can draw, switched on over
@@ -26,6 +30,19 @@ export function PluginsPanel({ settings, set }: { settings: UrlState; set: SetSe
       return Object.keys(options).length > 0 ? { ...rest, [id]: options } : rest;
     });
   const modified = settings.plugins.length > 0 || Object.keys(settings.pluginOptions).length > 0;
+  const moreOn = MORE.filter((p) => on.has(p.id)).length;
+  // Open from the start when the URL switched one of them on, so it isn't hidden.
+  const [showMore, setShowMore] = useState(moreOn > 0);
+  const controls = (p: ShowcasePlugin) => (
+    <PluginControls
+      key={p.id}
+      plugin={p}
+      enabled={on.has(p.id)}
+      options={settings.pluginOptions[p.id] ?? {}}
+      onToggle={(v) => toggle(p.id, v)}
+      onOptions={(o) => setOptions(p.id, o)}
+    />
+  );
 
   return (
     <Section
@@ -52,27 +69,30 @@ export function PluginsPanel({ settings, set }: { settings: UrlState; set: SetSe
             Burn, Neon, Sparkles, shuffled Colors). The same seed draws the same every time.
           </Hint>
         </div>
-        {SHOWCASE_PLUGINS.map((p) => (
-          <PluginControls
-            key={p.id}
-            plugin={p}
-            enabled={on.has(p.id)}
-            options={settings.pluginOptions[p.id] ?? {}}
-            onToggle={(v) => toggle(p.id, v)}
-            onOptions={(o) => setOptions(p.id, o)}
-          />
-        ))}
+        {FEATURED.map(controls)}
+        <button
+          type="button"
+          className="mt-1 flex h-8 items-center gap-1.5 border-t border-zinc-200 pt-1 text-left text-[12px] font-medium text-zinc-500 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+          onClick={() => setShowMore(!showMore)}
+          aria-expanded={showMore}
+        >
+          <ChevronDownIcon size={12} className={showMore ? 'transition-transform' : '-rotate-90 transition-transform'} />
+          <span className="flex-1">More plugins ({MORE.length})</span>
+          {moreOn > 0 && <span className="text-indigo-500">{moreOn} on</span>}
+        </button>
+        {showMore && MORE.map(controls)}
       </DialScope>
       <Hint>
         Stroke order, Brush (try its Scroll preset) and Practice paper's 田字格 / 米字格 suit kanji best. Try Klee One with 永 or 書. Neon,
-        Laser and Cathode tube shine on the dark theme. Sound starts once you've clicked on the page; Haptics buzz on Android phones.
+        Laser and Cathode tube (the last two under More) shine on the dark theme. Sound starts once you've clicked on the page; Haptics buzz
+        on Android phones.
       </Hint>
     </Section>
   );
 }
 
 function PluginControls({
-  plugin: { factory },
+  plugin: { factory, source },
   enabled,
   options,
   onToggle,
@@ -99,11 +119,16 @@ function PluginControls({
       checked={enabled}
       onChange={onToggle}
       trailing={
-        enabled && changed ? (
-          <SmallIconButton label={`Reset ${factory.label}`} onClick={() => onOptions({})}>
-            <ResetIcon size={12} />
-          </SmallIconButton>
-        ) : undefined
+        <>
+          {enabled && changed && (
+            <SmallIconButton label={`Reset ${factory.label}`} onClick={() => onOptions({})}>
+              <ResetIcon size={12} />
+            </SmallIconButton>
+          )}
+          <SmallIconLink label={`${factory.label} source on GitHub`} href={source}>
+            <GithubIcon size={12} />
+          </SmallIconLink>
+        </>
       }
     >
       {hasParams && (

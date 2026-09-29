@@ -1,7 +1,9 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
 import { clearance, type PlacedStroke, type StrokeFrame, StrokePath, type TegakiFrame } from 'tegaki/core';
 import { PerspectiveCamera, Vector3 } from 'three';
+import { REPO_URL } from '../../site.ts';
 import { skipPieces } from './ballpoint.ts';
 import { bristles, brushWidth, splashes } from './brush.ts';
 import { burnColor, puffAt, puffs } from './burn.ts';
@@ -39,7 +41,7 @@ import { stitches } from './stitch.ts';
 import { layoutGuides } from './stroke-order.ts';
 import { sweepOrder, sweepTimes } from './sweep.ts';
 import { keyTimes, punch, strikeOf, typedGlyphs } from './typewriter.ts';
-import { dryness, inkAge, poolFactors } from './wet.ts';
+import { dryness, inkAge, paperUnder, poolFactors } from './wet.ts';
 
 /** A straight stroke from (x0, y) to (x1, y), `width` px wide. */
 const line = (x0: number, x1: number, y: number, width = 8) =>
@@ -162,10 +164,15 @@ describe('echo', () => {
     expect(lagged(0.4, 0)).toBe(0.4);
   });
 
-  test('the defaults lay a lead and a follow, the follow narrower and halfway behind the lead to the ink', () => {
+  test('the defaults lay a lead and a follow at the ink width, the follow halfway behind the lead to the ink', () => {
     const [lead, follow] = echoPasses(echoPlugin.defaults);
-    expect(lead).toEqual({ color: '#ffd166', width: 2.6, lag: 0 });
-    expect(follow!.color).toBe('#ef476f');
+    expect(lead).toEqual({ color: '#ffd166', width: 1, lag: 0 });
+    expect(follow).toEqual({ color: '#ef476f', width: 1, lag: 0.4 });
+  });
+
+  test('a halo spreads the lead widest and the follow between it and the ink', () => {
+    const [lead, follow] = echoPasses(echoPlugin.resolve(echoPlugin.presets.Halo));
+    expect(lead!.width).toBe(2.6);
     expect(follow!.width).toBeGreaterThan(1);
     expect(follow!.width).toBeLessThan(lead!.width);
     expect(follow!.lag).toBeCloseTo(0.18);
@@ -239,8 +246,17 @@ describe('showcase', () => {
     }
   });
 
+  test("every plugin's source link points at its file in the repo", () => {
+    const root = new URL('../../../../../', import.meta.url);
+    for (const { id, source } of SHOWCASE_PLUGINS) {
+      const path = source.replace(`${REPO_URL}/blob/main/`, '');
+      expect(path, id).not.toBe(source);
+      expect(existsSync(new URL(path, root)), `${id}: ${path}`).toBe(true);
+    }
+  });
+
   test('options state keeps known plugins with something changed, as their params take it', () => {
-    expect(normalizePluginOptions({ brush: { bristles: 100, core: 0.45 }, echo: { lag: 0.36 }, nope: { x: 1 } })).toEqual({
+    expect(normalizePluginOptions({ brush: { bristles: 100, core: 0.45 }, echo: { lag: 0.8 }, nope: { x: 1 } })).toEqual({
       brush: { bristles: 40 },
     });
     expect(normalizePluginOptions('brush')).toEqual({});
@@ -358,6 +374,12 @@ describe('wet ink', () => {
     expect(dryness(0, 1.5)).toBe(0);
     expect(dryness(0.75, 1.5)).toBeCloseTo(0.5);
     expect(dryness(5, 1.5)).toBe(1);
+  });
+
+  test("ink dries toward the paper: white under dark ink, black under the dark theme's light ink", () => {
+    expect(paperUnder([20, 20, 30, 1])).toEqual([255, 255, 255, 1]);
+    expect(paperUnder([40, 80, 220, 1])).toEqual([255, 255, 255, 1]);
+    expect(paperUnder([240, 240, 240, 1])).toEqual([0, 0, 0, 1]);
   });
 });
 

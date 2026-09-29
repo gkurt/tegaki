@@ -17,13 +17,35 @@ export function parseCanvasColor(color: string): Rgba | null {
   return null;
 }
 
+let probe: CanvasRenderingContext2D | null = null;
+const probed = new Map<string, Rgba>();
+
+/**
+ * A color the canvas writes back as it was given — `oklch(…)`, `color(…)`,
+ * Tailwind's palette — as sRGB numbers: painted on a pixel and read back.
+ */
+function probeColor(color: string): Rgba {
+  let out = probed.get(color);
+  if (out) return out;
+  probe ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
+  probe.canvas.width = probe.canvas.height = 1;
+  probe.fillStyle = color;
+  probe.fillRect(0, 0, 1, 1);
+  const [r, g, b, a] = probe.getImageData(0, 0, 1, 1).data;
+  out = [r!, g!, b!, a! / 255];
+  if (probed.size > 256) probed.clear();
+  probed.set(color, out);
+  return out;
+}
+
 /** Any CSS color as numbers, read back through the canvas (which knows every CSS color). */
 export function canvasColor(ctx: CanvasRenderingContext2D, color: string): Rgba | null {
   const was = ctx.fillStyle;
   ctx.fillStyle = color;
-  const out = typeof ctx.fillStyle === 'string' ? parseCanvasColor(ctx.fillStyle) : null;
+  const style = ctx.fillStyle;
   ctx.fillStyle = was;
-  return out;
+  if (typeof style !== 'string') return null;
+  return parseCanvasColor(style) ?? probeColor(style);
 }
 
 export const rgba = ([r, g, b, a]: Rgba) => `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, a)).toFixed(3)})`;

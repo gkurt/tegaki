@@ -87,6 +87,9 @@ export function ColorStops({ colors, onChange }: { colors: string[]; onChange: (
   );
 }
 
+const SMALL_ICON =
+  'inline-flex size-7 shrink-0 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 disabled:pointer-events-none disabled:opacity-30 dark:hover:bg-zinc-800 dark:hover:text-zinc-100';
+
 export function SmallIconButton({
   label,
   onClick,
@@ -99,16 +102,18 @@ export function SmallIconButton({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 disabled:pointer-events-none disabled:opacity-30 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-    >
+    <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick} className={SMALL_ICON}>
       {children}
     </button>
+  );
+}
+
+/** A {@link SmallIconButton} that opens a link in a new tab. */
+export function SmallIconLink({ label, href, children }: { label: string; href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" title={label} aria-label={label} className={SMALL_ICON}>
+      {children}
+    </a>
   );
 }
 

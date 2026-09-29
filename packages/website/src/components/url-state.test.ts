@@ -218,7 +218,7 @@ describe('demo plugins', () => {
   });
 
   test('po reads each plugin’s options as its params take them, dropping unknown plugins, keys and defaults', () => {
-    const po = JSON.stringify({ echo: { spread: 9, lag: 0.36, bogus: 1 }, pen: { barrel: 'plaid' }, nope: { a: 1 } });
+    const po = JSON.stringify({ echo: { spread: 9, lag: 0.8, bogus: 1 }, pen: { barrel: 'plaid' }, nope: { a: 1 } });
     expect(parseUrlState(`?pg=echo,pen&po=${encodeURIComponent(po)}`).pluginOptions).toEqual({ echo: { spread: 5 } });
   });
 

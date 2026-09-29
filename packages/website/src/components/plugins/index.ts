@@ -14,6 +14,7 @@ import {
   textPathPlugin,
   variationPlugin,
 } from 'tegaki/core';
+import { REPO_URL } from '../../site.ts';
 import { ballpointPlugin } from './ballpoint.ts';
 import { bleedPlugin } from './bleed.ts';
 import { brushPlugin } from './brush.ts';
@@ -57,7 +58,16 @@ export interface ShowcasePlugin {
   id: string;
   /** Makes it, and says what it can be set to (label, description, params, presets). */
   factory: TegakiPluginFactory;
+  /** Its source on GitHub. */
+  source: string;
+  /** One of the few the Plugins tab lists first; the rest are under More. */
+  featured?: boolean;
 }
+
+/** A demo plugin's source, from its file in components/plugins. */
+const demo = (file: string) => `${REPO_URL}/blob/main/packages/website/src/components/plugins/${file}.ts`;
+/** A plugin shipped in `tegaki/core`, from its file in the renderer's plugins. */
+const core = (file: string) => `${REPO_URL}/blob/main/packages/renderer/src/plugins/${file}.ts`;
 
 // Listed in the order they run, which is the order that matters: geometry
 // first, so the painters get the reshaped strokes (a glyph leaned and shaken
@@ -79,48 +89,48 @@ export interface ShowcasePlugin {
 // it, and the screen shake last, moving everything drawn before it.
 export const SHOWCASE_PLUGINS: readonly ShowcasePlugin[] = [
   // Shipped in tegaki/core, not demos: Variation, Boil, Text on a path, Captions and Annotate.
-  { id: 'vary', factory: variationPlugin },
-  { id: 'boil', factory: boilPlugin },
-  { id: 'slant', factory: slantPlugin },
-  { id: 'shaky', factory: shakyPlugin },
-  { id: 'path', factory: textPathPlugin },
-  { id: 'nib', factory: nibPlugin },
-  { id: 'rhythm', factory: rhythmPlugin },
-  { id: 'joins', factory: joinsPlugin },
-  { id: 'caption', factory: captionPlugin },
-  { id: 'sweep', factory: sweepPlugin },
-  { id: 'paper', factory: paperPlugin },
-  { id: 'order', factory: strokeOrderPlugin },
-  { id: 'colors', factory: colorsPlugin },
-  { id: 'type', factory: typewriterPlugin },
-  { id: 'annotate', factory: annotatePlugin },
-  { id: 'erase', factory: eraserPlugin },
-  { id: 'segment', factory: segmentPlugin },
-  { id: 'ball', factory: ballpointPlugin },
-  { id: 'graphite', factory: graphitePlugin },
-  { id: 'wet', factory: wetPlugin },
-  { id: 'marker', factory: markerPlugin },
-  { id: 'spray', factory: sprayPlugin },
-  { id: 'hatch', factory: hatchPlugin },
-  { id: 'stitch', factory: stitchPlugin },
-  { id: 'chalk', factory: chalkPlugin },
-  { id: 'foil', factory: foilPlugin },
-  { id: 'burn', factory: burnPlugin },
-  { id: 'neon', factory: neonPlugin },
-  { id: 'laser', factory: laserPlugin },
-  { id: 'brush', factory: brushPlugin },
-  { id: 'echo', factory: echoPlugin },
-  { id: '3d', factory: ink3dPlugin },
-  { id: 'grain', factory: grainPlugin },
-  { id: 'bleed', factory: bleedPlugin },
-  { id: 'shadow', factory: shadowPlugin },
-  { id: 'crt', factory: crtPlugin },
-  { id: 'shake', factory: shakePlugin },
-  { id: 'sparkle', factory: sparklePlugin },
-  { id: 'karaoke', factory: karaokePlugin },
-  { id: 'pen', factory: penPlugin },
-  { id: 'sound', factory: soundPlugin },
-  { id: 'haptics', factory: hapticsPlugin },
+  { id: 'vary', factory: variationPlugin, source: core('variation'), featured: true },
+  { id: 'boil', factory: boilPlugin, source: core('boil'), featured: true },
+  { id: 'slant', factory: slantPlugin, source: demo('slant') },
+  { id: 'shaky', factory: shakyPlugin, source: demo('shaky') },
+  { id: 'path', factory: textPathPlugin, source: core('textPath'), featured: true },
+  { id: 'nib', factory: nibPlugin, source: demo('nib') },
+  { id: 'rhythm', factory: rhythmPlugin, source: demo('rhythm') },
+  { id: 'joins', factory: joinsPlugin, source: demo('joins') },
+  { id: 'caption', factory: captionPlugin, source: core('caption') },
+  { id: 'sweep', factory: sweepPlugin, source: demo('sweep') },
+  { id: 'paper', factory: paperPlugin, source: demo('paper'), featured: true },
+  { id: 'order', factory: strokeOrderPlugin, source: demo('stroke-order'), featured: true },
+  { id: 'colors', factory: colorsPlugin, source: demo('colors'), featured: true },
+  { id: 'type', factory: typewriterPlugin, source: demo('typewriter'), featured: true },
+  { id: 'annotate', factory: annotatePlugin, source: core('annotate'), featured: true },
+  { id: 'erase', factory: eraserPlugin, source: demo('eraser') },
+  { id: 'segment', factory: segmentPlugin, source: demo('segment') },
+  { id: 'ball', factory: ballpointPlugin, source: demo('ballpoint') },
+  { id: 'graphite', factory: graphitePlugin, source: demo('graphite') },
+  { id: 'wet', factory: wetPlugin, source: demo('wet'), featured: true },
+  { id: 'marker', factory: markerPlugin, source: demo('marker') },
+  { id: 'spray', factory: sprayPlugin, source: demo('spray') },
+  { id: 'hatch', factory: hatchPlugin, source: demo('hatch') },
+  { id: 'stitch', factory: stitchPlugin, source: demo('stitch') },
+  { id: 'chalk', factory: chalkPlugin, source: demo('chalk') },
+  { id: 'foil', factory: foilPlugin, source: demo('foil') },
+  { id: 'burn', factory: burnPlugin, source: demo('burn') },
+  { id: 'neon', factory: neonPlugin, source: demo('neon'), featured: true },
+  { id: 'laser', factory: laserPlugin, source: demo('laser') },
+  { id: 'brush', factory: brushPlugin, source: demo('brush'), featured: true },
+  { id: 'echo', factory: echoPlugin, source: demo('echo') },
+  { id: '3d', factory: ink3dPlugin, source: demo('ink3d') },
+  { id: 'grain', factory: grainPlugin, source: demo('grain') },
+  { id: 'bleed', factory: bleedPlugin, source: demo('bleed') },
+  { id: 'shadow', factory: shadowPlugin, source: demo('shadow') },
+  { id: 'crt', factory: crtPlugin, source: demo('crt') },
+  { id: 'shake', factory: shakePlugin, source: demo('shake') },
+  { id: 'sparkle', factory: sparklePlugin, source: demo('sparkle') },
+  { id: 'karaoke', factory: karaokePlugin, source: demo('karaoke') },
+  { id: 'pen', factory: penPlugin, source: demo('pen'), featured: true },
+  { id: 'sound', factory: soundPlugin, source: demo('sound') },
+  { id: 'haptics', factory: hapticsPlugin, source: demo('haptics') },
 ];
 
 /** Some of a plugin's options, by param key. */
