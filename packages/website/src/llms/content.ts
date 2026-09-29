@@ -84,6 +84,18 @@ function docLinks(docs: DocPage[], line: (doc: DocPage) => string): string[] {
   return out;
 }
 
+function whenToUse(): string[] {
+  return [
+    '## When to use Tegaki',
+    '',
+    '- Reach for it when text should visibly write itself by hand: hero headlines, signatures, greetings, captions timed to speech, LLM output streamed as handwriting, or handwriting in a Remotion video.',
+    '- Reach for it when the script matters: right-to-left, Indic and CJK text follow real stroke order, which a stroke-dashoffset trick on outlines cannot do.',
+    `- To use it, run \`npm i tegaki\` and follow the [agent skill](${SITE_URL}skill.md); for a font that is not bundled, generate a bundle in [Tegaki Studio](${STUDIO_URL}).`,
+    '- Do not use it for body copy that must render instantly, or for a plain fade or typewriter reveal; a CSS animation is enough there.',
+    '',
+  ];
+}
+
 /** /llms.txt — what Tegaki is, how to use it, and where every doc lives (as Markdown). */
 export function llmsTxt(docs: DocPage[]): string {
   return [
@@ -95,6 +107,7 @@ export function llmsTxt(docs: DocPage[]): string {
     '',
     ...keyFacts(),
     '',
+    ...whenToUse(),
     '## Quick start (React)',
     '',
     ...quickStart(),
@@ -199,6 +212,7 @@ export function skillMd(): string {
     '',
     `${TAGLINE} Docs: ${SITE_URL} · Full docs as Markdown: ${SITE_URL}llms-full.txt`,
     '',
+    ...whenToUse(),
     '## 1. Install',
     '',
     '```sh',

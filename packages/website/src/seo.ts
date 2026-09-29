@@ -47,6 +47,10 @@ const organization = {
   logo: { '@type': 'ImageObject', url: LOGO_IMAGE, width: 180, height: 180 },
   description: TAGLINE,
   founder: { '@id': ids.author },
+  contactPoint: [
+    { '@type': 'ContactPoint', contactType: 'technical support', url: `${REPO_URL}/issues`, availableLanguage: 'en' },
+    { '@type': 'ContactPoint', contactType: 'customer support', url: `${SITE_URL}contact/`, availableLanguage: 'en' },
+  ],
   sameAs: [REPO_URL, NPM_URL, TWITTER_URL],
 };
 
