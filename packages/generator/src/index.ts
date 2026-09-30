@@ -111,6 +111,14 @@ export {
   type ReferenceDataset,
   type ReferenceDatasetId,
 } from './stroke-order/datasets.ts';
+export {
+  createDrawnDataset,
+  createDrawnDatasetProvider,
+  DRAWN_DATASET_FORMAT,
+  DRAWN_UNITS_PER_EM,
+  type DrawnDataset,
+  parseDrawnDataset,
+} from './stroke-order/drawn.ts';
 export { createHangulProvider, decomposeHangul, HANGUL_LICENSE } from './stroke-order/hangul.ts';
 export {
   createHersheyGreekProvider,

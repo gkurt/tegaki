@@ -116,6 +116,13 @@ describe('createReferenceSet', () => {
     expect(await collectReferences('あ', set)).toEqual([]);
   });
 
+  test('a drawn dataset orders the characters it has on its own; the rest keep the built-in datasets', async () => {
+    const set = createReferenceSet(han, 'ja', undefined, [named('my hand', 'a'), named('their hand', 'a')]);
+    expect((await collectReferences('a', set)).map((r) => r.source)).toEqual(['my hand', 'their hand']);
+    expect((await collectReferences('b', set)).map((r) => r.source)).toContain('hershey-simplex');
+    expect((await collectReferences('中', set)).map((r) => r.source)).toEqual(['kanjivg']);
+  });
+
   test("'zh' takes Make Me a Hanzi for shared hanzi and still finds kana in KanjiVG", async () => {
     const set = createReferenceSet(han, 'zh');
     expect((await collectReferences('中', set)).map((r) => r.source)).toEqual(['makemeahanzi']);

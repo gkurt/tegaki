@@ -289,6 +289,7 @@ export function Hint({ children }: { children: ReactNode }) {
 export function Chip({
   selected,
   onClick,
+  onDoubleClick,
   children,
   title,
   mono,
@@ -296,6 +297,7 @@ export function Chip({
 }: {
   selected?: boolean;
   onClick: () => void;
+  onDoubleClick?: () => void;
   children: ReactNode;
   title?: string;
   mono?: boolean;
@@ -308,6 +310,7 @@ export function Chip({
       disabled={disabled}
       aria-pressed={selected}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       className={cx(
         'h-6 rounded-md px-2 text-[11px] font-medium whitespace-nowrap transition-colors disabled:opacity-40',
         mono && 'font-mono',

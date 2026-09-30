@@ -29,6 +29,7 @@ import { enumerateFontChars } from '../font/parse.ts';
 import { initStraightSkeleton } from '../geometry/face-straight-skeleton.ts';
 import type { GeometryOptions } from '../geometry/types.ts';
 import { DEFAULT_GEOMETRY_OPTIONS } from '../geometry/types.ts';
+import { createDrawnDatasetProvider, parseDrawnDataset } from '../stroke-order/drawn.ts';
 import { createKanjiVGProvider } from '../stroke-order/kanjivg.ts';
 import { createKanjiVGFileLoader } from '../stroke-order/kanjivg-fetch.ts';
 import { createMakeMeAHanziProvider } from '../stroke-order/makemeahanzi.ts';
@@ -39,16 +40,39 @@ import { createReferenceSet } from '../stroke-order/providers.ts';
 // null` stops Padrone from ending it again with the default "Working...".
 const PROGRESS = { spinner: true, bar: true, time: true, eta: true, message: { success: null } } as const;
 
-/** Every stroke-order reference source, Han characters following `hanLocale` (see createReferenceSet). */
-const referenceProviders = (hanLocale: GeometryOptions['hanLocale'], datasets: GeometryOptions['referenceDatasets']) =>
-  createReferenceSet(
+/**
+ * Every stroke-order reference source, Han characters following `hanLocale`
+ * (see createReferenceSet), plus the hand-drawn datasets in `files`.
+ */
+async function referenceProviders(
+  hanLocale: GeometryOptions['hanLocale'],
+  datasets: GeometryOptions['referenceDatasets'],
+  files: readonly string[] = [],
+) {
+  const drawn = await Promise.all(
+    files.map(async (file) => {
+      try {
+        return createDrawnDatasetProvider(parseDrawnDataset(await Bun.file(file).text()));
+      } catch (e) {
+        throw new Error(`--reference-file ${file}: ${(e as Error).message}`);
+      }
+    }),
+  );
+  return createReferenceSet(
     {
       kanjiVG: createKanjiVGProvider(createKanjiVGFileLoader()),
       makeMeAHanzi: createMakeMeAHanziProvider(createMakeMeAHanziFileLoader()),
     },
     hanLocale,
     datasets,
+    drawn,
   );
+}
+
+const referenceFileArg = z
+  .array(z.string())
+  .default([])
+  .describe('Also consult this hand-drawn stroke-order dataset (a JSON file downloaded from the Studio); repeat for more');
 
 const fontFileArg = z
   .string()
@@ -96,10 +120,10 @@ export const tegakiProgram = createPadrone('tegaki')
         description:
           'Downloads a font (or reads --font-file), extracts glyph outlines, computes skeletons and stroke order, then writes a JSON file.',
       })
-      .arguments(generateArgsSchema, { positional: ['family'] })
+      .arguments(generateArgsSchema.extend({ referenceFile: referenceFileArg }), { positional: ['family'] })
       .action(async (args, ctx) => {
         const progress = ctx.context.progress;
-        const { family: familyArg, fontFile, fullFont, output, force, debug, chars, pipeline, ...pipelineOptions } = args;
+        const { family: familyArg, fontFile, fullFont, output, force, debug, chars, pipeline, referenceFile, ...pipelineOptions } = args;
 
         // chars: true → all glyphs in the font (skip &text= subsetting)
         // chars: false → DEFAULT_CHARS
@@ -160,7 +184,8 @@ export const tegakiProgram = createPadrone('tegaki')
           fullFontFileName,
           pipeline,
           geometryOptions: pickGeometryOptions(args),
-          strokeOrderProviders: pipeline === 'geometry' ? referenceProviders(args.hanLocale, args.referenceDatasets) : [],
+          strokeOrderProviders:
+            pipeline === 'geometry' ? await referenceProviders(args.hanLocale, args.referenceDatasets, referenceFile) : [],
           onProgress: (msg, p) => {
             if (p !== undefined) {
               progress?.update({ message: msg, progress: p });
@@ -212,6 +237,7 @@ export const tegakiProgram = createPadrone('tegaki')
             .default(DEFAULT_GEOMETRY_OPTIONS.hanLocale)
             .describe('Stroke-order convention for Han characters — `ja` (KanjiVG) or `zh` (Make Me a Hanzi, PRC order)'),
           referenceDatasets: geometryOptionsSchema.shape.referenceDatasets,
+          referenceFile: referenceFileArg,
           json: z.string().optional().describe('Write the full per-glyph report to this JSON file').meta({ flags: 'j' }),
           force: z.boolean().default(false).describe('Re-download font even if cached').meta({ flags: 'f' }),
         }),
@@ -219,14 +245,14 @@ export const tegakiProgram = createPadrone('tegaki')
       )
       .action(async (args, ctx) => {
         const progress = ctx.context.progress;
-        const { chars, hanLocale, referenceDatasets, json } = args;
+        const { chars, hanLocale, referenceDatasets, referenceFile, json } = args;
 
         progress?.update(args.fontFile ? `Reading font "${args.fontFile}"...` : 'Downloading font...');
         const { family, fontBuffer, extraFontBuffers } = await resolveFont(args, chars, 'Klee One');
         const fontInfo = await parseFont(fontBuffer, extraFontBuffers, family);
 
         await initStraightSkeleton();
-        const providers = referenceProviders(hanLocale, referenceDatasets);
+        const providers = await referenceProviders(hanLocale, referenceDatasets, referenceFile);
 
         const { summary, glyphs } = await runStrokeOrderReport(fontInfo, chars, providers, {
           onProgress: (done, total, char) => {
@@ -267,6 +293,7 @@ export const tegakiProgram = createPadrone('tegaki')
             .describe('Font units a pen may miss the ink by and still count as painting it')
             .meta({ flags: 't' }),
           worst: z.number().default(10).describe('How many of the worst glyphs to list'),
+          referenceFile: referenceFileArg,
           json: z.string().optional().describe('Write the full per-glyph report to this JSON file').meta({ flags: 'j' }),
           force: z.boolean().default(false).describe('Re-download font even if cached').meta({ flags: 'f' }),
         }),
@@ -283,7 +310,7 @@ export const tegakiProgram = createPadrone('tegaki')
         const geometryOptions = pickGeometryOptions(args);
         if (geometryOptions.extraction === 'partition' && geometryOptions.medialMethod === 'straight-skeleton')
           await initStraightSkeleton();
-        const providers = referenceProviders(geometryOptions.hanLocale, geometryOptions.referenceDatasets);
+        const providers = await referenceProviders(geometryOptions.hanLocale, geometryOptions.referenceDatasets, args.referenceFile);
 
         const { summary, glyphs } = await runCoverageReport(fontInfo, chars, providers, {
           geometryOptions,
@@ -323,6 +350,7 @@ export const tegakiProgram = createPadrone('tegaki')
             .meta({ flags: 'c' }),
           baseline: z.string().describe('Baseline JSON file to compare with (or write, with --update)').meta({ flags: 'b' }),
           update: z.boolean().default(false).describe('Write this run as the baseline instead of comparing with it').meta({ flags: 'u' }),
+          referenceFile: referenceFileArg,
           name: z.string().optional().describe("Heading for the comparison (default: the font's family)"),
           summary: z.string().optional().describe('Append the Markdown comparison to this file (default: $GITHUB_STEP_SUMMARY when set)'),
           force: z.boolean().default(false).describe('Re-download font even if cached').meta({ flags: 'f' }),
@@ -344,7 +372,7 @@ export const tegakiProgram = createPadrone('tegaki')
           fontInfo,
           family,
           chars,
-          referenceProviders(geometryOptions.hanLocale, geometryOptions.referenceDatasets),
+          await referenceProviders(geometryOptions.hanLocale, geometryOptions.referenceDatasets, args.referenceFile),
           {
             geometryOptions,
             onProgress: (done, total, char) => {

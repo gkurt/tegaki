@@ -34,6 +34,11 @@ export interface ReferenceGlyph {
   source: string;
   /** Attribution carried with the data (required by CC BY-SA etc.). */
   license: string;
+  /**
+   * Changes whenever the entry's strokes do — a hand-drawn dataset being
+   * edited — so a cache keyed by `source` can tell one version from the next.
+   */
+  revision?: string;
 }
 
 /** A source of per-character stroke-order reference data. */

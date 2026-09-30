@@ -36,9 +36,10 @@ import {
   type VariantComponent,
 } from 'tegaki-generator';
 import type { Pipeline } from './constants.ts';
+import { useDrawnDatasets } from './drawn-datasets.ts';
 import { fontCacheId } from './font-cache-id.ts';
 import { collectShapedGlyphs, type ShapedGlyphRef } from './shaped-glyphs.ts';
-import { strokeOrderProviders } from './stroke-order-providers.ts';
+import { referencesKey, strokeOrderProviders } from './stroke-order-providers.ts';
 
 TegakiEngine.registerShaper(harfbuzzShaper);
 
@@ -238,7 +239,10 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     () => JSON.stringify([fontCacheId(fontInfo), geometryOptions, options.bezierTolerance]),
     [fontInfo, geometryOptions, options.bezierTolerance],
   );
-  const geoWanted = `${geoKey}:${normalizedText}`;
+  // A drawing in a drawn dataset changes the references without changing the
+  // options: refetch them (each glyph's cache key names the drawing it used).
+  const drawnRevision = useDrawnDatasets().revision;
+  const geoWanted = `${geoKey}:${drawnRevision}:${normalizedText}`;
   const [geoGlyphs, setGeoGlyphs] = useState<{ key: string; data: TegakiBundle['glyphData'] } | null>(null);
   const prepareGeometry = useCallback(async () => {
     if (geometryOptions.extraction === 'partition' && geometryOptions.medialMethod === 'straight-skeleton') {
@@ -261,7 +265,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
             ? []
             : await collectReferences(char, strokeOrderProviders(geometryOptions)).catch(() => []);
         if (cancelled) return;
-        const cacheKey = `${char}:${geoKey}:${refs.map((r) => r.source).join('+') || 'noref'}`;
+        const cacheKey = `${char}:${geoKey}:${referencesKey(refs)}`;
         let res = geoCache.get(cacheKey);
         if (!res) {
           await yieldToBrowser();
@@ -271,12 +275,12 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
         }
         if (res) data[char] = toCompactGlyph(res);
       }
-      if (!cancelled) setGeoGlyphs({ key: `${geoKey}:${normalizedText}`, data });
+      if (!cancelled) setGeoGlyphs({ key: geoWanted, data });
     })();
     return () => {
       cancelled = true;
     };
-  }, [geometry, fontInfo, normalizedText, geoKey, geometryOptions, options.bezierTolerance, geoCache, prepareGeometry]);
+  }, [geometry, fontInfo, normalizedText, geoKey, geoWanted, geometryOptions, options.bezierTolerance, geoCache, prepareGeometry]);
 
   // Variant glyphs the renderer's shaper produces for the current text, keyed
   // the way the renderer looks them up: bare `"<gid>"` for primary-subset
@@ -317,11 +321,12 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
         options,
         geometry,
         geoKey,
+        drawnRevision,
         normalizedText,
         letterSpaced,
         closure,
       ]),
-    [fontUrl, extraFontUrls, enabledFeatures, fontInfo, options, geometry, geoKey, normalizedText, letterSpaced, closure],
+    [fontUrl, extraFontUrls, enabledFeatures, fontInfo, options, geometry, geoKey, drawnRevision, normalizedText, letterSpaced, closure],
   );
   useEffect(() => {
     if (!variantShaper) return;
@@ -365,11 +370,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
           const refs = letter === undefined ? [] : await referencesOf(letter);
           const components = ligature === undefined ? undefined : await ligatureComponents(fontInfo, subsetIdx, ligature, referencesOf);
           if (cancelled) return;
-          const sourcesKey = (reference: VariantComponent['reference']) =>
-            [reference ?? []]
-              .flat()
-              .map((r) => r.source)
-              .join('+') || 'noref';
+          const sourcesKey = (reference: VariantComponent['reference']) => referencesKey([reference ?? []].flat());
           const letterKey =
             letter !== undefined
               ? `:${letter}:${sourcesKey(refs)}`

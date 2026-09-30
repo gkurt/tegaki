@@ -64,13 +64,18 @@ export interface HanReferenceProviders {
  * ordered by `hanLocale` (KanjiVG also covers kana and print Latin, so it
  * stays in the chain for 'zh') behind the punctuation references, which stand
  * in for KanjiVG's directionless comma; then the Hershey faces, Letterpaths'
- * taught hands and composed Hangul as best-fit variants. Cheap to call: every
- * set shares the passed providers' caches and the in-memory ones.
+ * taught hands and composed Hangul as best-fit variants. Last, `drawn`:
+ * hand-drawn datasets (drawn.ts), which come first where they have a
+ * character — a drawing is the order someone asked for, so the built-in
+ * datasets aren't asked about it (several drawings of it compete as variants).
+ * Cheap to call: every set shares the passed providers' caches and the
+ * in-memory ones.
  */
 export function createReferenceSet(
   han: HanReferenceProviders,
   hanLocale: GeometryOptions['hanLocale'],
   datasets: readonly ReferenceDatasetId[] = DEFAULT_REFERENCE_DATASETS,
+  drawn: readonly StrokeOrderProvider[] = [],
 ): StrokeOrderProvider[] {
   const on = new Set(datasets);
   // Asking Make Me a Hanzi about anything else only costs a failed fetch.
@@ -80,7 +85,14 @@ export function createReferenceSet(
   );
   const first = [...(on.has('punctuation') ? [PUNCTUATION] : []), ...hanOrder];
   const variants = VARIANTS.flatMap(([id, providers]) => (on.has(id) ? providers : []));
-  return [...(first.length > 0 ? [firstMatchProvider(first)] : []), ...variants];
+  const builtIn = [...(first.length > 0 ? [firstMatchProvider(first)] : []), ...variants];
+  if (drawn.length === 0) return builtIn;
+  const drawnHas = async (char: string) => (await Promise.all(drawn.map((p) => p.get(char).catch(() => null)))).some((r) => r !== null);
+  const unlessDrawn = (provider: StrokeOrderProvider): StrokeOrderProvider => ({
+    name: provider.name,
+    get: async (char) => ((await drawnHas(char)) ? null : provider.get(char)),
+  });
+  return [...builtIn.map(unlessDrawn), ...drawn];
 }
 
 async function referencesFor(char: string, providers: StrokeOrderProvider[]): Promise<ReferenceGlyph[]> {

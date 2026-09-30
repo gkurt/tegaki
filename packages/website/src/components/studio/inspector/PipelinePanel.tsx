@@ -17,6 +17,7 @@ import { URL_DEFAULTS, type UrlState } from '../../url-state.ts';
 import type { CharsetInfo } from '../charsets.ts';
 import type { SetSetting } from '../state.ts';
 import { Chip, Hint, Section, Segmented } from '../ui.tsx';
+import { DrawnDatasets } from './DrawnDatasets.tsx';
 import { DialScope } from './dial.tsx';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
@@ -427,9 +428,12 @@ export function PipelinePanel({
               );
             })}
           </div>
+          <DrawnDatasets />
           <Hint>
             The stroke-order datasets consulted. Each one that has a character offers its strokes as a variant, and the one that fits the
-            font's ink best orders it; switch a hand off to keep it from winning.
+            font's ink best orders it; switch a hand off to keep it from winning. Draw your own in Glyphs › Reference: a drawing orders its
+            character ahead of the built-in datasets. Drawn datasets are kept in this browser — Download one to keep it, or to use it with{' '}
+            <code>tegaki generate --reference-file</code>.
           </Hint>
         </Section>
       )}
