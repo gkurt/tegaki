@@ -1,6 +1,6 @@
 {
   "name": "@tegaki/website",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "Documentation and demo website for Tegaki",

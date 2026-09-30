@@ -1,3 +1,13 @@
+## tegaki@1.0.1
+
+### Docs moved to tegaki.ink
+
+The docs moved to [tegaki.ink](https://tegaki.ink/). The package's `homepage` and the bundler-setup warning now link there.
+
+### Vue, Svelte, Solid and Astro components share `tegaki/core`
+
+The Vue, Nuxt, Svelte, Solid and Astro components now run on the same core as `tegaki/core`. These adapters ship as source, and they had been compiling a second copy of the engine from it. So plugins made with `tegaki/core`'s factories failed to typecheck in the `plugins` prop (`Type 'TegakiPlugin[]' is not assignable to type 'readonly TegakiPluginSpec[]'`), and a plugin or bundle registered through `tegaki/core` wasn't found by name in these components.
+
 ## tegaki@1.0.0
 
 ### Tegaki 1.0
