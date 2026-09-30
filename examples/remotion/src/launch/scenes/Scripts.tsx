@@ -2,7 +2,7 @@ import { AbsoluteFill, useCurrentFrame } from 'remotion';
 import { Rise } from '../components.tsx';
 import { type Bundle, FONTS } from '../fonts.ts';
 import { C, EASE, keys, MONO, ramp, SERIF } from '../theme.ts';
-import { SCENE, SCRIPTS as SCRIPTS_T } from '../timing.ts';
+import { SCRIPTS as SCRIPTS_T } from '../timing.ts';
 import { Write } from '../Write.tsx';
 
 interface Cell {
@@ -44,8 +44,6 @@ const GRID_H = 3 * CARD_H + 2 * GAP;
 const FOCUS = { row: 1, col: 1 };
 const HQ = { pixelRatio: 2 };
 
-const SCRIPTS_FRAMES = SCENE.scripts.frames;
-
 /** Hello in twelve hands: the camera pulls back from one card as the rest write in a ripple. */
 export const Scripts: React.FC = () => {
   const frame = useCurrentFrame();
@@ -54,10 +52,14 @@ export const Scripts: React.FC = () => {
   const fy = (FOCUS.row - 1) * (CARD_H + GAP);
   const pull = ramp(frame, 4, 70, EASE.inOut);
   const scale = 2.1 + (0.94 - 2.1) * pull;
-  const drift = keys(frame, [70, SCRIPTS_FRAMES], [0.94, 0.9], EASE.soft);
-  const s = frame > 70 ? drift : scale;
-  const tx = -fx * (1 - pull);
-  const ty = -fy * (1 - pull) - 40 * pull;
+  const drift = keys(frame, [70, SCRIPTS_T.whip[0]], [0.94, 0.9], EASE.soft);
+  // ...and at the end, back in through the card it started on, into black.
+  const whip = ramp(frame, SCRIPTS_T.whip[0], SCRIPTS_T.whip[1], EASE.inOut);
+  const s = (frame > 70 ? drift : scale) * (1 + whip ** 1.5 * 9);
+  // The pan leads the zoom, so the card is centered before it fills the frame.
+  const aim = ramp(frame, SCRIPTS_T.whip[0], SCRIPTS_T.whip[0] + 16, EASE.inOut);
+  const tx = -fx * (1 - pull) + (-fx + fx * (1 - pull)) * aim;
+  const ty = -fy * (1 - pull) - 40 * pull + (-fy + fy * (1 - pull) + 40 * pull) * aim;
   return (
     <AbsoluteFill style={{ background: `radial-gradient(ellipse at 50% 40%, ${C.paper} 0%, ${C.paperDeep} 100%)` }}>
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -131,11 +133,12 @@ export const Scripts: React.FC = () => {
           )}
         </div>
       </AbsoluteFill>
-      <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 70 }}>
+      <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 70, opacity: 1 - whip }}>
         <Rise at={SCRIPTS_T.tagline} style={{ fontFamily: SERIF, fontSize: 64, color: C.ink, letterSpacing: -0.5 }}>
           Any font. <span style={{ fontStyle: 'italic', color: C.seal }}>Every script.</span>
         </Rise>
       </AbsoluteFill>
+      <AbsoluteFill style={{ background: '#050505', opacity: whip ** 3 }} />
     </AbsoluteFill>
   );
 };

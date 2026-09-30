@@ -43,29 +43,29 @@ const TAB_X = (i: number) => CANVAS_W + 47.5 + i * 95;
 
 const CURSOR: [number, number, number, boolean?][] = [
   [20, 1000, 900],
-  [40, STAGE_X(1), 93],
+  [T.skeleton - 2, STAGE_X(1), 93],
   [T.skeleton, STAGE_X(1), 93, true],
-  [64, STAGE_X(2), 93],
+  [T.strokes - 2, STAGE_X(2), 93],
   [T.strokes, STAGE_X(2), 93, true],
-  [91, STAGE_X(3), 93],
+  [T.final - 3, STAGE_X(3), 93],
   [T.final, STAGE_X(3), 93, true],
-  [112, 700, 200],
-  [133, 772, 28],
+  [T.final + 16, 700, 200],
+  [T.text - 3, 772, 28],
   [T.text, 772, 28, true],
-  [158, 300, 28],
+  [T.picker - 4, 300, 28],
   [T.picker, 300, 28, true],
-  [172, 320, 178],
-  [180, 320, 132],
+  [T.picker + 9, 320, 178],
+  [T.parisienne - 4, 320, 132],
   [T.parisienne, 320, 132, true],
-  [200, TAB_X(2), 78],
+  [T.pluginsTab - 4, TAB_X(2), 78],
   [T.pluginsTab, TAB_X(2), 78, true],
-  [213, W - 52, PLUGIN_Y(1)],
+  [T.rainbow - 3, W - 52, PLUGIN_Y(1)],
   [T.rainbow, W - 52, PLUGIN_Y(1), true],
-  [229, W - 52, PLUGIN_Y(0)],
+  [T.glow - 3, W - 52, PLUGIN_Y(0)],
   [T.glow, W - 52, PLUGIN_Y(0), true],
-  [245, W - 52, PLUGIN_Y(2)],
+  [T.boil - 3, W - 52, PLUGIN_Y(2)],
   [T.boil, W - 52, PLUGIN_Y(2), true],
-  [270, 900, 600],
+  [T.whip[1], 900, 600],
 ];
 
 const box = (style: CSSProperties): CSSProperties => ({ position: 'absolute', ...style });
@@ -143,8 +143,8 @@ export const Studio: React.FC = () => {
   // Camera: in on the glyph while it's taken apart, back out for text mode.
   // ...and out through the canvas into the next scene.
   const whip = ramp(frame, T.whip[0], T.whip[1], EASE.in);
-  const zoom = keys(frame, [10, 60, 118, 140, 248], [1, 1.16, 1.16, 1, 1.03], EASE.inOut) * (1 + whip * whip * 2.4);
-  const zoomY = keys(frame, [10, 60, 118, 140], [0, 60, 60, 0], EASE.inOut);
+  const zoom = keys(frame, [10, 58, T.final + 22, T.text + 4, T.whip[0]], [1, 1.16, 1.16, 1, 1.03], EASE.inOut) * (1 + whip * whip * 2.4);
+  const zoomY = keys(frame, [10, 58, T.final + 22, T.text + 4], [0, 60, 60, 0], EASE.inOut);
 
   const stage = frame < T.skeleton ? 0 : frame < T.strokes ? 1 : frame < T.final ? 2 : 3;
   const pickerOpen = frame >= T.picker && frame < T.parisienne + 2 ? ramp(frame, T.picker, T.picker + 7, EASE.out) : 0;
@@ -157,7 +157,7 @@ export const Studio: React.FC = () => {
   const playback = Math.min(1, (frame - writeFrom) / writeFrames);
 
   return (
-    <AbsoluteFill style={{ background: `radial-gradient(ellipse at 50% 30%, #efe7d8 0%, #ddd3c0 100%)`, opacity: ramp(frame, 0, 10) }}>
+    <AbsoluteFill style={{ background: `radial-gradient(ellipse at 50% 30%, #efe7d8 0%, #ddd3c0 100%)` }}>
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
         <div
           style={{

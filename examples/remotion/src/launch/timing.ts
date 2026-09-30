@@ -4,17 +4,17 @@
 
 export const FPS = 30;
 
-/** One bar of the music: 67 frames, four beats at 107.46 BPM. The cuts into the Studio, the plugins, the video and the outro fall on bars. */
+/** One bar of the music: 67 frames, four beats at 107.46 BPM. The cuts into the plugins, the video and the outro fall on bars. */
 export const BAR = 67;
 export const BEAT = BAR / 4;
 
-/** Where each scene starts and how long it runs. Neighbours overlap for the transitions. */
+/** Where each scene starts and how long it runs, in the order they play. Neighbours overlap for the transitions. */
 export const SCENE = {
   title: { at: 0, frames: 150 },
-  scripts: { at: 146, frames: 138 },
-  studio: { at: 4 * BAR, frames: 270 },
-  plugins: { at: 8 * BAR, frames: 270 },
-  video: { at: 12 * BAR, frames: 186 },
+  scripts: { at: 146, frames: 4 * BAR - 146 },
+  plugins: { at: 4 * BAR, frames: 270 },
+  video: { at: 8 * BAR, frames: 186 },
+  studio: { at: 8 * BAR + 182, frames: 250 },
   everywhere: { at: 970, frames: 106 },
   outro: { at: 16 * BAR, frames: 122 },
 } as const;
@@ -26,6 +26,7 @@ export const DURATION = SCENE.outro.at + SCENE.outro.frames;
 /** The wipes: brush strokes over the frame, from `at` (scene frames) for `dur`. */
 export const WIPES = {
   titleOut: { at: SCENE.title.frames - 20, dur: 16 },
+  videoOut: { at: SCENE.studio.at - SCENE.video.at - 16, dur: 16 },
   everywhereOut: { at: SCENE.everywhere.frames - 15, dur: 13 },
 };
 
@@ -41,22 +42,30 @@ export const TITLE = {
 // --- Scripts ------------------------------------------------------------
 
 /** A card's pen starts `6 + distance * 11` frames in, rippling out from the card the camera starts on. */
-export const SCRIPTS = { rippleAt: 6, rippleStep: 11, writeFrames: 46, tagline: 78 };
+export const SCRIPTS = {
+  rippleAt: 6,
+  rippleStep: 11,
+  writeFrames: 46,
+  tagline: 74,
+  /** Back into the card it started on, into black: the drop comes out of it. */
+  whip: [90, SCENE.scripts.frames - 4] as const,
+};
 
 // --- Studio -------------------------------------------------------------
 
 export const STUDIO = {
-  skeleton: 42,
-  strokes: 66,
-  final: 94,
-  text: 136,
-  picker: 162,
-  parisienne: 184,
-  pluginsTab: 204,
-  rainbow: 216,
-  glow: 232,
-  boil: 248,
-  whip: [248, 264] as const,
+  skeleton: 40,
+  strokes: 62,
+  final: 86,
+  text: 124,
+  picker: 148,
+  parisienne: 170,
+  pluginsTab: 188,
+  rainbow: 200,
+  glow: 214,
+  boil: 228,
+  /** Out through the canvas, into black. */
+  whip: [230, 246] as const,
   writeFrames: 46,
 };
 

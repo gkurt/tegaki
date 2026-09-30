@@ -16,9 +16,9 @@ export { FPS as LAUNCH_FPS, HEIGHT as LAUNCH_HEIGHT, WIDTH as LAUNCH_WIDTH } fro
 const SCENES = [
   { id: 'title', Scene: Title },
   { id: 'scripts', Scene: Scripts },
-  { id: 'studio', Scene: Studio },
   { id: 'plugins', Scene: Plugins },
   { id: 'video', Scene: Video },
+  { id: 'studio', Scene: Studio },
   { id: 'everywhere', Scene: Everywhere },
   { id: 'outro', Scene: Outro },
 ] as const;
@@ -31,6 +31,7 @@ export const Launch: React.FC = () => (
       <Sequence key={id} name={id} from={SCENE[id].at} durationInFrames={SCENE[id].frames}>
         <Scene />
         {id === 'title' && <InkWipe id="t2s" {...WIPES.titleOut} color={C.paper} />}
+        {id === 'video' && <InkWipe id="v2s" {...WIPES.videoOut} color={C.paper} />}
         {id === 'everywhere' && <InkWipe id="e2o" {...WIPES.everywhereOut} color={C.night} />}
       </Sequence>
     ))}

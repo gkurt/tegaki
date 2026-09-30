@@ -56,7 +56,6 @@ import {
   pad,
   pluck,
   riser,
-  shaker,
   sparkle,
   tap,
   whoosh,
@@ -91,9 +90,9 @@ const CH = {
   Em: { bass: 40, pad: [55, 59, 62, 64, 66] },
   A7: { bass: 33, pad: [55, 57, 62, 64, 67] },
 };
-const PROGRESSION = [CH.D, CH.D, CH.Bm, CH.G, CH.D, CH.A, CH.Bm, CH.G, CH.G, CH.A, CH.Fsm, CH.Bm, CH.G, CH.A, CH.Em, CH.A7];
-// How open the pad's filter is, bar by bar: it brightens toward the drop, dims in the editor, opens for the end.
-const BRIGHT = [650, 800, 950, 1100, 1300, 1400, 1500, 1700, 2600, 2700, 2800, 2900, 1500, 1500, 2200, 2600];
+const PROGRESSION = [CH.D, CH.D, CH.Bm, CH.G, CH.G, CH.A, CH.Fsm, CH.Bm, CH.D, CH.A, CH.Bm, CH.G, CH.G, CH.A, CH.Em, CH.A7];
+// How open the pad's filter is, bar by bar: dark for the intro, open from the drop on.
+const BRIGHT = [650, 800, 950, 1100, 2600, 2700, 2800, 2900, 2300, 2400, 2500, 2600, 2600, 2700, 2500, 2800];
 
 PROGRESSION.forEach((c, bar) => {
   pad(music, bt(bar), s(BAR) * 1.02, c.pad, {
@@ -124,49 +123,39 @@ for (const [beat, m] of [
   bell(echoSend, bt(16, beat), m, { gain: 0.08, decay: 2.2 });
 }
 
-// Drums and bass by section.
+// Drums, bass and the arpeggio: upbeat from the drop (the plugins) to the end,
+// a little lighter under the editor, with a fill as it wipes into the Studio.
 for (let bar = 4; bar < 16; bar++) {
   const c = PROGRESSION[bar]!;
-  const drop = bar >= 8 && bar < 12;
-  const editor = bar === 12 || bar === 13;
+  const groove = bar >= 8 && bar < 11;
   const build = bar >= 14;
-  const studio = bar < 8;
-  const kicksAt = studio ? (bar === 7 ? [0] : [0, 2]) : editor ? [0, 2.5] : [0, 1, 2, 3];
-  for (const b of kicksAt) {
+  const fill = bar === 10;
+  for (const b of fill ? [0, 1] : [0, 1, 2, 3]) {
     const t = bt(bar, b);
-    kick(drums, t, { gain: studio ? 0.34 : 0.5, tone: studio ? 0.8 : 1 });
+    kick(drums, t, { gain: 0.5 });
     kicks.push(t);
   }
-  if (drop || build) for (const b of [1, 3]) clap(drums, bt(bar, b), { gain: 0.14, seed: bar * 10 + b });
-  if (editor) clap(drums, bt(bar, 2), { gain: 0.12, seed: bar });
+  for (const b of fill ? [1] : [1, 3]) clap(drums, bt(bar, b), { gain: 0.14, seed: bar * 10 + b });
+  if (fill) for (let k = 0; k < 6; k++) clap(drums, bt(bar, 2.5 + k / 4), { gain: 0.05 + k * 0.015, seed: 600 + k });
   for (let k = 0; k < 16; k++) {
     const b = k / 4;
-    if (studio && bar !== 7 && k % 2 === 0) shaker(drums, bt(bar, b), { gain: k % 4 === 2 ? 0.035 : 0.022, seed: bar * 16 + k });
-    if (drop || build) {
-      if (k % 4 === 2) hat(drums, bt(bar, b), { gain: 0.05, open: k === 10, seed: bar * 16 + k });
-      else hat(drums, bt(bar, b), { gain: 0.018, seed: bar * 16 + k, pan: -0.25 });
-    }
-    if (editor && k % 2 === 0) hat(drums, bt(bar, b), { gain: 0.03, seed: bar * 16 + k });
+    if (groove) {
+      if (k % 2 === 0) hat(drums, bt(bar, b), { gain: k % 4 === 2 ? 0.05 : 0.025, seed: bar * 16 + k });
+    } else if (k % 4 === 2) hat(drums, bt(bar, b), { gain: 0.05, open: k === 10, seed: bar * 16 + k });
+    else hat(drums, bt(bar, b), { gain: 0.018, seed: bar * 16 + k, pan: -0.25 });
   }
-  // Bass: long notes in the Studio and the editor, pumping eighths in the drop and the build.
-  if (studio || editor) {
-    bass(music, bt(bar, 0), s(BEAT) * 1.9, c.bass, { gain: 0.16 });
-    bass(music, bt(bar, 2), s(BEAT) * 1.9, c.bass, { gain: 0.14 });
-  } else {
-    for (let k = 0; k < 4; k++) bass(music, bt(bar, k + 0.5), s(BEAT) * 0.45, c.bass + (k % 2 ? 12 : 0), { gain: 0.17 });
-  }
+  // Bass: pumping on the off-beats, an octave up every other one.
+  for (let k = 0; k < 4; k++) bass(music, bt(bar, k + 0.5), s(BEAT) * 0.45, c.bass + (k % 2 ? 12 : 0), { gain: 0.17 });
   // The arpeggio: chord tones an octave up, sixteenths, through an echo.
-  if (drop || build) {
-    const tones = c.pad.map((m) => m + 12);
-    const order = [0, 1, 2, 3, 4, 3, 2, 1, 0, 2, 4, 2, 1, 3, 4, 3];
-    for (let k = 0; k < 16; k++) {
-      const m = tones[order[k]! % tones.length]!;
-      pluck(echoSend, bt(bar, k / 4), m, {
-        gain: k % 4 === 0 ? 0.05 : 0.035,
-        cutoff: build ? 2400 + bar * 60 : 3000,
-        pan: k % 2 ? 0.3 : -0.3,
-      });
-    }
+  const tones = c.pad.map((m) => m + 12);
+  const order = [0, 1, 2, 3, 4, 3, 2, 1, 0, 2, 4, 2, 1, 3, 4, 3];
+  for (let k = 0; k < (fill ? 8 : 16); k++) {
+    const m = tones[order[k]! % tones.length]!;
+    pluck(echoSend, bt(bar, k / 4), m, {
+      gain: (k % 4 === 0 ? 0.05 : 0.035) * (groove ? 0.65 : 1),
+      cutoff: build ? 2400 + bar * 60 : 3000,
+      pan: k % 2 ? 0.3 : -0.3,
+    });
   }
 }
 // A roll into the end.
@@ -177,10 +166,18 @@ kicks.push(bt(16));
 impact(sfx, bt(16), { gain: 0.35 });
 sparkle(verbSend, bt(16), 2.4, { gain: 0.02, density: 25, seed: 16 });
 
-// The drop: a riser through bar 7 that stops dead as the screen goes black, then the hit.
-const cutAt = s(SCENE.studio.at + STUDIO.whip[1]);
-riser(sfx, bt(7), cutAt - bt(7), { gain: 0.11 });
-impact(sfx, bt(8), { gain: 0.42 });
+// The drop: a riser through bar 3 that stops dead as the screen goes black, then the hit.
+const cutAt = s(SCENE.scripts.at + SCRIPTS.whip[1]);
+riser(sfx, bt(3), cutAt - bt(3), { gain: 0.11 });
+impact(sfx, bt(4), { gain: 0.42 });
+whoosh(sfx, at('scripts', SCRIPTS.whip[0]), s(SCRIPTS.whip[1] - SCRIPTS.whip[0]), {
+  gain: 0.2,
+  from: 300,
+  to: 6000,
+  panFrom: 0,
+  panTo: 0,
+  seed: 17,
+});
 // The eight panels writing together: a short rise and a hit.
 riser(sfx, at('plugins', PLUGINS.unison - 16), s(16), { gain: 0.06, seed: 51 });
 impact(sfx, at('plugins', PLUGINS.unison), { gain: 0.2, seed: 52 });
@@ -389,6 +386,7 @@ click(sfx, at('video', VIDEO.render), { gain: 0.12, tone: 1900, pan: 0.5 });
 for (let f = VIDEO.render + 2; f < VIDEO.rendered; f += 2) click(sfx, at('video', f), { gain: 0.025, tone: 4200, pan: 0.5 });
 for (const [k, m] of [74, 78, 81, 86].entries())
   bell(verbSend, at('video', VIDEO.rendered) + k * 0.06, m, { gain: 0.06, decay: 1.2, pan: 0.5 });
+whoosh(sfx, at('video', WIPES.videoOut.at), s(WIPES.videoOut.dur) + 0.15, { gain: 0.18, from: 300, to: 2500, seed: 18 });
 
 // Everywhere: the page sliding up, the tiles landing, each written, the chips ticking in.
 whoosh(sfx, at('everywhere', 0), 0.5, { gain: 0.16, from: 250, to: 1600, panFrom: 0, panTo: 0 });
@@ -437,7 +435,7 @@ for (const k of kicks) {
 const gate = (i: number) => {
   const t = i / SR;
   const a = cutAt;
-  const b = bt(8);
+  const b = bt(4);
   if (t < a - 0.03 || t >= b) return 1;
   if (t < a) return (a - t) / 0.03;
   return 0;
