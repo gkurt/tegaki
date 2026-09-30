@@ -3,6 +3,12 @@ declare module '*.ttf' {
   export default src;
 }
 
+// The stroke fonts' bundles ship a font synthesized from their strokes.
+declare module '*.otf' {
+  const src: string;
+  export default src;
+}
+
 declare module '*.svelte' {
   import type { Component } from 'svelte';
 

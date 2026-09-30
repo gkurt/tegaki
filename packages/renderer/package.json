@@ -176,6 +176,20 @@
       "types": "./dist/fonts/lxgw-wenkai/bundle.d.mts",
       "node": "./dist/fonts/lxgw-wenkai/bundle.mjs",
       "default": "./dist/fonts/lxgw-wenkai/bundle.mjs"
+    },
+    "./fonts/hershey-script": {
+      "tegaki@dev": "./fonts/hershey-script/bundle.ts",
+      "source": "./fonts/hershey-script/bundle.ts",
+      "types": "./dist/fonts/hershey-script/bundle.d.mts",
+      "node": "./dist/fonts/hershey-script/bundle.mjs",
+      "default": "./dist/fonts/hershey-script/bundle.mjs"
+    },
+    "./fonts/ems-allure": {
+      "tegaki@dev": "./fonts/ems-allure/bundle.ts",
+      "source": "./fonts/ems-allure/bundle.ts",
+      "types": "./dist/fonts/ems-allure/bundle.d.mts",
+      "node": "./dist/fonts/ems-allure/bundle.mjs",
+      "default": "./dist/fonts/ems-allure/bundle.mjs"
     }
   },
   "files": [

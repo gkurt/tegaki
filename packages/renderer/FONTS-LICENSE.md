@@ -1,7 +1,7 @@
 # Bundled Font Licenses
 
 The `tegaki` package includes pre-generated bundles for the following fonts.
-All fonts are licensed under the [SIL Open Font License, Version 1.1](https://openfontlicense.org/).
+All but Hershey Script are licensed under the [SIL Open Font License, Version 1.1](https://openfontlicense.org/); Hershey Script carries the Hershey Fonts' own terms (below).
 
 ## Caveat
 
@@ -68,6 +68,23 @@ All fonts are licensed under the [SIL Open Font License, Version 1.1](https://op
 - **Designer**: LXGW, derived from Klee One by Fontworks Inc.
 - **Copyright**: Copyright 2021-2026 LXGW (https://github.com/lxgw/LxgwWenKai); Copyright 2020 The Klee Project Authors (https://github.com/fontworks-fonts/Klee)
 - **License**: SIL Open Font License, Version 1.1
+
+## EMS Allure
+
+A stroke font: its bundle's glyph data is the font's pen strokes, and the bundled `.otf` is made from those strokes by Tegaki.
+
+- **Designer**: Sheldon B. Michaels (single-line derivative of Allura by Rob Leuschke, TypeSETit); SVG font conversion by Windell H. Oskay (https://gitlab.com/oskay/svg-fonts)
+- **License**: SIL Open Font License, Version 1.1
+
+## Hershey Script 1-stroke
+
+A stroke font, as EMS Allure above. It is not under the Open Font License; the Hershey Fonts may be used by anyone for any purpose, provided these acknowledgements are distributed with the font data:
+
+- The Hershey Fonts were originally created by Dr. A. V. Hershey while working at the U. S. National Bureau of Standards.
+- The format of the Font data in this distribution was originally created by James Hurt, Cognition, Inc., 900 Technology Park Drive, Billerica, MA 01821.
+- This version was prepared in 2011 and converted to SVG fonts in 2019 by Windell H. Oskay (www.evilmadscientist.com), adapted from emergent.unpythonic.net/software/hershey by way of "Hershey Fonts in SVG" by Marty McGuire.
+
+The font data may be converted into any other format *except* the format distributed by the U.S. NTIS, where each point is described in eight bytes as "xxx yyy:". The full notice is in `fonts/hershey-script/LICENSE.txt`.
 
 ---
 

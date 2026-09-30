@@ -1,5 +1,5 @@
 // The fonts shipped under `tegaki/fonts/*`: what `generate-fonts.ts` builds
-// and `scoreboard.ts` scores. The Latin fonts use the generator's default
+// and `scoreboard.ts` scores (all but the stroke fonts). The Latin fonts use the generator's default
 // ASCII set; the non-Latin fonts pass an explicit `chars` (see the generator's
 // `charsets.ts` for what's included).
 
@@ -29,7 +29,17 @@ export interface FontSpec {
   file?: { url: string; cacheName: string };
   /** Han stroke-order convention (the generator's `--han-locale`); default `ja`. */
   hanLocale?: 'ja' | 'zh';
+  /**
+   * A stroke font (a single-line SVG font), cached like `file`: its strokes are
+   * the glyph data as they are (`--stroke-font`), every glyph it has, so no
+   * pipeline runs and the scoreboard has nothing to score.
+   */
+  strokeFont?: { url: string; cacheName: string };
 }
+
+/** Evil Mad Scientist's single-line SVG fonts, at a pinned commit (GitLab's raw-file API). */
+const svgFont = (path: string) =>
+  `https://gitlab.com/api/v4/projects/oskay%2Fsvg-fonts/repository/files/${encodeURIComponent(`fonts/${path}`)}/raw?ref=8c71f2d9e1a5292047bb88e5595a766241b82cc6`;
 
 export const FONTS: FontSpec[] = [
   { family: 'Caveat', dir: 'caveat' },
@@ -54,4 +64,14 @@ export const FONTS: FontSpec[] = [
     },
     hanLocale: 'zh',
   },
+  // Stroke fonts: made of pen strokes, drawn as they are.
+  {
+    family: 'Hershey Script 1-stroke',
+    dir: 'hershey-script',
+    strokeFont: { url: svgFont('Hershey/HersheyScript1.svg'), cacheName: 'HersheyScript1-8c71f2d.svg' },
+  },
+  { family: 'EMS Allure', dir: 'ems-allure', strokeFont: { url: svgFont('EMS/EMSAllure.svg'), cacheName: 'EMSAllure-8c71f2d.svg' } },
 ];
+
+/** The bundles made by the pipelines — what the scoreboard scores. */
+export const PIPELINE_FONTS: FontSpec[] = FONTS.filter((f) => !f.strokeFont);

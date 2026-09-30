@@ -61,7 +61,7 @@ function fontBundlePlugin() {
       // Transform: import fontUrl from './X.ttf' with { type: 'url' }
       // →  const fontUrl = new URL('./X.ttf', import.meta.url).href
       result = result.replace(
-        /import\s+(\w+)\s+from\s+['"](\.\/[^'"]+\.ttf)['"]\s+with\s+\{[^}]*\}\s*;/g,
+        /import\s+(\w+)\s+from\s+['"](\.\/[^'"]+\.(?:ttf|otf))['"]\s+with\s+\{[^}]*\}\s*;/g,
         (_match: string, name: string, path: string) => `const ${name} = new URL('${path}', import.meta.url).href;`,
       );
 
@@ -81,7 +81,7 @@ function fontBundlePlugin() {
       }
     },
     writeBundle() {
-      // Copy .ttf files next to built bundles so import.meta.url references resolve
+      // Copy the font files (.ttf; .otf for the stroke fonts' synthesized ones) next to built bundles so import.meta.url references resolve
       const fonts = [
         'caveat',
         'italianno',
@@ -94,13 +94,15 @@ function fontBundlePlugin() {
         'nanum-pen-script',
         'atma',
         'lxgw-wenkai',
+        'hershey-script',
+        'ems-allure',
       ];
       for (const font of fonts) {
         const srcDir = resolve(configDir, 'fonts', font);
         const destDir = resolve(configDir, 'dist', 'fonts', font);
         mkdirSync(destDir, { recursive: true });
         for (const file of readdirSync(srcDir)) {
-          if (file.endsWith('.ttf')) {
+          if (file.endsWith('.ttf') || file.endsWith('.otf')) {
             copyFileSync(resolve(srcDir, file), resolve(destDir, file));
           }
         }
@@ -131,6 +133,8 @@ export default defineConfig([
       'fonts/nanum-pen-script/bundle': 'fonts/nanum-pen-script/bundle.ts',
       'fonts/atma/bundle': 'fonts/atma/bundle.ts',
       'fonts/lxgw-wenkai/bundle': 'fonts/lxgw-wenkai/bundle.ts',
+      'fonts/hershey-script/bundle': 'fonts/hershey-script/bundle.ts',
+      'fonts/ems-allure/bundle': 'fonts/ems-allure/bundle.ts',
     },
     dts: true,
     sourcemap: true,

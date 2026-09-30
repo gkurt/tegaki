@@ -31,6 +31,8 @@ const FONTS: Record<string, string> = {
   'nanum-pen-script': 'Nanum Pen Script (Korean + Latin)',
   'lxgw-wenkai': 'LXGW WenKai (Simplified Chinese + Latin)',
   atma: 'Atma (Bengali + Latin)',
+  'hershey-script': 'Hershey Script (Latin, single-line)',
+  'ems-allure': 'EMS Allure (Latin, single-line)',
 };
 
 /** Fonts whose scripts need shaping (RTL / complex GPOS) — warned about under `--no-shaping`. */

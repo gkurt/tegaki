@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import * as opentype from 'opentype.js';
 import { createPadrone, padroneProgress } from 'padrone';
 import * as z from 'zod/v4';
@@ -165,7 +165,7 @@ export const tegakiProgram = createPadrone('tegaki')
           );
           const outputDir = output ?? `output/${font.family.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-')}`;
           for (const file of files) {
-            const filePath = join(outputDir, file.path);
+            const filePath = resolve(outputDir, file.path);
             mkdirSync(dirname(filePath), { recursive: true });
             await Bun.write(filePath, file.content);
           }
@@ -246,7 +246,7 @@ export const tegakiProgram = createPadrone('tegaki')
         // Write bundle files to disk
         const outputDir = output ?? `output/${family.toLowerCase().replace(/\s+/g, '-')}`;
         for (const file of bundle.files) {
-          const filePath = join(outputDir, file.path);
+          const filePath = resolve(outputDir, file.path);
           mkdirSync(dirname(filePath), { recursive: true });
           await Bun.write(filePath, file.content);
         }
@@ -309,7 +309,7 @@ export const tegakiProgram = createPadrone('tegaki')
         });
 
         if (json) {
-          mkdirSync(dirname(join(json)), { recursive: true });
+          mkdirSync(dirname(resolve(json)), { recursive: true });
           await Bun.write(json, JSON.stringify({ family, summary, glyphs }, null, 2));
         }
 
@@ -370,7 +370,7 @@ export const tegakiProgram = createPadrone('tegaki')
         });
 
         if (json) {
-          mkdirSync(dirname(join(json)), { recursive: true });
+          mkdirSync(dirname(resolve(json)), { recursive: true });
           await Bun.write(json, JSON.stringify({ family, tolerance, geometryOptions, summary, glyphs }, null, 2));
         }
 
@@ -430,7 +430,7 @@ export const tegakiProgram = createPadrone('tegaki')
         );
 
         if (update) {
-          mkdirSync(dirname(baseline), { recursive: true });
+          mkdirSync(dirname(resolve(baseline)), { recursive: true });
           await Bun.write(baseline, serializeScoreboard(board));
           progress?.succeed(`Wrote the baseline for ${Object.keys(board.glyphs).length} glyphs of ${family} to ${baseline}`);
           return;

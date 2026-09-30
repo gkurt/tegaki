@@ -99,6 +99,8 @@ Several handwriting fonts are bundled and ready to use:
 - **Nanum Pen Script** — `tegaki/fonts/nanum-pen-script` _(Korean: Hangul syllables + jamo + Latin)_
 - **Atma** — `tegaki/fonts/atma` _(Bengali + Latin)_
 - **LXGW WenKai** — `tegaki/fonts/lxgw-wenkai` _(Simplified Chinese: the 1000 most frequent hanzi + Latin)_
+- **Hershey Script** — `tegaki/fonts/hershey-script` _(Latin, single-line: a plotter font drawn in its own pen strokes)_
+- **EMS Allure** — `tegaki/fonts/ems-allure` _(Latin, single-line: Evil Mad Scientist's stroke version of Allura)_
 
 For other fonts, use the [interactive studio](https://tegaki.ink/studio/) to create a custom bundle.
 

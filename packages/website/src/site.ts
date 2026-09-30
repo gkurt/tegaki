@@ -38,6 +38,9 @@ export const BUNDLED_FONTS: [string, string, string][] = [
   ['klee-one', 'Klee One', 'Japanese'],
   ['nanum-pen-script', 'Nanum Pen Script', 'Korean'],
   ['lxgw-wenkai', 'LXGW WenKai', 'Simplified Chinese'],
+  // Stroke fonts, drawn in their own pen strokes; named as the studio's font picker names them.
+  ['hershey-script', 'Hershey Script 1-stroke', 'Latin, single-line'],
+  ['ems-allure', 'EMS Allure', 'Latin, single-line'],
 ];
 
 export type SidebarItem = { label: string; slug: string } | { label: string; link: string };

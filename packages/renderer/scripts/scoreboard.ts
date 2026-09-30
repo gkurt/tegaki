@@ -8,7 +8,7 @@
 
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { FONTS, type FontSpec } from './bundled-fonts.ts';
+import { PIPELINE_FONTS as FONTS, type FontSpec } from './bundled-fonts.ts';
 
 const RENDERER_DIR = join(import.meta.dir, '..');
 

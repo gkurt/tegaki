@@ -3,7 +3,8 @@
 // explicit `--chars` from `./charsets.ts` (see notes there for what's
 // included). Fonts not on Google Fonts (or not in the variant wanted) are
 // downloaded from their release into the generator's font cache and read with
-// `--font-file`. Run via `bun --filter tegaki generate-fonts`.
+// `--font-file`; stroke fonts (single-line SVG fonts) are read with
+// `--stroke-font`, their strokes as they are. Run via `bun --filter tegaki generate-fonts`.
 
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -12,8 +13,8 @@ import { FONTS, type FontSpec } from './bundled-fonts.ts';
 
 const GENERATOR_DIR = join(import.meta.dir, '../../generator');
 
-/** Download a `file` font into the generator's font cache (once); returns its path relative to the generator. */
-async function cachedFontFile(file: NonNullable<FontSpec['file']>): Promise<string> {
+/** Download a `file` or `strokeFont` font into the generator's font cache (once); returns its path relative to the generator. */
+async function cachedFontFile(file: { url: string; cacheName: string }): Promise<string> {
   const path = join('.cache/fonts', file.cacheName);
   const absolute = join(GENERATOR_DIR, path);
   if (!existsSync(absolute)) {
@@ -27,7 +28,11 @@ async function cachedFontFile(file: NonNullable<FontSpec['file']>): Promise<stri
 }
 
 async function runOne(spec: FontSpec): Promise<void> {
-  const source = spec.file ? ['--font-file', await cachedFontFile(spec.file)] : [spec.family];
+  const source = spec.strokeFont
+    ? ['--stroke-font', await cachedFontFile(spec.strokeFont)]
+    : spec.file
+      ? ['--font-file', await cachedFontFile(spec.file)]
+      : [spec.family];
   const args = ['--filter', 'tegaki-generator', 'start', 'generate', ...source, '--output', `../renderer/fonts/${spec.dir}`];
   if (spec.chars !== undefined) args.push('--chars', spec.chars);
   if (spec.hanLocale) args.push('--han-locale', spec.hanLocale);
