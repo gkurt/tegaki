@@ -112,6 +112,14 @@ export interface RegroupOptions {
    *   proposal it would take instead.
    */
   retracedSplits?: 'allow' | 'reject' | 'avoid';
+  /**
+   * Whether ink that re-travels a corridor may be pruned (the DEDUP set;
+   * default true). Where the order is standardized, a knot the font writes
+   * as one pass is the reference's (ね); where the reference is one hand among
+   * several, pruning is the reference forcing its hand on the font — a print
+   * h's stem walked up, down and up again to meet a cursive h.
+   */
+  dedup?: boolean;
 }
 
 export interface RegroupResult {
@@ -1531,7 +1539,7 @@ export function regroupStrokesByReference(strokes: GeoStroke[], references: Poin
   if (absorbedSet) pieceSets.push({ name: 'absorb', ...absorbedSet, pruned: 0, extras: [] });
   // Dedup applies to the RAW pieces only: absorption splices out-and-back
   // excursions on purpose, and dedup would immediately unpick them.
-  const deduped = dedupOverlap(pieces, refs, options);
+  const deduped = options.dedup === false ? null : dedupOverlap(pieces, refs, options);
   if (deduped) pieceSets.push({ name: 'dedup', pieces: deduped.pieces, absorbed: 0, pruned: deduped.dropped, extras: [] });
   // Misfit features the reference has no stroke for leave the chains and
   // ride along as extra strokes (drawn after the prescribed order).

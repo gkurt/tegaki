@@ -8,6 +8,8 @@ import {
   type GeometryOptions,
   type ParsedFontInfo,
   type PipelineOptions,
+  REFERENCE_DATASET_IDS,
+  REFERENCE_DATASETS,
   type SkeletonMethod,
 } from 'tegaki-generator';
 import { type Pipeline, SKELETON_METHODS } from '../../preview/constants.ts';
@@ -45,7 +47,7 @@ const resetKeys = (opts: PipelineOptions, keys: readonly (keyof PipelineOptions)
 });
 
 const PIPELINE_HINTS: Record<Pipeline, string> = {
-  geometry: 'Outline geometry → ink graph, ordered by KanjiVG / Make Me a Hanzi / Hershey / Hangul references. The shipped bundles use it.',
+  geometry: 'Outline geometry → ink graph, ordered by the stroke-order references (see References). The shipped bundles use it.',
   raster: 'Rasterize → skeletonize → trace. The original pipeline, kept for comparison.',
 };
 
@@ -67,7 +69,11 @@ export function PipelinePanel({
   const geoOpt = <K extends keyof GeometryOptions>(key: K, value: GeometryOptions[K]) =>
     set('geometryOptions', (g) => ({ ...g, [key]: value }));
 
-  const geoModified = JSON.stringify(geo) !== JSON.stringify(DEFAULT_GEOMETRY_OPTIONS);
+  // The References section owns the dataset list; Geometry, the rest.
+  const { referenceDatasets, ...geoRest } = geo;
+  const { referenceDatasets: defaultDatasets, ...defaultGeoRest } = DEFAULT_GEOMETRY_OPTIONS;
+  const geoModified = JSON.stringify(geoRest) !== JSON.stringify(defaultGeoRest);
+  const datasetsModified = referenceDatasets.join() !== defaultDatasets.join();
   const features = fontInfo?.features ?? [];
   const disabled = options.disabledFeatures;
   const charCount = [...segmenter.segment(settings.chars)].length;
@@ -122,7 +128,7 @@ export function PipelinePanel({
           title="Geometry"
           defaultOpen={false}
           modified={geoModified}
-          onReset={() => set('geometryOptions', DEFAULT_GEOMETRY_OPTIONS)}
+          onReset={() => set('geometryOptions', (g) => ({ ...DEFAULT_GEOMETRY_OPTIONS, referenceDatasets: g.referenceDatasets }))}
         >
           <DialScope className="flex flex-col gap-1.5">
             <SelectControl
@@ -391,6 +397,40 @@ export function PipelinePanel({
               />
             </Folder>
           </DialScope>
+        </Section>
+      )}
+
+      {pipeline === 'geometry' && (
+        <Section
+          title="References"
+          defaultOpen={false}
+          modified={datasetsModified}
+          onReset={() => geoOpt('referenceDatasets', [...DEFAULT_GEOMETRY_OPTIONS.referenceDatasets])}
+        >
+          <div className="flex flex-wrap gap-1">
+            {REFERENCE_DATASETS.map((d) => {
+              const on = geo.referenceDatasets.includes(d.id);
+              return (
+                <Chip
+                  key={d.id}
+                  selected={on}
+                  title={`${d.description} · ${d.license}`}
+                  onClick={() =>
+                    geoOpt(
+                      'referenceDatasets',
+                      REFERENCE_DATASET_IDS.filter((id) => (id === d.id ? !on : geo.referenceDatasets.includes(id))),
+                    )
+                  }
+                >
+                  {d.name}
+                </Chip>
+              );
+            })}
+          </div>
+          <Hint>
+            The stroke-order datasets consulted. Each one that has a character offers its strokes as a variant, and the one that fits the
+            font's ink best orders it; switch a hand off to keep it from winning.
+          </Hint>
         </Section>
       )}
 

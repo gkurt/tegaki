@@ -13,6 +13,7 @@
 // so the y-down convention never needs special-casing.
 
 import type { BBox, Nib, Point, Stroke } from 'tegaki';
+import { DEFAULT_REFERENCE_DATASETS, type ReferenceDatasetId } from '../stroke-order/datasets.ts';
 import type { RegisteredReference } from '../stroke-order/types.ts';
 
 /** A closed outline polygon (no duplicate closing point). */
@@ -206,6 +207,12 @@ export interface GeometryOptions {
    */
   hanLocale: 'ja' | 'zh';
   /**
+   * The stroke-order reference datasets consulted (see stroke-order/datasets.ts;
+   * default: all). Each one that has a character offers a variant, and the
+   * best fit wins. Read where references are collected, like hanLocale.
+   */
+  referenceDatasets: ReferenceDatasetId[];
+  /**
    * How strokes are extracted from the outline:
    * - 'ink-graph' (default): triangulate the ink once, read the stroke
    *   topology off the triangles (tips / sleeves / junctions), prune spurs by
@@ -249,6 +256,7 @@ export const DEFAULT_GEOMETRY_OPTIONS: GeometryOptions = {
   medialMethod: 'straight-skeleton',
   strokeOrder: 'auto',
   hanLocale: 'ja',
+  referenceDatasets: [...DEFAULT_REFERENCE_DATASETS],
   extraction: 'ink-graph',
   inkSampleRatio: 0.006,
   // A round pen pokes (√2−1)·r ≈ 0.41·r short of a square outer corner; such

@@ -490,6 +490,9 @@ const ORIENT_MAX_COST = 0.35;
  */
 const ORIENT_MAX_RATIO = 0.75;
 
+/** References in a joined hand, whose letters are one pen motion (Letterpaths' cursive). */
+const JOINED_HAND_SOURCE = /^letterpaths-cursive/;
+
 /**
  * An orient-only plan (see `OrderPlan`): each paired stroke that runs
  * clearly one way along its reference stroke (`ORIENT_MAX_COST`,
@@ -513,12 +516,14 @@ export function orientByReference(match: StrokeMatchResult, strokeCount: number)
 /**
  * The order a 1:1 match prescribes: the reference's stroke order, each
  * stroke in its pen direction (a loop entered where the reference enters
- * it). Strokes the match left unpaired draw after the prescribed ones.
+ * it). Strokes the match left unpaired draw after the prescribed ones, each
+ * the way the heuristic enters it.
  */
 function datasetPlan(match: StrokeMatchResult, strokeCount: number): OrderPlan {
   const sequence = [...match.pairs].sort((a, b) => a.reference - b.reference).map((p) => p.extracted);
   for (let i = 0; i < strokeCount; i++) if (!sequence.includes(i)) sequence.push(i);
-  const reverse = Array.from({ length: strokeCount }, () => false);
+  // Unpaired strokes keep the heuristic's direction.
+  const reverse: (boolean | undefined)[] = Array.from({ length: strokeCount }, () => undefined);
   const start: (number | undefined)[] = Array.from({ length: strokeCount }, () => undefined);
   for (const pair of match.pairs) {
     reverse[pair.extracted] = pair.reversed;
@@ -749,6 +754,10 @@ export function runGeometryPipeline(
             // one; where the reference is one style among several (Latin),
             // the font's own strokes stand.
             retracedSplits: hasCanonicalStrokeOrder(char) ? 'allow' : GUIDED_STROKE_ORDER.test(char) ? 'avoid' : 'reject',
+            // A joined hand's letter is one pen motion; pruning a print
+            // font's serifs as duplicated ink would let it claim that ink
+            // (Suez One's h, Amiri's l drawn as cursive loops).
+            dedup: !JOINED_HAND_SOURCE.test(variant.source),
           });
           if (proposal) {
             const candidate = carryNibs(

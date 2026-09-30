@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { createHersheyProvider, createHersheySimplexProvider } from './hershey.ts';
+import { createHersheyGreekProvider, createHersheyProvider, createHersheySimplexProvider } from './hershey.ts';
+import { mergeRetraces, parseJhf } from './jhf.ts';
 import { collectReferences } from './providers.ts';
 import type { ReferenceGlyph, StrokeOrderProvider } from './types.ts';
 
@@ -58,6 +59,62 @@ describe('createHersheySimplexProvider', () => {
   test('non-Latin characters have no entry', async () => {
     const provider = createHersheySimplexProvider();
     expect(await provider.get('あ')).toBeNull();
+  });
+});
+
+describe('createHersheyGreekProvider', () => {
+  test('Greek letters take the Greek simplex glyphs, in alphabet order (λ is the 11th)', async () => {
+    const provider = createHersheyGreekProvider();
+    const lambda = await provider.get('λ');
+    expect(lambda!.source).toBe('hershey-greek');
+    expect(lambda!.strokes.length).toBe(2);
+    expect((await provider.get('Ω'))!.strokes.length).toBe(1);
+  });
+
+  test('Latin letters have no entry', async () => {
+    expect(await createHersheyGreekProvider().get('a')).toBeNull();
+  });
+});
+
+describe('parseJhf', () => {
+  // Two glyphs: a space (bearings only), then a V drawn in one stroke and a
+  // bar after a pen-up, wrapped past the first line.
+  const jhf = ['12345  1JZ', '12346  7JZMRRX', 'WM RMWWW'].join('\n');
+
+  test('reads the vertex count across wrapped lines, skipping the bearings', () => {
+    expect(parseJhf(jhf)).toEqual([
+      [],
+      [
+        [
+          [-5, 0],
+          [0, 6],
+          [5, -5],
+        ],
+        [
+          [-5, 5],
+          [5, 5],
+        ],
+      ],
+    ]);
+  });
+
+  test('a stroke starting on a point the last one drew through joins it; one starting mid-line does not', () => {
+    const apex: [number, number] = [0, -10];
+    const legs = mergeRetraces([
+      [apex, [-5, 10]],
+      [apex, [5, 10]],
+      [
+        [-2, 0],
+        [2, 0],
+      ],
+    ]);
+    expect(legs).toEqual([
+      [apex, [-5, 10], apex, [5, 10]],
+      [
+        [-2, 0],
+        [2, 0],
+      ],
+    ]);
   });
 });
 

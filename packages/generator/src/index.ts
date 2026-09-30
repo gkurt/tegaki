@@ -103,8 +103,21 @@ export { type GeometryStage, renderGeometryStage } from './geometry/visualize.ts
 export { glyphToAnimatedSVG } from './processing/animated-svg.ts';
 export { isRtlChar, isRtlCodepoint } from './processing/rtl.ts';
 export { renderStage, STROKE_COLORS, type VisualizationStage } from './processing/visualize.ts';
+export {
+  DEFAULT_REFERENCE_DATASETS,
+  isReferenceDatasetId,
+  REFERENCE_DATASET_IDS,
+  REFERENCE_DATASETS,
+  type ReferenceDataset,
+  type ReferenceDatasetId,
+} from './stroke-order/datasets.ts';
 export { createHangulProvider, decomposeHangul, HANGUL_LICENSE } from './stroke-order/hangul.ts';
-export { createHersheyProvider, createHersheySimplexProvider, HERSHEY_LICENSE } from './stroke-order/hershey.ts';
+export {
+  createHersheyGreekProvider,
+  createHersheyProvider,
+  createHersheySimplexProvider,
+  HERSHEY_LICENSE,
+} from './stroke-order/hershey.ts';
 export {
   createKanjiVGProvider,
   KANJIVG_LICENSE,

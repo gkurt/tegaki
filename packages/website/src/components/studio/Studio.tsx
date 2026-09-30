@@ -111,7 +111,7 @@ export function Studio() {
         subset: false,
         pipeline: settings.pipeline,
         geometryOptions: settings.geometryOptions,
-        strokeOrderProviders: strokeOrderProviders(settings.geometryOptions.hanLocale),
+        strokeOrderProviders: strokeOrderProviders(settings.geometryOptions),
       });
       const encoder = new TextEncoder();
       const zipFiles: Record<string, Uint8Array> = {};

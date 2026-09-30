@@ -34,6 +34,7 @@ import { isRtlChar } from '../processing/rtl.ts';
 import { skeletonize } from '../processing/skeletonize/index.ts';
 import { orderStrokes } from '../processing/stroke-order.ts';
 import { computeInverseDistanceTransform } from '../processing/width.ts';
+import { REFERENCE_DATASET_IDS, type ReferenceDatasetId } from '../stroke-order/datasets.ts';
 import { collectReferences } from '../stroke-order/providers.ts';
 import type { ReferenceGlyph, StrokeOrderProvider } from '../stroke-order/types.ts';
 
@@ -92,6 +93,10 @@ export const geometryOptionsSchema = z.object({
     .enum(['ja', 'zh'])
     .default(G.hanLocale)
     .describe('Geometry: stroke-order convention for Han characters — `ja` (KanjiVG) or `zh` (Make Me a Hanzi, PRC order)'),
+  referenceDatasets: z
+    .array(z.enum(REFERENCE_DATASET_IDS as [ReferenceDatasetId, ...ReferenceDatasetId[]]))
+    .default([...G.referenceDatasets])
+    .describe(`Geometry: stroke-order reference datasets to consult — any of ${REFERENCE_DATASET_IDS.join(', ')} (default: all)`),
   inkSampleRatio: z
     .number()
     .default(G.inkSampleRatio)

@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
-import { DEFAULT_CHARS, KOREAN_CHARS, SIMPLIFIED_CHINESE_CHARS } from 'tegaki-generator';
+import { DEFAULT_CHARS, type GeometryOptions, KOREAN_CHARS, SIMPLIFIED_CHINESE_CHARS } from 'tegaki-generator';
 import { buildUrlParams, defaultClipText, parseUrlState, URL_DEFAULTS } from './url-state.ts';
 
 describe('parseUrlState', () => {
@@ -77,6 +77,27 @@ describe('Han locale', () => {
 
   test('an unknown locale falls back to the default', () => {
     expect(parseUrlState('?ghl=ko').geometryOptions.hanLocale).toBe(URL_DEFAULTS.geometryOptions.hanLocale);
+  });
+});
+
+describe('reference datasets', () => {
+  const withDatasets = (referenceDatasets: GeometryOptions['referenceDatasets']) => ({
+    ...URL_DEFAULTS,
+    geometryOptions: { ...URL_DEFAULTS.geometryOptions, referenceDatasets },
+  });
+
+  test('a dataset switched off round-trips as grd=-id; the default set stays out of the URL', () => {
+    const state = withDatasets(URL_DEFAULTS.geometryOptions.referenceDatasets.filter((id) => id !== 'hershey-script'));
+    const params = buildUrlParams(state);
+    expect(params.get('grd')).toBe('-hershey-script');
+    expect(parseUrlState(params).geometryOptions.referenceDatasets).toEqual(state.geometryOptions.referenceDatasets);
+    expect(buildUrlParams(URL_DEFAULTS).has('grd')).toBe(false);
+  });
+
+  test('unknown ids from stale links are dropped', () => {
+    expect(parseUrlState('?grd=-kanjivg,-nope,bogus').geometryOptions.referenceDatasets).toEqual(
+      URL_DEFAULTS.geometryOptions.referenceDatasets.filter((id) => id !== 'kanjivg'),
+    );
   });
 });
 

@@ -40,13 +40,14 @@ import { createReferenceSet } from '../stroke-order/providers.ts';
 const PROGRESS = { spinner: true, bar: true, time: true, eta: true, message: { success: null } } as const;
 
 /** Every stroke-order reference source, Han characters following `hanLocale` (see createReferenceSet). */
-const referenceProviders = (hanLocale: GeometryOptions['hanLocale']) =>
+const referenceProviders = (hanLocale: GeometryOptions['hanLocale'], datasets: GeometryOptions['referenceDatasets']) =>
   createReferenceSet(
     {
       kanjiVG: createKanjiVGProvider(createKanjiVGFileLoader()),
       makeMeAHanzi: createMakeMeAHanziProvider(createMakeMeAHanziFileLoader()),
     },
     hanLocale,
+    datasets,
   );
 
 const fontFileArg = z
@@ -159,7 +160,7 @@ export const tegakiProgram = createPadrone('tegaki')
           fullFontFileName,
           pipeline,
           geometryOptions: pickGeometryOptions(args),
-          strokeOrderProviders: pipeline === 'geometry' ? referenceProviders(args.hanLocale) : [],
+          strokeOrderProviders: pipeline === 'geometry' ? referenceProviders(args.hanLocale, args.referenceDatasets) : [],
           onProgress: (msg, p) => {
             if (p !== undefined) {
               progress?.update({ message: msg, progress: p });
@@ -210,6 +211,7 @@ export const tegakiProgram = createPadrone('tegaki')
             .enum(['ja', 'zh'])
             .default(DEFAULT_GEOMETRY_OPTIONS.hanLocale)
             .describe('Stroke-order convention for Han characters — `ja` (KanjiVG) or `zh` (Make Me a Hanzi, PRC order)'),
+          referenceDatasets: geometryOptionsSchema.shape.referenceDatasets,
           json: z.string().optional().describe('Write the full per-glyph report to this JSON file').meta({ flags: 'j' }),
           force: z.boolean().default(false).describe('Re-download font even if cached').meta({ flags: 'f' }),
         }),
@@ -217,14 +219,14 @@ export const tegakiProgram = createPadrone('tegaki')
       )
       .action(async (args, ctx) => {
         const progress = ctx.context.progress;
-        const { chars, hanLocale, json } = args;
+        const { chars, hanLocale, referenceDatasets, json } = args;
 
         progress?.update(args.fontFile ? `Reading font "${args.fontFile}"...` : 'Downloading font...');
         const { family, fontBuffer, extraFontBuffers } = await resolveFont(args, chars, 'Klee One');
         const fontInfo = await parseFont(fontBuffer, extraFontBuffers, family);
 
         await initStraightSkeleton();
-        const providers = referenceProviders(hanLocale);
+        const providers = referenceProviders(hanLocale, referenceDatasets);
 
         const { summary, glyphs } = await runStrokeOrderReport(fontInfo, chars, providers, {
           onProgress: (done, total, char) => {
@@ -281,7 +283,7 @@ export const tegakiProgram = createPadrone('tegaki')
         const geometryOptions = pickGeometryOptions(args);
         if (geometryOptions.extraction === 'partition' && geometryOptions.medialMethod === 'straight-skeleton')
           await initStraightSkeleton();
-        const providers = referenceProviders(geometryOptions.hanLocale);
+        const providers = referenceProviders(geometryOptions.hanLocale, geometryOptions.referenceDatasets);
 
         const { summary, glyphs } = await runCoverageReport(fontInfo, chars, providers, {
           geometryOptions,
@@ -338,12 +340,18 @@ export const tegakiProgram = createPadrone('tegaki')
 
         const geometryOptions = pickGeometryOptions(args);
         await initStraightSkeleton();
-        const board = await runScoreboard(fontInfo, family, chars, referenceProviders(geometryOptions.hanLocale), {
-          geometryOptions,
-          onProgress: (done, total, char) => {
-            progress?.update({ message: `Scoring ${char || 'done'} (${done}/${total})`, progress: total > 0 ? done / total : 1 });
+        const board = await runScoreboard(
+          fontInfo,
+          family,
+          chars,
+          referenceProviders(geometryOptions.hanLocale, geometryOptions.referenceDatasets),
+          {
+            geometryOptions,
+            onProgress: (done, total, char) => {
+              progress?.update({ message: `Scoring ${char || 'done'} (${done}/${total})`, progress: total > 0 ? done / total : 1 });
+            },
           },
-        });
+        );
 
         if (update) {
           mkdirSync(dirname(baseline), { recursive: true });

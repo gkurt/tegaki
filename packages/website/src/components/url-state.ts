@@ -5,7 +5,10 @@ import {
   DEFAULT_GEOMETRY_OPTIONS,
   DEFAULT_OPTIONS,
   type GeometryOptions,
+  isReferenceDatasetId,
   type PipelineOptions,
+  REFERENCE_DATASET_IDS,
+  type ReferenceDatasetId,
 } from 'tegaki-generator';
 import { normalizePluginIds, normalizePluginOptions, type PluginOptionsState, pluginOptionsFor } from './plugins/index.ts';
 import {
@@ -197,6 +200,7 @@ const GEO_OPTION_KEYS: Record<keyof GeometryOptions, string> = {
   medialMethod: 'gmm',
   strokeOrder: 'gso',
   hanLocale: 'ghl',
+  referenceDatasets: 'grd',
   extraction: 'gx',
   inkSampleRatio: 'gis',
   inkSpurTolerance: 'gip',
@@ -208,6 +212,33 @@ const MEDIAL_METHODS: readonly GeometryOptions['medialMethod'][] = ['chain', 'vo
 const STROKE_ORDER_MODES: readonly GeometryOptions['strokeOrder'][] = ['auto', 'dataset', 'heuristic'];
 const EXTRACTION_MODES: readonly GeometryOptions['extraction'][] = ['partition', 'ink-graph'];
 const HAN_LOCALES: readonly GeometryOptions['hanLocale'][] = ['ja', 'zh'];
+
+/**
+ * The reference datasets as their difference from the default set: `-id` for a
+ * default one switched off, `id` for another switched on (null when there is
+ * none) — so a dataset added later takes its default in old links.
+ */
+export function encodeReferenceDatasets(datasets: readonly ReferenceDatasetId[]): string | null {
+  const on = new Set(datasets);
+  const defaults = new Set(DEFAULT_GEOMETRY_OPTIONS.referenceDatasets);
+  const diff = REFERENCE_DATASET_IDS.flatMap((id) =>
+    defaults.has(id) && !on.has(id) ? [`-${id}`] : !defaults.has(id) && on.has(id) ? [id] : [],
+  );
+  return diff.length > 0 ? diff.join(',') : null;
+}
+
+/** The inverse of `encodeReferenceDatasets`; unknown ids (stale links) are dropped. */
+export function decodeReferenceDatasets(raw: string): ReferenceDatasetId[] {
+  const on = new Set(DEFAULT_GEOMETRY_OPTIONS.referenceDatasets);
+  for (const token of raw.split(',')) {
+    const off = token.startsWith('-');
+    const id = off ? token.slice(1) : token;
+    if (!isReferenceDatasetId(id)) continue;
+    if (off) on.delete(id);
+    else on.add(id);
+  }
+  return REFERENCE_DATASET_IDS.filter((id) => on.has(id));
+}
 
 const REVERSE_GEO_OPTION_KEYS = Object.fromEntries(Object.entries(GEO_OPTION_KEYS).map(([k, v]) => [v, k])) as Record<
   string,
@@ -399,6 +430,10 @@ export function parseUrlState(search: string | URLSearchParams = window.location
       state.geometryOptions.hanLocale = parseEnum(raw, HAN_LOCALES, DEFAULT_GEOMETRY_OPTIONS.hanLocale);
       continue;
     }
+    if (long === 'referenceDatasets') {
+      state.geometryOptions.referenceDatasets = decodeReferenceDatasets(raw);
+      continue;
+    }
     if (long === 'extraction') {
       state.geometryOptions.extraction = parseEnum(raw, EXTRACTION_MODES, DEFAULT_GEOMETRY_OPTIONS.extraction);
       continue;
@@ -476,7 +511,10 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
   // Geometry options — only non-defaults.
   for (const [long, short] of Object.entries(GEO_OPTION_KEYS)) {
     const key = long as keyof GeometryOptions;
-    if (state.geometryOptions[key] !== DEFAULT_GEOMETRY_OPTIONS[key]) p.set(short, String(state.geometryOptions[key]));
+    if (key === 'referenceDatasets') {
+      const encoded = encodeReferenceDatasets(state.geometryOptions.referenceDatasets);
+      if (encoded) p.set(short, encoded);
+    } else if (state.geometryOptions[key] !== DEFAULT_GEOMETRY_OPTIONS[key]) p.set(short, String(state.geometryOptions[key]));
   }
 
   // Pipeline options — only non-defaults. Array-valued options are serialized

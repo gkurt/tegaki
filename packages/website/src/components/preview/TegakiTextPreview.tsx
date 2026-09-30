@@ -259,7 +259,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
         const refs =
           geometryOptions.strokeOrder === 'heuristic'
             ? []
-            : await collectReferences(char, strokeOrderProviders(geometryOptions.hanLocale)).catch(() => []);
+            : await collectReferences(char, strokeOrderProviders(geometryOptions)).catch(() => []);
         if (cancelled) return;
         const cacheKey = `${char}:${geoKey}:${refs.map((r) => r.source).join('+') || 'noref'}`;
         let res = geoCache.get(cacheKey);
@@ -361,7 +361,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
           const referencesOf = (char: string): Promise<ReferenceGlyph[]> =>
             geometryOptions.strokeOrder === 'heuristic'
               ? Promise.resolve([])
-              : collectReferences(char, strokeOrderProviders(geometryOptions.hanLocale)).catch(() => []);
+              : collectReferences(char, strokeOrderProviders(geometryOptions)).catch(() => []);
           const refs = letter === undefined ? [] : await referencesOf(letter);
           const components = ligature === undefined ? undefined : await ligatureComponents(fontInfo, subsetIdx, ligature, referencesOf);
           if (cancelled) return;

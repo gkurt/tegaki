@@ -280,8 +280,8 @@ export interface OrderPlan {
   /** Draw sequence: a permutation of stroke indices; unset keeps the heuristic order. */
   sequence?: number[];
   /**
-   * Per stroke index: reverse the polyline before timing. In an orient-only
-   * plan, unset leaves the stroke to the heuristic's orientation.
+   * Per stroke index: reverse the polyline before timing. Unset (a stroke the
+   * plan doesn't decide) leaves it to the heuristic's orientation.
    */
   reverse: (boolean | undefined)[];
   /**
@@ -372,9 +372,10 @@ export function orderAndTimeStrokes(strokes: GeoStroke[], params: OrderTimingPar
   const planReverse = strokes.map(() => false);
   const planStart: (number | undefined)[] = strokes.map(() => undefined);
   const groupPlanned = strokes.map(() => false);
-  // A stroke a plan orients: every stroke of a sequenced plan, and the ones
-  // an orient-only plan gives a direction.
-  const orients = (p: OrderPlan, i: number) => p.sequence !== undefined || p.reverse[i] !== undefined;
+  // A stroke a plan orients: one it gives a direction. The others — strokes a
+  // match left unpaired, an orient-only plan's undecided ones — enter as the
+  // heuristic has them.
+  const orients = (p: OrderPlan, i: number) => p.reverse[i] !== undefined;
   groups?.forEach((group, g) => {
     for (const i of group.strokes) groupOf[i] = g;
     const plan = group.plan;

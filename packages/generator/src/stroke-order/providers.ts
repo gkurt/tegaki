@@ -6,8 +6,10 @@
 
 import { baseLetter, hasCombiningMarks } from '../geometry/marks.ts';
 import type { GeometryOptions } from '../geometry/types.ts';
+import { DEFAULT_REFERENCE_DATASETS, type ReferenceDatasetId } from './datasets.ts';
 import { createHangulProvider } from './hangul.ts';
-import { createHersheyProvider, createHersheySimplexProvider } from './hershey.ts';
+import { createHersheyGreekProvider, createHersheyProvider, createHersheySimplexProvider } from './hershey.ts';
+import { createLetterpathsCursiveHighProvider, createLetterpathsCursiveProvider, createLetterpathsPrintProvider } from './letterpaths.ts';
 import { createPunctuationProvider } from './punctuation.ts';
 import type { ReferenceGlyph, StrokeOrderProvider } from './types.ts';
 
@@ -39,8 +41,16 @@ function onlyFor(pattern: RegExp, provider: StrokeOrderProvider): StrokeOrderPro
 const HAN = /^\p{Script=Han}/u;
 
 // Pure in-memory datasets: one memoizing instance serves every reference set.
-const LATIN_AND_HANGUL: StrokeOrderProvider[] = [createHersheyProvider(), createHersheySimplexProvider(), createHangulProvider()];
 const PUNCTUATION = createPunctuationProvider();
+/** The best-fit variant datasets, in the order they're offered; a dataset may offer more than one hand. */
+const VARIANTS: [ReferenceDatasetId, StrokeOrderProvider[]][] = [
+  ['hershey-script', [createHersheyProvider()]],
+  ['hershey-simplex', [createHersheySimplexProvider()]],
+  ['hershey-greek', [createHersheyGreekProvider()]],
+  ['letterpaths-print', [createLetterpathsPrintProvider()]],
+  ['letterpaths-cursive', [createLetterpathsCursiveProvider(), createLetterpathsCursiveHighProvider()]],
+  ['hangul', [createHangulProvider()]],
+];
 
 /** The Han datasets, with their IO already wired (CLI disk cache, website fetch). */
 export interface HanReferenceProviders {
@@ -49,18 +59,28 @@ export interface HanReferenceProviders {
 }
 
 /**
- * Every stroke-order reference source, as the CLI and the Studio use them:
- * the Han datasets as ONE source ordered by `hanLocale` (KanjiVG also covers
- * kana and print Latin, so it stays in the chain for 'zh') behind the
- * punctuation references, which stand in for KanjiVG's directionless comma;
- * then Hershey cursive + print Latin and composed Hangul as best-fit variants. Cheap to
- * call: every set shares the passed providers' caches and the in-memory ones.
+ * Every stroke-order reference source, as the CLI and the Studio use them,
+ * narrowed to `datasets` (see datasets.ts): the Han datasets as ONE source
+ * ordered by `hanLocale` (KanjiVG also covers kana and print Latin, so it
+ * stays in the chain for 'zh') behind the punctuation references, which stand
+ * in for KanjiVG's directionless comma; then the Hershey faces, Letterpaths'
+ * taught hands and composed Hangul as best-fit variants. Cheap to call: every
+ * set shares the passed providers' caches and the in-memory ones.
  */
-export function createReferenceSet(han: HanReferenceProviders, hanLocale: GeometryOptions['hanLocale']): StrokeOrderProvider[] {
+export function createReferenceSet(
+  han: HanReferenceProviders,
+  hanLocale: GeometryOptions['hanLocale'],
+  datasets: readonly ReferenceDatasetId[] = DEFAULT_REFERENCE_DATASETS,
+): StrokeOrderProvider[] {
+  const on = new Set(datasets);
   // Asking Make Me a Hanzi about anything else only costs a failed fetch.
   const makeMeAHanzi = onlyFor(HAN, han.makeMeAHanzi);
-  const hanOrder = hanLocale === 'zh' ? [makeMeAHanzi, han.kanjiVG] : [han.kanjiVG, makeMeAHanzi];
-  return [firstMatchProvider([PUNCTUATION, ...hanOrder]), ...LATIN_AND_HANGUL];
+  const hanOrder = (hanLocale === 'zh' ? [makeMeAHanzi, han.kanjiVG] : [han.kanjiVG, makeMeAHanzi]).filter((p) =>
+    on.has(p === makeMeAHanzi ? 'makemeahanzi' : 'kanjivg'),
+  );
+  const first = [...(on.has('punctuation') ? [PUNCTUATION] : []), ...hanOrder];
+  const variants = VARIANTS.flatMap(([id, providers]) => (on.has(id) ? providers : []));
+  return [...(first.length > 0 ? [firstMatchProvider(first)] : []), ...variants];
 }
 
 async function referencesFor(char: string, providers: StrokeOrderProvider[]): Promise<ReferenceGlyph[]> {

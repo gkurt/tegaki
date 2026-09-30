@@ -17,7 +17,7 @@ import {
 import { GEOMETRY_STAGES, type Pipeline, STAGES } from '../preview/constants.ts';
 import { fontCacheId } from '../preview/font-cache-id.ts';
 import { GeometryStageRenderer, geometryStageFrame, rasterStageFrame, type StageFrame, StageRenderer } from '../preview/stage-views.tsx';
-import { strokeOrderProviders } from '../preview/stroke-order-providers.ts';
+import { referenceSetKey, strokeOrderProviders } from '../preview/stroke-order-providers.ts';
 import { TegakiTextPreview } from '../preview/TegakiTextPreview.tsx';
 import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
 import type { UrlState } from '../url-state.ts';
@@ -179,22 +179,23 @@ export function GlyphWorkspace({
   // alternate draws the same letter and takes its references; a ligature
   // takes each of its letters' (ordering them one by one); a part draws no
   // one letter and has none.
-  const hanLocale = geometryOptions.hanLocale;
+  const providers = strokeOrderProviders(geometryOptions);
+  const setKey = referenceSetKey(geometryOptions);
   const refChar = form ? (form.kind === 'alternate' ? (form.text ?? '') : '') : selectedChar;
   const ligatureComponents = form?.kind === 'ligature' ? form.components : undefined;
   const refChars = refChar ? [refChar] : [...new Set(ligatureComponents?.flatMap((c) => (c.letter ? [c.letter] : [])))];
-  const refsKey = pipeline === 'geometry' && refChars.length > 0 ? `${refChars.join('|')}:${hanLocale}` : '';
+  const refsKey = pipeline === 'geometry' && refChars.length > 0 ? `${refChars.join('|')}\u0000${setKey}` : '';
   useEffect(() => {
     if (!refsKey) return;
     let cancelled = false;
-    const chars = refsKey.slice(0, refsKey.lastIndexOf(':')).split('|');
-    Promise.all(chars.map((c) => collectReferences(c, strokeOrderProviders(hanLocale)).catch((): ReferenceGlyph[] => []))).then(
+    const chars = refsKey.slice(0, refsKey.lastIndexOf('\u0000')).split('|');
+    Promise.all(chars.map((c) => collectReferences(c, providers).catch((): ReferenceGlyph[] => []))).then(
       (lists) => !cancelled && setRefs({ key: refsKey, byChar: Object.fromEntries(chars.map((c, i) => [c, lists[i]!])) }),
     );
     return () => {
       cancelled = true;
     };
-  }, [refsKey, hanLocale]);
+  }, [refsKey, providers]);
   const refsByChar = !refsKey ? NO_REFS_BY_CHAR : refs?.key === refsKey ? refs.byChar : undefined;
   const refGlyphs = refsByChar && (refChar ? (refsByChar[refChar] ?? NO_REFS) : NO_REFS);
   const letterRefs = useMemo(

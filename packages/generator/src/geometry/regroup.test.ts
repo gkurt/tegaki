@@ -492,6 +492,9 @@ describe('regroupStrokesByReference — merging', () => {
     // A continuation piece is NOT a duplicate: covering new reference arc
     // survives dedup — pinned by the plain-merge tests above, which still
     // chain end-to-end pieces instead of dropping them.
+
+    // Where the reference is one hand among several, no ink is pruned.
+    expect(regroupStrokesByReference([a, b], refs, { ...OPTIONS, dedup: false })?.pruned ?? 0).toBe(0);
   });
 
   test('coverage veto: a parallel piece whose ink the kept pen does not reach is never pruned (Playfair Display 9)', () => {

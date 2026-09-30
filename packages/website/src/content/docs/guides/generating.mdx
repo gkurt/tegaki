@@ -21,7 +21,7 @@ Works on the outline itself, with no bitmap:
 3. **Spurs and nibs**: short offshoots at pointed ends and corners are pruned, and the ink they held is painted by an elliptic nib stamp as the pen passes
 4. **Junctions**: where strokes meet, the arms are paired so a pen runs straight through a crossing instead of turning
 5. **Simplify**: width-aware Ramer-Douglas-Peucker keeps the points the pen needs to cover the ink; leftover holes get stamps of their own
-6. **Stroke order**: ordered by a matching [KanjiVG](https://kanjivg.tagaini.net/) or Hershey reference glyph when one fits the ink, otherwise top-to-bottom/left-to-right
+6. **Stroke order**: ordered by the reference glyph that fits the ink best, from [KanjiVG](https://kanjivg.tagaini.net/), [Make Me a Hanzi](https://github.com/skishore/makemeahanzi), the [Hershey fonts](https://github.com/kamalmostafa/hershey-fonts), [Letterpaths](https://github.com/RobinL/letterpaths) and composed Hangul (pick which in the Studio's **Pipeline → References**, or with `--reference-datasets`); a letter whose shape misses them all still takes the pen direction a reference clearly prefers; otherwise top-to-bottom/left-to-right
 
 ### Raster
 

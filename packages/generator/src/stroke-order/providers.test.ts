@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { REFERENCE_DATASET_IDS } from './datasets.ts';
 import { collectReferences, createReferenceSet, firstMatchProvider } from './providers.ts';
 import type { ReferenceGlyph, StrokeOrderProvider } from './types.ts';
 
@@ -96,6 +97,23 @@ describe('createReferenceSet', () => {
     // Written from the head down to the tail.
     const points = comma!.strokes[0]!.points;
     expect(points[0]!.y).toBeLessThan(points.at(-1)!.y);
+  });
+
+  test('every dataset is consulted by default; a switched-off one offers no variant', async () => {
+    const all = (await collectReferences('a', createReferenceSet(han, 'ja'))).map((r) => r.source);
+    expect(all).toEqual(['hershey-script', 'hershey-simplex', 'letterpaths-print', 'letterpaths-cursive', 'letterpaths-cursive-high']);
+    const noCursive = createReferenceSet(
+      han,
+      'ja',
+      REFERENCE_DATASET_IDS.filter((id) => id !== 'letterpaths-cursive'),
+    );
+    expect((await collectReferences('a', noCursive)).map((r) => r.source)).not.toContain('letterpaths-cursive-high');
+  });
+
+  test('with KanjiVG off, Han characters fall to Make Me a Hanzi even for ja', async () => {
+    const set = createReferenceSet(han, 'ja', ['makemeahanzi']);
+    expect((await collectReferences('中', set)).map((r) => r.source)).toEqual(['makemeahanzi']);
+    expect(await collectReferences('あ', set)).toEqual([]);
   });
 
   test("'zh' takes Make Me a Hanzi for shared hanzi and still finds kana in KanjiVG", async () => {
