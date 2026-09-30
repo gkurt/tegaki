@@ -1,6 +1,6 @@
 import { createPlugin } from '../core/createPlugin.ts';
 import { seededRandom } from '../lib/random.ts';
-import { type FontPoint, inPx } from './glyphSpace.ts';
+import { type FontPoint, inEms, inPx } from './glyphSpace.ts';
 
 /** How the lines boil. */
 export interface BoilOptions {
@@ -91,9 +91,9 @@ export const boilPlugin = createPlugin({
     drawings: { type: 'number', label: 'Drawings', description: 'How many drawings the cycle has.', default: 3, min: 2, max: 8, step: 1 },
     fps: { type: 'number', label: 'Speed', description: 'Drawings a second.', default: 12, min: 2, max: 24, step: 1 },
     amount: {
-      type: 'number',
+      type: 'length',
       label: 'Amount',
-      description: 'How far the line wanders, in ems.',
+      description: "How far the line wanders: in em, or px as '1px'.",
       default: 0.012,
       min: 0,
       max: 0.05,
@@ -132,24 +132,25 @@ export const boilPlugin = createPlugin({
   setup: (options) => {
     const drawings = Math.round(options.drawings);
     const fields = new Map<string, (p: FontPoint) => FontPoint>();
-    const fieldFor = (seed: number, step: number, em: number) => {
-      const key = `${seed}|${step}|${em}`;
+    const fieldFor = (seed: number, step: number, em: number, fontSize: number) => {
+      const key = `${seed}|${step}|${em}|${fontSize}`;
       let field = fields.get(key);
       if (!field) {
         if (fields.size > 4096) fields.clear();
-        fields.set(key, (field = boilField(seed, step, options, em)));
+        // The amount as ems: a px one is a different share of each font size.
+        fields.set(key, (field = boilField(seed, step, { amount: inEms(options.amount, fontSize), detail: options.detail }, em)));
       }
       return field;
     };
     return {
       steps: { count: drawings, fps: options.fps, idle: options.idle },
       geometry(path, g) {
-        const move = inPx(fieldFor(g.seed, g.step, g.fontSize / g.place.scale), g.place);
+        const move = inPx(fieldFor(g.seed, g.step, g.fontSize / g.place.scale, g.fontSize), g.place);
         const width = boilWidth(g.seed, String(g.stroke.strokeIndex), g.step, options.width);
         return path.map((p) => ({ ...move(p), width: p.width * width(p.t) }));
       },
       outline(contour, o) {
-        return contour.map(inPx(fieldFor(o.seed, o.step, o.fontSize / o.place.scale), o.place));
+        return contour.map(inPx(fieldFor(o.seed, o.step, o.fontSize / o.place.scale, o.fontSize), o.place));
       },
     };
   },

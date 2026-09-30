@@ -79,6 +79,13 @@ describe('annotate: shapes', () => {
     expect(box.maxX).toBeGreaterThan(148);
   });
 
+  test('width and padding are lengths: in px they match the same share of the font size in em', () => {
+    const box = (o: Partial<AnnotateOptions>) => annotations(strokesOf('abc'), { ...defaults, mark: 'box', ...o }, EM)[0]!.strokes[0]!.path;
+    const inEm = box({ width: 0.05, padding: 0.2 });
+    const inPx = box({ width: `${0.05 * EM}px`, padding: `${0.2 * EM}px` });
+    expect(inPx.points.map((p) => [p.x, p.y, p.width])).toEqual(inEm.points.map((p) => [p.x, p.y, p.width]));
+  });
+
   test('a circle goes round what it marks, clear of the ink', () => {
     const [mark] = annotations(strokesOf('abc'), { ...defaults, mark: 'circle' }, EM);
     const box = mark!.strokes[0]!.path.bounds()!;

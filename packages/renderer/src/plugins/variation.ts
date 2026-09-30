@@ -1,8 +1,8 @@
 import { createPlugin } from '../core/createPlugin.ts';
 import { seededRandom } from '../lib/random.ts';
-import { type FontPoint, inPx } from './glyphSpace.ts';
+import { type FontPoint, inEms, inPx } from './glyphSpace.ts';
 
-/** How far each glyph can stray from the font, before `amount` scales it all. */
+/** How far each glyph can stray from the font, before `amount` scales it all — the params' lengths resolved to ems at the font size. */
 export interface VariationOptions {
   /** Scales everything below: 0 draws the font as it is, 2 twice as loose. */
   amount: number;
@@ -104,11 +104,19 @@ export const variationPlugin = createPlugin({
     },
     slant: { type: 'number', label: 'Slant', description: 'Lean, in degrees either way.', default: 4, min: 0, max: 15, step: 0.5 },
     rotation: { type: 'number', label: 'Rotation', description: 'Turn, in degrees either way.', default: 2, min: 0, max: 10, step: 0.5 },
-    drift: { type: 'number', label: 'Drift', description: 'Shift off its place, in ems.', default: 0.02, min: 0, max: 0.1, step: 0.005 },
+    drift: {
+      type: 'length',
+      label: 'Drift',
+      description: "Shift off its place: in em, or px as '2px'.",
+      default: 0.02,
+      min: 0,
+      max: 0.1,
+      step: 0.005,
+    },
     warp: {
-      type: 'number',
+      type: 'length',
       label: 'Warp',
-      description: 'A slow bend through the glyph, in ems.',
+      description: "A slow bend through the glyph: in em, or px as '1.5px'.",
       default: 0.015,
       min: 0,
       max: 0.08,
@@ -130,25 +138,31 @@ export const variationPlugin = createPlugin({
     Signature: { slant: 8, warp: 0.03, size: 0.08, rotation: 3 },
   },
   setup: (options) => {
+    // The lengths as ems: a px one is a different share of each font size.
+    const atSize = (fontSize: number): VariationOptions => ({
+      ...options,
+      drift: inEms(options.drift, fontSize),
+      warp: inEms(options.warp, fontSize),
+    });
     const fields = new Map<string, (p: FontPoint) => FontPoint>();
-    const fieldFor = (seed: number, em: number) => {
-      const key = `${seed}|${em}`;
+    const fieldFor = (seed: number, em: number, fontSize: number) => {
+      const key = `${seed}|${em}|${fontSize}`;
       let field = fields.get(key);
       if (!field) {
         // Seeds come and go as the text or the renderer's seed changes; keep the cache from growing without end.
         if (fields.size > 4096) fields.clear();
-        fields.set(key, (field = variationField(seed, options, em)));
+        fields.set(key, (field = variationField(seed, atSize(fontSize), em)));
       }
       return field;
     };
     return {
       geometry(path, g) {
-        const move = inPx(fieldFor(g.seed, g.fontSize / g.place.scale), g.place);
-        const width = variationWidth(g.seed, String(g.stroke.strokeIndex), options);
+        const move = inPx(fieldFor(g.seed, g.fontSize / g.place.scale, g.fontSize), g.place);
+        const width = variationWidth(g.seed, String(g.stroke.strokeIndex), atSize(g.fontSize));
         return path.map((p) => ({ ...move(p), width: p.width * width(p.t) }));
       },
       outline(contour, o) {
-        const move = inPx(fieldFor(o.seed, o.fontSize / o.place.scale), o.place);
+        const move = inPx(fieldFor(o.seed, o.fontSize / o.place.scale, o.fontSize), o.place);
         return contour.map(move);
       },
     };

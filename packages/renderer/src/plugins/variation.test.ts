@@ -5,7 +5,8 @@ import type { GlyphPlacement, StrokeGeometryContext } from '../lib/strokeTimelin
 import { type VariationOptions, variationField, variationPlugin, variationWidth } from './variation.ts';
 
 const EM = 1000;
-const defaults: VariationOptions = variationPlugin.defaults;
+// The defaults are bare numbers, in em, so they're the field's options as they are.
+const defaults = variationPlugin.defaults as VariationOptions;
 const points = [
   { x: 0, y: 0 },
   { x: 500, y: -700 },
@@ -99,6 +100,16 @@ describe('variationPlugin', () => {
     for (let i = 0; i < moved.length; i++) {
       expect(outline[i]!.x).toBeCloseTo(moved[i]!.x, 9);
       expect(outline[i]!.y).toBeCloseTo(moved[i]!.y, 9);
+    }
+  });
+
+  test('drift and warp are lengths: in px they match the same share of the font size in em', () => {
+    const g = { seed: 4, place, fontSize, stroke: { strokeIndex: 0 } } as unknown as TegakiGeometryContext & StrokeGeometryContext;
+    const inEm = variationPlugin({ drift: 0.03, warp: 0.02 }).geometry!(path, g).points;
+    const inPx = variationPlugin({ drift: '3px', warp: '2px' }).geometry!(path, g).points;
+    for (let i = 0; i < inEm.length; i++) {
+      expect(inPx[i]!.x).toBeCloseTo(inEm[i]!.x, 9);
+      expect(inPx[i]!.y).toBeCloseTo(inEm[i]!.y, 9);
     }
   });
 

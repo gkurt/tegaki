@@ -1,4 +1,4 @@
-import { createPlugin } from '../core/createPlugin.ts';
+import { createPlugin, lengthToPx, type TegakiLength } from '../core/createPlugin.ts';
 import { paintStroke } from '../lib/paintStroke.ts';
 import { seededRandom } from '../lib/random.ts';
 import { type Box, type PathPoint, StrokePath, unionBoxes } from '../lib/strokePath.ts';
@@ -19,10 +19,10 @@ export interface AnnotateOptions {
   pick: number;
   when: AnnotateWhen;
   color: string;
-  /** The pen's width, in ems. */
-  width: number;
-  /** How far the marks sit off the ink, in ems. */
-  padding: number;
+  /** The pen's width: in em, or px as `'3px'`. */
+  width: TegakiLength;
+  /** How far the marks sit off the ink: in em, or px as `'10px'`. */
+  padding: TegakiLength;
   /** How loosely the hand draws them: 0 ruler-straight, 1 dashed off. */
   roughness: number;
   /** Seconds each mark takes to draw. */
@@ -228,8 +228,8 @@ const HIGHLIGHT = -0.3;
 
 /** A mark's strokes round or along one group, in px. */
 export function markStrokes(group: StrokeGroup, o: AnnotateOptions, fontSize: number, random: Random): AnnotationStroke[] {
-  const width = Math.max(0.5, o.width * fontSize);
-  const pad = o.padding * fontSize;
+  const width = Math.max(0.5, lengthToPx(o.width, fontSize));
+  const pad = lengthToPx(o.padding, fontSize);
   const rough = o.roughness;
   const { ink, baseline } = group;
   const over = () => (0.03 + 0.08 * random()) * rough * fontSize;
@@ -256,7 +256,7 @@ export function markStrokes(group: StrokeGroup, o: AnnotateOptions, fontSize: nu
     case 'strike':
       return [{ path: along(baseline + STRIKE * fontSize, width), from: 0, to: 1 }];
     case 'highlight': {
-      const band = (0.5 + 2 * o.width) * fontSize;
+      const band = 0.5 * fontSize + 2 * lengthToPx(o.width, fontSize);
       return [{ path: along(baseline + HIGHLIGHT * fontSize, band, 0, true), from: 0, to: 1 }];
     }
     case 'circle':
@@ -386,8 +386,24 @@ export const annotatePlugin = createPlugin({
       ],
     },
     color: { type: 'color', label: 'Color', default: '#e5484d' },
-    width: { type: 'number', label: 'Width', description: "The pen's width, in ems.", default: 0.045, min: 0.01, max: 0.15, step: 0.005 },
-    padding: { type: 'number', label: 'Padding', description: 'How far off the ink, in ems.', default: 0.12, min: 0, max: 0.6, step: 0.01 },
+    width: {
+      type: 'length',
+      label: 'Width',
+      description: "The pen's width: in em, or px as '3px'.",
+      default: 0.045,
+      min: 0.01,
+      max: 0.15,
+      step: 0.005,
+    },
+    padding: {
+      type: 'length',
+      label: 'Padding',
+      description: "How far off the ink: in em, or px as '10px'.",
+      default: 0.12,
+      min: 0,
+      max: 0.6,
+      step: 0.01,
+    },
     roughness: { type: 'number', label: 'Roughness', description: 'How loosely the hand draws.', default: 0.5, min: 0, max: 1, step: 0.05 },
     duration: { type: 'number', label: 'Duration', description: 'Seconds each mark takes.', default: 0.5, min: 0.05, max: 3, step: 0.05 },
     delay: { type: 'number', label: 'Delay', description: 'Seconds before each mark.', default: 0.25, min: 0, max: 3, step: 0.05 },

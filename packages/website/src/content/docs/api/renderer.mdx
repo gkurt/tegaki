@@ -638,8 +638,8 @@ How each glyph strays comes from its seed, the renderer's [`seed`](#seed) plus t
 | `size` | `0.05` | How much a glyph grows or shrinks, as a share of its size. |
 | `slant` | `4` | Lean, in degrees either way. |
 | `rotation` | `2` | Turn, in degrees either way. |
-| `drift` | `0.02` | Shift off the glyph's place, in ems. |
-| `warp` | `0.015` | A slow bend through the glyph, in ems. |
+| `drift` | `0.02` | Shift off the glyph's place: a [length](#plugins-with-options-createplugindefinition), em unless it says px (`'2px'`). |
+| `warp` | `0.015` | A slow bend through the glyph: a length, em unless it says px. |
 | `width` | `0.12` | Ink width, as a share of the stroke's. |
 
 It comes with three presets: `Subtle`, `Loose` and `Signature`. `toSVG` draws the glyphs as it varies them.
@@ -659,7 +659,7 @@ const always = [boilPlugin({ idle: true, fps: 8 })]; // and after it's written, 
 |--------|---------|-----------------|
 | `drawings` | `3` | How many drawings the cycle has (2–8). |
 | `fps` | `12` | Drawings a second. 12 is animation "on twos"; 8 is choppier. |
-| `amount` | `0.012` | How far the line wanders, in ems. |
+| `amount` | `0.012` | How far the line wanders: a [length](#plugins-with-options-createplugindefinition), em unless it says px (`'1px'`). |
 | `detail` | `0.3` | `0` bends the lines slowly; `1` makes them jitter along their length. |
 | `width` | `0.08` | How much the ink width wanders, as a share of the stroke's. |
 | `idle` | `false` | Keep boiling once the text is written, or while it's paused (uncontrolled and CSS time). |
@@ -685,8 +685,8 @@ const highlight = [annotatePlugin({ mark: 'highlight', target: 'lines', color: '
 | `pick` | `0` | Which one to mark, counting from 1. `0` marks every one. |
 | `when` | `'after'` | `'after'` draws the marks one after another once the text is written. `'each'` draws each mark as soon as what it marks is written, and holds the writing back while it's drawn. |
 | `color` | `'#e5484d'` | The pen's color. A highlighter is drawn see-through, under the ink. |
-| `width` | `0.045` | The pen's width, in ems. |
-| `padding` | `0.12` | How far the marks sit off the ink, in ems. |
+| `width` | `0.045` | The pen's width: a [length](#plugins-with-options-createplugindefinition), em unless it says px (`'3px'`). |
+| `padding` | `0.12` | How far the marks sit off the ink: a length, em unless it says px. |
 | `roughness` | `0.5` | How loosely the hand draws: `0` is ruler-straight, `1` is dashed off. |
 | `duration` | `0.5` | Seconds each mark takes to draw. |
 | `delay` | `0.25` | Seconds before each mark starts. |

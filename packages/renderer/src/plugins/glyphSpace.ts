@@ -1,9 +1,15 @@
+import { lengthToPx, type TegakiLength } from '../core/createPlugin.ts';
 import type { GlyphPlacement } from '../lib/strokeTimeline.ts';
 
 /** A point in a glyph's own font units: x from its origin, y down from its baseline. */
 export interface FontPoint {
   x: number;
   y: number;
+}
+
+/** A length param as ems of `fontSize`, what the glyph fields measure in: `0.02` stays 0.02, `'2px'` at 100px is 0.02. */
+export function inEms(length: TegakiLength, fontSize: number): number {
+  return fontSize > 0 ? lengthToPx(length, fontSize) / fontSize : 0;
 }
 
 /**

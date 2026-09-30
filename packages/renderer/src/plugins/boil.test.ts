@@ -5,7 +5,8 @@ import type { GlyphPlacement, StrokeGeometryContext } from '../lib/strokeTimelin
 import { type BoilOptions, boilField, boilPlugin, boilWidth } from './boil.ts';
 
 const EM = 1000;
-const defaults: BoilOptions = boilPlugin.defaults;
+// The defaults are bare numbers, in em, so they're the field's options as they are.
+const defaults = boilPlugin.defaults as BoilOptions;
 const points = [
   { x: 0, y: 0 },
   { x: 500, y: -700 },
@@ -76,6 +77,12 @@ describe('boilPlugin', () => {
   ]);
   const ctx = (step: number) =>
     ({ seed: 4, place, fontSize, step, stroke: { strokeIndex: 0 } }) as unknown as TegakiGeometryContext & StrokeGeometryContext;
+
+  test('amount is a length: in px it matches the same share of the font size in em', () => {
+    const inEm = boilPlugin({ amount: 0.02 }).geometry!(path, ctx(1)).points;
+    const inPx = boilPlugin({ amount: '2px' }).geometry!(path, ctx(1)).points;
+    for (let i = 0; i < inEm.length; i++) expect(inPx[i]!.x).toBeCloseTo(inEm[i]!.x, 9);
+  });
 
   test('asks the engine for its drawings as steps', () => {
     expect(boilPlugin().steps).toEqual({ count: 3, fps: 12, idle: false });
