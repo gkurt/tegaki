@@ -50,25 +50,50 @@ function npmView(spec: string): string {
   return execFileSync('npm', ['view', spec, 'version'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }
 
+/**
+ * Whether the registry's abbreviated packument — the document `bun install` reads —
+ * lists the version. `npm view` reads the full packument, which the registry's CDN
+ * caches separately (max-age 300): 1.0.0 showed up in `npm view` while installs
+ * still got a document without it.
+ */
+async function installable(version: string): Promise<boolean> {
+  const res = await fetch('https://registry.npmjs.org/tegaki', {
+    headers: { accept: 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*' },
+  });
+  if (!res.ok) return false;
+  const doc = (await res.json()) as { versions?: Record<string, unknown> };
+  return Boolean(doc.versions?.[version]);
+}
+
 /** Resolve a dist-tag to a concrete version, then wait for the registry to serve it. */
-function resolveVersion(spec: string): string {
+async function resolveVersion(spec: string): Promise<string> {
   const version = /^\d/.test(spec) ? spec : npmView(`tegaki@${spec}`);
   if (!version) throw new Error(`Could not resolve tegaki@${spec} on npm`);
 
-  // A fresh publish can take minutes to become visible (0.22.2 took ~2m). Until
-  // then `npm view` exits non-zero with E404, so a throw means "not yet", not failure.
-  const deadline = Date.now() + 300_000;
+  // A fresh publish can take minutes to become visible (0.22.2 took ~2m, 1.0.0 ~6m).
+  const deadline = Date.now() + 600_000;
   for (;;) {
-    let seen = '';
-    try {
-      seen = npmView(`tegaki@${version}`);
-    } catch {
-      /* E404 until the version propagates */
-    }
-    if (seen === version) return version;
+    if (await installable(version).catch(() => false)) return version;
     if (Date.now() > deadline) throw new Error(`tegaki@${version} never became visible on npm`);
     console.log(`Waiting for tegaki@${version} to propagate on npm...`);
-    execFileSync('sleep', ['5']);
+    await Bun.sleep(5000);
+  }
+}
+
+/**
+ * `bun install`, retried a few times: the CDN edge an install hits can still serve
+ * a packument without the new version after the poll above saw it.
+ */
+async function install(dest: string) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      run('bun', ['install'], dest);
+      return;
+    } catch (err) {
+      if (attempt === 4) throw err;
+      console.log(`bun install failed (attempt ${attempt}); retrying in 30s...`);
+      await Bun.sleep(30_000);
+    }
   }
 }
 
@@ -90,7 +115,7 @@ function stripDevCondition(text: string): string {
 // The configs that may carry the `tegaki@dev` condition, across the examples' bundlers.
 const DEV_CONDITION_CONFIGS = ['tsconfig.json', 'vite.config.ts', 'astro.config.ts'];
 
-const version = resolveVersion(versionArg);
+const version = await resolveVersion(versionArg);
 console.log(`\n=== Testing published tegaki@${version} against examples ===\n`);
 
 const staging = stagingArg ? resolve(stagingArg) : mkdtempSync(join(tmpdir(), 'tegaki-published-'));
@@ -126,7 +151,7 @@ for (const name of ALL_EXAMPLES) {
 for (const name of ALL_EXAMPLES) {
   const dest = join(staging, name);
   console.log(`\n--- ${name}: install ---`);
-  run('bun', ['install'], dest);
+  await install(dest);
 
   // Sanity: the installed package must be the npm tarball, not a workspace link.
   const dep = join(dest, 'node_modules', 'tegaki');
