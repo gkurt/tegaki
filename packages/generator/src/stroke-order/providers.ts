@@ -8,6 +8,7 @@ import { baseLetter, hasCombiningMarks } from '../geometry/marks.ts';
 import type { GeometryOptions } from '../geometry/types.ts';
 import { createHangulProvider } from './hangul.ts';
 import { createHersheyProvider, createHersheySimplexProvider } from './hershey.ts';
+import { createPunctuationProvider } from './punctuation.ts';
 import type { ReferenceGlyph, StrokeOrderProvider } from './types.ts';
 
 /**
@@ -39,6 +40,7 @@ const HAN = /^\p{Script=Han}/u;
 
 // Pure in-memory datasets: one memoizing instance serves every reference set.
 const LATIN_AND_HANGUL: StrokeOrderProvider[] = [createHersheyProvider(), createHersheySimplexProvider(), createHangulProvider()];
+const PUNCTUATION = createPunctuationProvider();
 
 /** The Han datasets, with their IO already wired (CLI disk cache, website fetch). */
 export interface HanReferenceProviders {
@@ -49,15 +51,16 @@ export interface HanReferenceProviders {
 /**
  * Every stroke-order reference source, as the CLI and the Studio use them:
  * the Han datasets as ONE source ordered by `hanLocale` (KanjiVG also covers
- * kana and print Latin, so it stays in the chain for 'zh'), then Hershey
- * cursive + print Latin and composed Hangul as best-fit variants. Cheap to
+ * kana and print Latin, so it stays in the chain for 'zh') behind the
+ * punctuation references, which stand in for KanjiVG's directionless comma;
+ * then Hershey cursive + print Latin and composed Hangul as best-fit variants. Cheap to
  * call: every set shares the passed providers' caches and the in-memory ones.
  */
 export function createReferenceSet(han: HanReferenceProviders, hanLocale: GeometryOptions['hanLocale']): StrokeOrderProvider[] {
   // Asking Make Me a Hanzi about anything else only costs a failed fetch.
   const makeMeAHanzi = onlyFor(HAN, han.makeMeAHanzi);
   const hanOrder = hanLocale === 'zh' ? [makeMeAHanzi, han.kanjiVG] : [han.kanjiVG, makeMeAHanzi];
-  return [firstMatchProvider(hanOrder), ...LATIN_AND_HANGUL];
+  return [firstMatchProvider([PUNCTUATION, ...hanOrder]), ...LATIN_AND_HANGUL];
 }
 
 async function referencesFor(char: string, providers: StrokeOrderProvider[]): Promise<ReferenceGlyph[]> {

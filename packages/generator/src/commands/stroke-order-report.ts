@@ -90,6 +90,7 @@ export function glyphStrokeOrder(char: string, result: GeometryPipelineResult): 
       result.geoStrokes.map((g) => g.points),
       result.reference.strokes.map((s) => s.points),
       diag,
+      result.geoStrokes.map((g) => g.isLoop),
     ).meanCost;
   }
   return {

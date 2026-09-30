@@ -325,9 +325,10 @@ export interface GeometryPipelineResult {
   reference?: RegisteredReference;
   /**
    * Where the final draw order/direction came from: a clean 1:1 match with
-   * the dataset, the dataset ordering strokes it could not match 1:1
-   * ('guided' — standardized-order scripts only, see guide.ts), or the
-   * heuristics.
+   * the dataset; 'guided' — the dataset ordering strokes it could not match
+   * 1:1 (standardized-order scripts, see guide.ts), or, elsewhere, the
+   * heuristic order with the pen directions the dataset clearly prefers (see
+   * `orientByReference`); or the heuristics.
    */
   strokeOrderSource: 'dataset' | 'guided' | 'heuristic';
   /**

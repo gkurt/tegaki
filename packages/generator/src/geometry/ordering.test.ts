@@ -181,3 +181,32 @@ describe('right-to-left order', () => {
     expect(orderAndTimeStrokes([he], { ...RTL, topEntry: true })[0]!.points[0]).toMatchObject({ x: 0, y: -600 });
   });
 });
+
+describe('orient-only plans', () => {
+  // An S in font units (y down): its top-right end, round to the bottom-left one.
+  const s = stroke([200, 0], [0, 60], [200, 140], [0, 200]);
+  const firstPoint = (strokes: GeoStroke[], plan?: Parameters<typeof orderAndTimeStrokes>[2]) =>
+    orderAndTimeStrokes(strokes, PARAMS, plan).map((t) => t.points[0]);
+
+  test('the heuristic enters a stroke at its left end', () => {
+    expect(firstPoint([s])[0]).toMatchObject({ x: 0, y: 200 });
+  });
+
+  test('a plan without a sequence sets the direction and keeps the heuristic order', () => {
+    const bar = stroke([0, 300], [60, 300]);
+    const points = firstPoint([bar, s], { reverse: [undefined, false] });
+    expect(points).toEqual([expect.objectContaining({ x: 200, y: 0 }), expect.objectContaining({ x: 0, y: 300 })]);
+  });
+
+  test("a plan's loop start enters a loop there, before reversing it", () => {
+    const loop: GeoStroke = { ...stroke([0, 0], [0, 100], [100, 100], [100, 0], [0, 0]), isLoop: true };
+    const [drawn] = orderAndTimeStrokes([loop], PARAMS, { sequence: [0], reverse: [true], start: [2] });
+    expect(drawn!.points.map((p) => [p.x, p.y])).toEqual([
+      [100, 100],
+      [0, 100],
+      [0, 0],
+      [100, 0],
+      [100, 100],
+    ]);
+  });
+});

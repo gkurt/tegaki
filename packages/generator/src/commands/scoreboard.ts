@@ -92,7 +92,7 @@ export interface ScoreboardSummary {
   geometryOver2: number;
   geometryOver5: number;
   rasterMean: number;
-  /** Glyphs with a stroke-order reference; of those, stroke counts equal, ordered 1:1, and ordered along it. */
+  /** Glyphs with a stroke-order reference; of those, stroke counts equal, ordered 1:1, and guided by it (ordered along it, or oriented by it). */
   withReference: number;
   countsAgree: number;
   dataset: number;
@@ -263,7 +263,7 @@ export function formatScoreboardComparison(name: string, c: ScoreboardComparison
     count('geometry drew nothing', 'geometryFailed', 'glyphs'),
     count('stroke counts match reference', 'countsAgree', 'withReference'),
     count('ordered 1:1 by reference', 'dataset', 'withReference'),
-    count('ordered along reference', 'guided', 'withReference'),
+    count('guided by reference (order or pen direction)', 'guided', 'withReference'),
     share('raster mean unpainted (not gated)', 'rasterMean'),
   ];
   const list = (title: string, changes: ScoreboardChange[]) => {

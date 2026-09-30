@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { PathCommand, Point } from 'tegaki';
 import { initStraightSkeleton } from './face-straight-skeleton.ts';
 import type { GeometryPipelineInput } from './pipeline.ts';
-import { runGeometryPipeline } from './pipeline.ts';
+import { orientByReference, runGeometryPipeline } from './pipeline.ts';
 import { DEFAULT_GEOMETRY_OPTIONS, type GeometryOptions } from './types.ts';
 
 const UPM = 1000;
@@ -367,6 +367,39 @@ describe('geometry pipeline — dataset stroke order', () => {
     expect(r.strokeOrderSource).toBe('heuristic');
     expect(r.reference).toBeUndefined();
     expect(r.warnings).toEqual([]);
+  });
+});
+
+describe('orientByReference', () => {
+  const pair = (extracted: number, cost: number, reverseCost: number, extra: { reversed?: boolean; start?: number } = {}) => ({
+    extracted,
+    reference: extracted,
+    cost,
+    reverseCost,
+    reversed: extra.reversed ?? false,
+    ...(extra.start !== undefined ? { start: extra.start } : {}),
+  });
+  const match = (...pairs: ReturnType<typeof pair>[]) => ({
+    pairs,
+    meanCost: pairs.reduce((s, p) => s + p.cost, 0) / pairs.length,
+    extractedCount: pairs.length,
+    referenceCount: pairs.length,
+  });
+
+  test('a stroke whose shape misses the gate still takes a direction it clearly prefers (Caveat S)', () => {
+    const oriented = orientByReference(match(pair(0, 0.187, 0.58, { reversed: true })), 1);
+    expect(oriented?.plan).toEqual({ reverse: [true] });
+    expect(oriented?.plan.sequence).toBeUndefined();
+  });
+
+  test('a stroke that fits nearly as well reversed keeps the heuristic direction (a cursive N against a print one)', () => {
+    expect(orientByReference(match(pair(0, 0.341, 0.4, { reversed: true })), 1)).toBeNull();
+  });
+
+  test('only the decisive strokes are oriented; a loop takes its entry too', () => {
+    const oriented = orientByReference(match(pair(0, 0.2, 0.25), pair(1, 0.2, 0.6, { start: 7 }), pair(2, 0.5, 2)), 3);
+    expect(oriented?.count).toBe(1);
+    expect(oriented?.plan).toEqual({ reverse: [undefined, false, undefined], start: [undefined, 7, undefined] });
   });
 });
 

@@ -1567,6 +1567,7 @@ export function regroupStrokesByReference(strokes: GeoStroke[], references: Poin
           chainStrokes.map((s) => s.points),
           references,
           options.glyphDiag,
+          chainStrokes.map((s) => s.isLoop),
         );
         const countsAgree = match.extractedCount === match.referenceCount;
         // Pruning is a last resort: even coverage-safe drops count against a

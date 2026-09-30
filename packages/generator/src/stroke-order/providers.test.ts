@@ -88,6 +88,16 @@ describe('createReferenceSet', () => {
     expect(asked).toEqual(['中', '中']);
   });
 
+  test("the comma takes the punctuation reference over KanjiVG's, which has no direction", async () => {
+    const set = createReferenceSet({ kanjiVG: named('kanjivg', ','), makeMeAHanzi: named('makemeahanzi', '') }, 'ja');
+    const [comma, ...others] = await collectReferences(',', set);
+    expect(others).toEqual([]);
+    expect(comma?.source).toBe('punctuation');
+    // Written from the head down to the tail.
+    const points = comma!.strokes[0]!.points;
+    expect(points[0]!.y).toBeLessThan(points.at(-1)!.y);
+  });
+
   test("'zh' takes Make Me a Hanzi for shared hanzi and still finds kana in KanjiVG", async () => {
     const set = createReferenceSet(han, 'zh');
     expect((await collectReferences('中', set)).map((r) => r.source)).toEqual(['makemeahanzi']);

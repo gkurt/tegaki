@@ -8,6 +8,7 @@
 
 import type { Stroke, TimedPoint } from 'tegaki';
 import { ORIENT_X_WEIGHT } from '../constants.ts';
+import { rotateLoop } from '../stroke-order/match.ts';
 import { dist } from './primitives.ts';
 import type { AxisPoint, GeoStroke } from './types.ts';
 
@@ -270,14 +271,30 @@ export function componentSlots(strokes: readonly (readonly { x: number; y: numbe
 
 /**
  * Externally decided order + orientation (e.g. from a stroke-order dataset).
- * When present it replaces the heuristics entirely: no entry-point orient, no
- * dots-last reclassification — the plan is prescriptive.
+ * With a `sequence` it replaces the heuristics entirely: no entry-point
+ * orient, no dots-last reclassification — the plan is prescriptive. Without
+ * one it only orients: the strokes run as the plan says, in the heuristic
+ * order.
  */
 export interface OrderPlan {
-  /** Draw sequence: a permutation of stroke indices. */
-  sequence: number[];
-  /** Per stroke index: reverse the polyline before timing. */
-  reverse: boolean[];
+  /** Draw sequence: a permutation of stroke indices; unset keeps the heuristic order. */
+  sequence?: number[];
+  /**
+   * Per stroke index: reverse the polyline before timing. In an orient-only
+   * plan, unset leaves the stroke to the heuristic's orientation.
+   */
+  reverse: (boolean | undefined)[];
+  /**
+   * Per stroke index: the vertex a closed loop is entered at (`rotateLoop`),
+   * applied before `reverse`; unset leaves the loop's seam where it is.
+   */
+  start?: (number | undefined)[];
+}
+
+/** A stroke as a plan draws it: its loop entered at `start`, then reversed. */
+function planned(points: AxisPoint[], reverse: boolean, start: number | undefined): AxisPoint[] {
+  const entered = start !== undefined ? rotateLoop(points, start) : points;
+  return reverse ? [...entered].reverse() : entered;
 }
 
 /**
@@ -353,32 +370,39 @@ export function orderAndTimeStrokes(strokes: GeoStroke[], params: OrderTimingPar
   const groupOf = strokes.map(() => groups?.length ?? 0);
   const planPos: (number | undefined)[] = strokes.map(() => undefined);
   const planReverse = strokes.map(() => false);
+  const planStart: (number | undefined)[] = strokes.map(() => undefined);
+  const groupPlanned = strokes.map(() => false);
+  // A stroke a plan orients: every stroke of a sequenced plan, and the ones
+  // an orient-only plan gives a direction.
+  const orients = (p: OrderPlan, i: number) => p.sequence !== undefined || p.reverse[i] !== undefined;
   groups?.forEach((group, g) => {
     for (const i of group.strokes) groupOf[i] = g;
-    group.plan?.sequence.forEach((local, pos) => {
+    const plan = group.plan;
+    if (!plan) return;
+    group.strokes.forEach((i, local) => {
+      if (strokes[i]!.mark || !orients(plan, local)) return;
+      groupPlanned[i] = true;
+      planReverse[i] = plan.reverse[local] ?? false;
+      planStart[i] = plan.start?.[local];
+    });
+    plan.sequence?.forEach((local, pos) => {
       const i = group.strokes[local]!;
-      if (strokes[i]!.mark) return;
-      planPos[i] = pos;
-      planReverse[i] = group.plan!.reverse[local] ?? false;
+      if (!strokes[i]!.mark) planPos[i] = pos;
     });
   });
 
   // Marks (accents) sit outside any reference plan: oriented like any
   // heuristic stroke, and drawn in the dot tier after the letter.
   const oriented = strokes.map((s, i) =>
-    plan && !s.mark
-      ? plan.reverse[i]
-        ? [...s.points].reverse()
-        : s.points
-      : planPos[i] !== undefined
-        ? planReverse[i]
-          ? [...s.points].reverse()
-          : s.points
+    plan && !s.mark && orients(plan, i)
+      ? planned(s.points, plan.reverse[i] ?? false, plan.start?.[i])
+      : groupPlanned[i]
+        ? planned(s.points, planReverse[i]!, planStart[i])
         : orient(s.points, s.isLoop, rtl, topEntry),
   );
   const priorities = strokes.map((s): number => (s.mark ? -1 : 0));
   let order: number[];
-  if (plan) {
+  if (plan?.sequence) {
     order = plan.sequence;
   } else {
     classifyDots(oriented, priorities);

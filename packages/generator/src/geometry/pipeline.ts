@@ -477,6 +477,56 @@ const GUIDED_STROKE_ORDER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakan
  */
 const GUIDE_MAX_DISTANCE = 0.06;
 
+/**
+ * A stroke the reference can't order still takes its pen direction when it
+ * follows its reference stroke within this cost (fraction of the glyph
+ * diagonal)…
+ */
+const ORIENT_MAX_COST = 0.35;
+/**
+ * …and at most this share of its cost the other way round. Measured over the
+ * shipped Latin fonts: an S, s, 5, 6 or f whose shape misses the gate runs
+ * 0.26–0.45 of reversed; a cursive N scored against a print one, 0.86.
+ */
+const ORIENT_MAX_RATIO = 0.75;
+
+/**
+ * An orient-only plan (see `OrderPlan`): each paired stroke that runs
+ * clearly one way along its reference stroke (`ORIENT_MAX_COST`,
+ * `ORIENT_MAX_RATIO`) takes that direction and, for a loop, its entry; the
+ * rest stay the heuristic's. Null when no stroke does.
+ */
+export function orientByReference(match: StrokeMatchResult, strokeCount: number): { plan: OrderPlan; count: number } | null {
+  const reverse: (boolean | undefined)[] = Array.from({ length: strokeCount }, () => undefined);
+  const start: (number | undefined)[] = Array.from({ length: strokeCount }, () => undefined);
+  let count = 0;
+  for (const pair of match.pairs) {
+    if (pair.cost > ORIENT_MAX_COST || pair.cost > ORIENT_MAX_RATIO * pair.reverseCost) continue;
+    reverse[pair.extracted] = pair.reversed;
+    start[pair.extracted] = pair.start;
+    count++;
+  }
+  if (count === 0) return null;
+  return { plan: { reverse, ...(start.some((v) => v !== undefined) ? { start } : {}) }, count };
+}
+
+/**
+ * The order a 1:1 match prescribes: the reference's stroke order, each
+ * stroke in its pen direction (a loop entered where the reference enters
+ * it). Strokes the match left unpaired draw after the prescribed ones.
+ */
+function datasetPlan(match: StrokeMatchResult, strokeCount: number): OrderPlan {
+  const sequence = [...match.pairs].sort((a, b) => a.reference - b.reference).map((p) => p.extracted);
+  for (let i = 0; i < strokeCount; i++) if (!sequence.includes(i)) sequence.push(i);
+  const reverse = Array.from({ length: strokeCount }, () => false);
+  const start: (number | undefined)[] = Array.from({ length: strokeCount }, () => undefined);
+  for (const pair of match.pairs) {
+    reverse[pair.extracted] = pair.reversed;
+    start[pair.extracted] = pair.start;
+  }
+  return { sequence, reverse, ...(start.some((v) => v !== undefined) ? { start } : {}) };
+}
+
 /** Scripts whose strokes turn corners only as 横折 / 竖折 do (see bends.ts). */
 const BENT_STROKE_SCRIPT = /[\p{Script=Han}\p{Script=Katakana}]/u;
 
@@ -681,6 +731,7 @@ export function runGeometryPipeline(
           strokes.map((g) => g.points),
           refPolylines,
           glyphDiag,
+          strokes.map((g) => g.isLoop),
         );
         let clean = isClean(match);
         let variantStrokes = strokes;
@@ -712,6 +763,7 @@ export function runGeometryPipeline(
               chains.map((g) => g.points),
               refPolylines,
               glyphDiag,
+              chains.map((g) => g.isLoop),
             );
             // Pruned ink and lifted extras count against the proposal,
             // mirroring the regroup portfolio's own gate — a proposal must
@@ -784,12 +836,7 @@ export function runGeometryPipeline(
       }
       const countsAgree = match.extractedCount === match.referenceCount;
       if (clean || geometryOptions.strokeOrder === 'dataset') {
-        const sequence = [...match.pairs].sort((a, b) => a.reference - b.reference).map((p) => p.extracted);
-        // Forced partial match: unmatched extras draw after the prescribed strokes.
-        for (let i = 0; i < outStrokes.length; i++) if (!sequence.includes(i)) sequence.push(i);
-        const reverse = outStrokes.map(() => false);
-        for (const pair of match.pairs) reverse[pair.extracted] = pair.reversed;
-        plan = { sequence, reverse };
+        plan = datasetPlan(match, outStrokes.length);
         strokeOrderSource = 'dataset';
         if (!countsAgree) {
           warnings.push(
@@ -809,10 +856,23 @@ export function runGeometryPipeline(
               glyphDiag,
             )
           : null;
+        // Elsewhere the reference is one hand among several, and a font
+        // whose shapes miss it still runs most strokes its way: an S from its
+        // top, a loop entered at its top. A stroke takes the reference's pen
+        // direction when it follows its reference stroke clearly better that
+        // way than reversed; the order, and every other stroke, stay the
+        // heuristic's.
+        const oriented = !guided && countsAgree ? orientByReference(match, outStrokes.length) : null;
         if (guided && guided.meanDistance <= GUIDE_MAX_DISTANCE) {
           plan = { sequence: guided.sequence, reverse: guided.reverse };
           strokeOrderSource = 'guided';
           warnings.push(`stroke order: ${why} — ordered along the '${reference.source}' reference`);
+        } else if (oriented) {
+          plan = oriented.plan;
+          strokeOrderSource = 'guided';
+          warnings.push(
+            `stroke order: ${why} — heuristic order kept, ${oriented.count} of ${outStrokes.length} stroke${outStrokes.length === 1 ? '' : 's'} run the '${reference.source}' reference's way`,
+          );
         } else {
           warnings.push(`stroke order: ${why} — heuristic order kept`);
         }
@@ -907,7 +967,8 @@ export function runGeometryPipeline(
   if (markStrokes.length > 0) {
     if (plan)
       plan = {
-        sequence: [...plan.sequence, ...markStrokes.map((_, k) => outStrokes.length + k)],
+        ...plan,
+        ...(plan.sequence ? { sequence: [...plan.sequence, ...markStrokes.map((_, k) => outStrokes.length + k)] } : {}),
         reverse: [...plan.reverse, ...markStrokes.map(() => false)],
       };
     outStrokes = [...outStrokes, ...markStrokes];
