@@ -1,0 +1,64 @@
+---
+title: Credits
+description: The fonts and stroke-order datasets Tegaki and Tegaki Studio are built with, their authors and their licenses.
+---
+
+Tegaki stands on other people's fonts and handwriting data. This page credits them and carries the notices their licenses ask to travel with them — the Studio runs the generator in your browser, so this site serves some of that data itself.
+
+## Bundled fonts
+
+The font bundles under `tegaki/fonts/*` are each under their font's own license: the SIL Open Font License for all but Hershey Script, which carries the Hershey Fonts' terms (below). Every font's designer, copyright and license is listed in [`FONTS-LICENSE.md`](https://github.com/gkurt/tegaki/blob/main/packages/renderer/FONTS-LICENSE.md), which ships in the npm package.
+
+## Stroke-order datasets
+
+The generator orders each glyph's strokes by the reference that fits its ink best, from these datasets (Studio › Pipeline › References):
+
+- **[KanjiVG](https://kanjivg.tagaini.net)** — Japanese kanji and kana, also print Latin and digits. Copyright © Ulrich Apel, licensed under [Creative Commons Attribution-Share Alike 3.0](https://creativecommons.org/licenses/by-sa/3.0/). Read per character from KanjiVG's files when a glyph needs it.
+- **[Make Me a Hanzi](https://github.com/skishore/makemeahanzi)** — Chinese hanzi in PRC order. Copyright © Shaunak Kishore; its graphics are derived from Arphic PL fonts and released under the Arphic Public License. Read per character from Hanzi Writer's republication, the [`hanzi-writer-data`](https://www.npmjs.com/package/hanzi-writer-data) package.
+- **[The Hershey Fonts](https://github.com/kamalmostafa/hershey-fonts)** — Hershey Script, Simplex and Greek, built into the generator. Their acknowledgement is below.
+- **[Letterpaths](https://github.com/RobinL/letterpaths)** — print letters and taught cursive lowercase, built into the generator. Its MIT notice is below.
+- **Hangul jamo** and **Punctuation** — made for Tegaki, under its MIT license.
+
+Datasets you draw in the Studio are yours; they stay in your browser.
+
+## Single-line fonts in the Studio
+
+The Studio's font picker lists single-line fonts, downloaded by your browser from their authors' repositories when you pick one:
+
+- The Hershey and EMS fonts from Evil Mad Scientist's [SVG fonts](https://gitlab.com/oskay/svg-fonts), converted by Windell H. Oskay. The EMS fonts are under the SIL Open Font License; the Hershey fonts under the Hershey Fonts' terms below.
+- [Relief SingleLine](https://github.com/isdat-type/Relief-SingleLine) by isdaT type, under the SIL Open Font License.
+
+## Hershey Fonts acknowledgement
+
+The Hershey Fonts may be used by anyone for any purpose, commercial or otherwise, provided these acknowledgements are distributed with the font data:
+
+- The Hershey Fonts were originally created by Dr. A. V. Hershey while working at the U. S. National Bureau of Standards.
+- The format of the Font data in this distribution was originally created by James Hurt, Cognition, Inc., 900 Technology Park Drive, Billerica, MA 01821 (mit-eddie!ci-dandelion!hurt).
+
+The font data may be converted into any other format *except* the format distributed by the U.S. NTIS, where each point is described in eight bytes as "xxx yyy:", with xxx and yyy the coordinate values as ASCII numbers.
+
+## Letterpaths license
+
+```text
+MIT License
+
+Copyright (c) 2026 Robin Linacre
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

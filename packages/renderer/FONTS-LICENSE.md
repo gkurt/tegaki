@@ -74,6 +74,7 @@ All but Hershey Script are licensed under the [SIL Open Font License, Version 1.
 A stroke font: its bundle's glyph data is the font's pen strokes, and the bundled `.otf` is made from those strokes by Tegaki.
 
 - **Designer**: Sheldon B. Michaels (single-line derivative of Allura by Rob Leuschke, TypeSETit); SVG font conversion by Windell H. Oskay (https://gitlab.com/oskay/svg-fonts)
+- **Copyright**: Copyright 2010 The Allura Project Authors (https://github.com/googlefonts/allura); single-line version by Sheldon B. Michaels
 - **License**: SIL Open Font License, Version 1.1
 
 ## Hershey Script 1-stroke
