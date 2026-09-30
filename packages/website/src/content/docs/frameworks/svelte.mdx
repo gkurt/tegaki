@@ -1,6 +1,6 @@
 ---
 title: Svelte
-description: 'Add a handwriting animation to a Svelte 5 app with the TegakiRenderer component: controlled time, effects and streaming text.'
+description: 'Add a handwriting animation to a Svelte 5 app with the TegakiRenderer component: controlled time, plugins and streaming text.'
 head:
   - tag: title
     content: 'Svelte Handwriting Animation | Tegaki'
@@ -58,32 +58,34 @@ Bind the time to a reactive variable:
 
 <LiveDemoControlled client:only="svelte" />
 
-## Effects
+## Plugins
+
+Glows, gradients, tapered ends, wobble and the rest are plugins. Import the factories from `tegaki/svelte` and pass the plugins in a list:
 
 ```svelte
 <script>
-  import { TegakiRenderer } from 'tegaki/svelte';
+  import { glowPlugin, strokeGradientPlugin, TegakiRenderer } from 'tegaki/svelte';
   import bundle from 'tegaki/fonts/caveat';
+
+  const plugins = [strokeGradientPlugin(), glowPlugin({ radius: 0.1, color: '#00ccff' })];
 </script>
 
 <TegakiRenderer
   font={bundle}
-  text="Fancy effects"
+  text="Glowing rainbow"
   time={{ mode: 'uncontrolled', speed: 1, loop: true }}
-  effects={{
-    glow: { radius: 8, color: '#00ccff' },
-    pressureWidth: true,
-    strokeGradient: { colors: 'rainbow' },
-  }}
+  {plugins}
   style="font-size: 48px"
 />
 ```
 
 <LiveDemo
   client:only="svelte"
-  text="Fancy effects"
-  effects={{ glow: { radius: 8, color: '#00ccff' }, pressureWidth: true, strokeGradient: { colors: 'rainbow' } }}
+  text="Glowing rainbow"
+  plugins={['strokeGradient', ['glow', { radius: 0.1, color: '#00ccff' }]]}
 />
+
+Registered plugins can also be named: `plugins={['taper', ['glow', { radius: 0.1 }]]}`. See [Style plugins](/api/renderer/#style-plugins) and [Naming plugins](/api/renderer/#naming-plugins). The `pressure` prop (`0` to `1`, default `1`) sets how much the ink's width follows the pen's pressure.
 
 ## Streaming text
 

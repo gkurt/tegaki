@@ -1,12 +1,12 @@
 import { ColorControl, SelectControl, Slider, TextControl, Toggle } from 'dialkit';
 import { useState } from 'react';
-import type { TegakiPluginParam, TegakiPluginParams } from 'tegaki/core';
+import { parseLength, type TegakiLength, type TegakiLengthParam, type TegakiPluginParam, type TegakiPluginParams } from 'tegaki/core';
 import { normalizePluginIds, type PluginOptions, SHOWCASE_PLUGINS, type ShowcasePlugin } from '../../plugins/index.ts';
 import type { UrlState } from '../../url-state.ts';
 import { ChevronDownIcon, GithubIcon, ResetIcon } from '../icons.tsx';
 import type { SetSetting } from '../state.ts';
 import { Chip, Hint, Section } from '../ui.tsx';
-import { DialScope, SeedControl, SmallIconButton, SmallIconLink, ToggleGroup } from './dial.tsx';
+import { ColorStops, DialScope, SeedControl, SmallIconButton, SmallIconLink, ToggleGroup } from './dial.tsx';
 
 const DOCS = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api/renderer/#plugins`;
 
@@ -37,6 +37,7 @@ export function PluginsPanel({ settings, set }: { settings: UrlState; set: SetSe
     <PluginControls
       key={p.id}
       plugin={p}
+      fontSize={settings.fontSizePx}
       enabled={on.has(p.id)}
       options={settings.pluginOptions[p.id] ?? {}}
       onToggle={(v) => toggle(p.id, v)}
@@ -93,12 +94,15 @@ export function PluginsPanel({ settings, set }: { settings: UrlState; set: SetSe
 
 function PluginControls({
   plugin: { factory, source },
+  fontSize,
   enabled,
   options,
   onToggle,
   onOptions,
 }: {
   plugin: ShowcasePlugin;
+  /** The text's font size in px, what a length param's em and px convert by. */
+  fontSize: number;
   enabled: boolean;
   /** The options changed from the defaults. */
   options: PluginOptions;
@@ -146,7 +150,14 @@ function PluginControls({
             </div>
           )}
           {Object.entries(params).map(([key, param]) => (
-            <ParamControl key={key} name={key} param={param} value={values[key]} onChange={(v) => change({ ...values, [key]: v })} />
+            <ParamControl
+              key={key}
+              name={key}
+              param={param}
+              value={values[key]}
+              fontSize={fontSize}
+              onChange={(v) => change({ ...values, [key]: v })}
+            />
           ))}
         </>
       )}
@@ -159,17 +170,21 @@ function ParamControl({
   name,
   param,
   value,
+  fontSize,
   onChange,
 }: {
   name: string;
   param: TegakiPluginParam;
   value: PluginOptions[string];
+  fontSize: number;
   onChange: (value: NonNullable<PluginOptions[string]>) => void;
 }) {
   const label = param.label ?? name;
   switch (param.type) {
     case 'number':
       return <Slider label={label} value={Number(value)} min={param.min} max={param.max} step={param.step} onChange={onChange} />;
+    case 'length':
+      return <LengthControl label={label} param={param} value={value as TegakiLength} fontSize={fontSize} onChange={onChange} />;
     case 'boolean':
       return <Toggle label={label} checked={Boolean(value)} onChange={onChange} />;
     case 'select':
@@ -178,5 +193,61 @@ function ParamControl({
       return <ColorControl label={label} value={String(value)} onChange={onChange} />;
     case 'text':
       return <TextControl label={label} value={String(value ?? '')} placeholder={param.placeholder} onChange={onChange} />;
+    case 'colors':
+      return <ColorStops colors={Array.isArray(value) ? value : [...param.default]} onChange={onChange} />;
   }
+}
+
+/**
+ * A length param: a slider in the unit the value is in, and a switch between
+ * em and px that converts it at the text's font size, so the size on screen
+ * stays put. A px value's slider spans the param's em range at that size.
+ */
+function LengthControl({
+  label,
+  param,
+  value,
+  fontSize,
+  onChange,
+}: {
+  label: string;
+  param: TegakiLengthParam;
+  value: TegakiLength;
+  fontSize: number;
+  onChange: (value: TegakiLength) => void;
+}) {
+  const own = param.unit ?? 'em';
+  const parsed = parseLength(value) ?? { value: 0, unit: undefined };
+  const unit = parsed.unit ?? own;
+  // The param's range is in its own unit; in the other, it's that range at this font size.
+  const factor = unit === own ? 1 : unit === 'px' ? fontSize : 1 / fontSize;
+  const range = (n: number | undefined) => (n === undefined ? undefined : Math.round(n * factor * 100) / 100);
+  const step = unit === own ? param.step : unit === 'px' ? 1 : 0.01;
+  const write = (n: number, u: 'em' | 'px'): TegakiLength => (u === own ? n : `${n}${u}`);
+  const round = (n: number, u: 'em' | 'px') => (u === 'px' ? Math.round(n) : Math.round(n * 1000) / 1000);
+  return (
+    <>
+      <Slider
+        label={`${label} (${unit})`}
+        value={parsed.value}
+        min={range(param.min)}
+        max={range(param.max)}
+        step={step}
+        onChange={(n) => onChange(write(n, unit))}
+      />
+      <SelectControl
+        label={`${label} unit`}
+        value={unit}
+        options={[
+          { value: 'em', label: 'em — grows with the text' },
+          { value: 'px', label: 'px — fixed' },
+        ]}
+        onChange={(u) => {
+          if (u === unit) return;
+          const next = u === 'px' ? parsed.value * fontSize : parsed.value / fontSize;
+          onChange(write(round(next, u as 'em' | 'px'), u as 'em' | 'px'));
+        }}
+      />
+    </>
+  );
 }

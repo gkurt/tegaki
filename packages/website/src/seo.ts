@@ -88,7 +88,7 @@ const software = {
     'Video rendering with Remotion',
     'Latin, Hebrew, Arabic, Devanagari, Bengali, Japanese, Korean and Chinese',
     'Controlled, uncontrolled and CSS-driven timelines; streaming text',
-    'Glow, wobble, pressure width, taper and gradient effects; plugin API',
+    'Glow, wobble, taper and gradient plugins, pressure width; plugin API',
     'Browser-based generator (Tegaki Studio) for custom font bundles',
   ],
   author: { '@id': ids.author },

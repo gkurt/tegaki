@@ -2,31 +2,36 @@
 interface Props {
   text?: string;
   fontSize?: number;
-  effects?: Record<string, any>;
+  /** The element's `plugins` attribute: names, or a JSON array with options. The script below registers the style plugins. */
+  plugins?: string;
   caption?: string;
 }
 
-const { text = 'Hello World', fontSize = 48, effects, caption } = Astro.props;
+const { text = 'Hello World', fontSize = 48, plugins, caption } = Astro.props;
 const id = `wc-demo-${Math.random().toString(36).slice(2, 8)}`;
 ---
 
 <div class="not-content live-demo">
   <div class="live-demo-card">
-    <tegaki-renderer
-      id={id}
-      text={text}
-      style={`font-size: ${fontSize}px`}
-      loop
-      data-effects={effects ? JSON.stringify(effects) : undefined}
-    ></tegaki-renderer>
+    <tegaki-renderer id={id} text={text} style={`font-size: ${fontSize}px`} loop plugins={plugins}></tegaki-renderer>
   </div>
   {caption && <div class="live-demo-caption">{caption}</div>}
 </div>
 
 <script>
-  import { registerTegakiElement, TegakiElement } from 'tegaki/wc';
+  import {
+    globalGradientPlugin,
+    glowPlugin,
+    registerTegakiElement,
+    strokeGradientPlugin,
+    TegakiElement,
+    TegakiEngine,
+    taperPlugin,
+    wobblePlugin,
+  } from 'tegaki/wc';
   import type { TegakiBundle } from 'tegaki/wc';
 
+  TegakiEngine.registerPlugin(glowPlugin, taperPlugin, wobblePlugin, strokeGradientPlugin, globalGradientPlugin);
   registerTegakiElement();
 
   let bundlePromise: Promise<TegakiBundle> | null = null;
@@ -41,12 +46,8 @@ const id = `wc-demo-${Math.random().toString(36).slice(2, 8)}`;
     if (el.dataset.initialized != null) return;
     el.dataset.initialized = '';
 
-    const effectsStr = el.dataset.effects;
-    const effects = effectsStr ? JSON.parse(effectsStr) : undefined;
-
     getBundle().then((bundle) => {
       el.font = bundle;
-      if (effects) el.effects = effects;
     });
   }
 

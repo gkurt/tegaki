@@ -1,6 +1,6 @@
 ---
 title: TegakiRenderer
-description: 'API reference for TegakiRenderer and TegakiEngine: props, time control, effects, plugins, frames and helper functions for handwriting animation.'
+description: 'API reference for TegakiRenderer and TegakiEngine: props, time control, plugins (glow, taper, wobble, gradients and your own), frames and helper functions for handwriting animation.'
 head:
   - tag: title
     content: 'TegakiRenderer API Reference | Tegaki'
@@ -65,30 +65,25 @@ Whether uncontrolled playback honours reduced motion. Under reduced motion the t
 
 Controlled and `css` time are driven by your own code, so this option doesn't affect them. Check `prefers-reduced-motion` yourself there if you need to.
 
-### `effects`
+### `pressure`
 
-**Type:** `TegakiEffectConfigs`
+**Type:** `number` · **Default:** `1`
 
-Effects configuration:
+How much the ink's width follows the pen pressure the bundle records, from `0` to `1`. At `1` each point is as wide as the bundle says. At `0` each stroke is drawn at one width, its mean. Values in between blend the two. It runs ahead of every plugin, so a plugin's `geometry` gets the widths it made.
 
-```ts
-{
-  glow?: { radius: number, color: string, offsetX?: number, offsetY?: number },
-  wobble?: { amplitude: number, frequency: number, mode?: 'sine' | 'noise' },
-  pressureWidth?: { strength: number },
-  taper?: { startLength: number, endLength: number },
-  strokeGradient?: { colors: string | string[], saturation?: number, lightness?: number },
-  globalGradient?: { colors: string[], angle?: number },
-}
+```tsx
+<TegakiRenderer font={caveat} pressure={0}>Even lines</TegakiRenderer>
 ```
-
-The effects are [plugins](#plugins) built into the renderer, run ahead of your own: pressure width, taper and wobble reshape each stroke (`geometry`), the gradients choose its paint (`paint`), and glow draws a blurred copy under each stroke (`paint`) or, with clip-to-text on, lights up the clipped ink as a whole (`ink`), since the clip would cut the copies away.
 
 ### `plugins`
 
-**Type:** `readonly TegakiPlugin[]`
+**Type:** `readonly TegakiPluginSpec[]`
 
-Code that reshapes, retimes or paints the ink, paints under or over it, or runs on every frame drawn: a brush, a pen at the tip, stroke-order arrows, a typist's pace, sound. They run after the built-in [effects](#effects). See [Plugins](#plugins). In React, keep the array stable (define it outside the component or memoize it), since a new array redraws the canvas. Plugins are functions, so the Astro component doesn't take them. `toSVG` draws the ink their `geometry` and `outline` shape, at the times their `timing` gives it. Painting hooks don't reach the file; a plugin's [`svg`](#in-an-exported-svg-svg) hook draws into it instead.
+Code that reshapes, retimes or paints the ink, paints under or over it, or runs on every frame drawn: a glow, a brush, a pen at the tip, stroke-order arrows, a typist's pace, sound. They run in the order listed. See [Plugins](#plugins).
+
+Each entry is a plugin object (`glowPlugin({ radius: 0.15 })`) or a plugin named by its registered factory: `'glow'`, or `['glow', { radius: 0.15 }]` with options. Names are plain data, so they work where functions can't go: an HTML attribute, the Astro component's props, a CLI flag. See [Naming plugins](#naming-plugins).
+
+In React, keep the array stable (define it outside the component or memoize it), since a new array of new plugin objects redraws the canvas. A list of names can be written inline: the renderer keeps the plugin it made for a name as long as the name and its options stay the same. `toSVG` draws the ink their `geometry` and `outline` shape, at the times their `timing` gives it. Painting hooks don't reach the file; a plugin's [`svg`](#in-an-exported-svg-svg) hook draws into it instead.
 
 ### `seed`
 
@@ -155,6 +150,16 @@ See [Text Shaping](/guides/shaping/) for the full setup, bundle requirements, an
 
 Register a font bundle so it can be referenced by family name (used by the Web Component adapter and any code that wants to pass a bundle name as a string instead of the bundle object).
 
+### `TegakiEngine.registerPlugin(...factories)`
+
+Register plugin factories (made with [`createPlugin`](#plugins-with-options-createplugindefinition)) so `plugins` can name them. Each is registered under its `name`. Registering another factory under the same name replaces it. The same function is exported from `tegaki/core` as `registerPlugin`, and `TegakiEngine.getPlugin(name)` returns the factory registered under a name. See [Naming plugins](#naming-plugins).
+
+```ts
+import { glowPlugin, TegakiEngine, taperPlugin } from 'tegaki/core';
+
+TegakiEngine.registerPlugin(glowPlugin, taperPlugin);
+```
+
 ## Strokes and frames
 
 The engine exposes the timeline one stroke at a time. In React, the engine is on the component's ref (`ref.current.engine`).
@@ -173,9 +178,9 @@ Every stroke at `time` (default: the current time). For each stroke you get:
 
 - `state`: `'pending'`, `'drawing'` or `'done'`.
 - `progress`: the eased draw progress, 0–1.
-- `path`: the whole stroke, a [`StrokePath`](#strokepath) in CSS px from the top-left of the text box, reshaped by every plugin's `geometry` (the built-in wobble, pressure width and taper among them), its widths the pen's own. With clip-to-text set to a factor (`clipText: 1.2`), the default painter draws it that much wider on the clipped canvas so the ink fills the letters; the path doesn't carry that. `rawPath` is the stroke as the bundle has it, before any plugin: unwobbled, with the bundle's own widths.
+- `path`: the whole stroke, a [`StrokePath`](#strokepath) in CSS px from the top-left of the text box, reshaped by every plugin's `geometry` (the [`pressure`](#pressure) option's widths first, then a wobble or taper if you list one), its widths the pen's own. With clip-to-text set to a factor (`clipText: 1.2`), the default painter draws it that much wider on the clipped canvas so the ink fills the letters; the path doesn't carry that. `rawPath` is the stroke as the bundle has it, before any plugin: unwobbled, with the bundle's own widths.
 - `nibs`: the stroke's nib stamps (blobs the pen leaves at some points), placed along `path`: `t`, an offset `dx`/`dy` in px, radii `rx`/`ry` as multiples of the ink width there, and an `angle`.
-- `seed`: a number fixed per glyph, which the built-in effects vary by.
+- `seed`: a number fixed per glyph, which plugins vary each glyph by (a wobble's phase, where a gradient starts).
 - `place`: where the stroke's glyph sits: `x` and `y` in px (the top of the glyph's ascender at its left edge), `scale` (px per font unit) and `ascender` (in font units), so the baseline is at `y + ascender * scale`. With `glyph.w * scale`, the glyph's advance, it's what a practice grid lays its squares out by.
 - `head`: once the stroke has started, the pen at the end of the ink, `path.pointAt(progress)`. It has `x` and `y`, `angle` (the direction of travel in radians, with y pointing down) and `width` (the ink width in px).
 
@@ -209,7 +214,7 @@ A plugin is an object with a `name` and any of these hooks:
 | `attach({ redraw })` | when a renderer starts running the plugin; what it returns, when it stops | setting up and releasing what the plugin needs: a WebGL context, a worker, a library to load (see [Setting up and releasing](#setting-up-and-releasing-attach)) |
 | `steps: { count, fps, idle?, paintOnly? }` | not a hook: a setting | redrawing the ink a few ways in turn, over time (see [Drawings over time](#drawings-over-time-steps)) |
 
-The built-in [effects](#effects) are plugins too, and run first, so each hook of yours sees what they made: `geometry` gets the path after pressure width, taper and wobble, and `paint` gets the gradient as its `style`.
+Plugins run in the order they're listed, each hook seeing what the ones before it made: a `geometry` listed after a taper gets the tapered path, and a `paint` listed after a gradient gets the gradient as its `style`. For paint, the later plugin wins: a `strokeGradientPlugin` listed after a `globalGradientPlugin` overrides it. The [`pressure`](#pressure) option runs ahead of them all. The glow, taper, wobble and gradients are plugins like any other (see [Style plugins](#style-plugins)).
 
 `ctx` is the canvas context, set up so one unit is one CSS px from the top-left of the text box. The engine saves and restores it around every hook. Underlays go on a layer of their own under the finished ink, so clip-to-text doesn't cut them. `color` is the text's color, and `step` is the plugin's current drawing if it has [`steps`](#drawings-over-time-steps) (`0` otherwise). `random(key)` returns a random number generator seeded by the renderer's [`seed`](#seed), so the same key gives the same numbers on every frame and, at the same seed, on every load. `prev` is the frame `onFrame` saw last, or `null` the first time.
 
@@ -261,7 +266,7 @@ const steady: TegakiPlugin = {
 
 `paint` is called for every stroke on every frame, including the ones the pen hasn't reached (their `stroke.state` is `'pending'`), so a plugin can decide for itself what shows when: stamp a whole glyph the moment its first stroke starts, or show the text written out from the start and rub it away. The default painter paints only what's drawn, so a pending stroke passed on unchanged shows nothing; to show it, pass it on with `state: 'done'` and the `progress` you want. Anything you draw directly, rather than through `next`, should check `stroke.state` first.
 
-With clip-to-text on, everything painted on `ctx` is cut to the letters' shapes once the strokes are drawn. To paint past their edges (a wide brush, a pass around the ink, flecks off the line), paint on `unclipped` instead: pass the stroke on as `next({ ...stroke, ctx: stroke.unclipped })`, or draw on it directly. It's a layer of its own, laid under the clipped ink before the `ink` hooks run, so a glow or a shadow still sees it as ink, and strokes painted on it keep the pen's own width (clip-to-text's widening is only for ink it cuts). With clip-to-text off it's `ctx` itself.
+With clip-to-text on, everything painted on `ctx` is cut to the letters' shapes once the strokes are drawn. To paint past their edges (a wide brush, a pass around the ink, flecks off the line), paint on `unclipped` instead: pass the stroke on as `next({ ...stroke, ctx: stroke.unclipped })`, or draw on it directly. It's a layer of its own, laid under the clipped ink before the `ink` hooks run, so a glow or a shadow still sees it as ink, and strokes painted on it keep the pen's own width (clip-to-text's widening is only for ink it cuts). With clip-to-text off it's `ctx` itself. Every painting hook (`paint`, `ink`, `underlay`, `overlay`) also gets `clipped`, `true` when clip-to-text is on, for a plugin that works one way or the other: the [glow plugin](#style-plugins) blurs each stroke when it's off, and the clipped ink as a whole in `ink` when it's on.
 
 ```ts
 // A broad nib's full width, whether or not the text is clipped.
@@ -277,6 +282,20 @@ const shadow: TegakiPlugin = {
     next(s);
   },
 };
+```
+
+A plugin whose `paint` only restyles strokes the pen has drawn (a color, a glow) can say so by wrapping its factory in `paintsDrawnOnly(factory)`, from `tegaki/core`. The engine then skips the pending strokes for it, and doesn't set up a layer past clip-to-text on its account. Don't use it for a plugin that paints ahead of the pen (a tracing guide, a typewriter).
+
+```ts
+import { createPlugin, paintsDrawnOnly } from 'tegaki/core';
+
+export const tint = paintsDrawnOnly(
+  createPlugin({
+    name: 'tint',
+    params: { color: { type: 'color', default: '#2850c8' } },
+    setup: ({ color }) => ({ paint: (s, next) => next({ ...s, style: color }) }),
+  }),
+);
 ```
 
 ### Painting around the ink
@@ -385,9 +404,11 @@ const flicker: TegakiPlugin = {
 | `defs(markup)` | a filter, gradient or pattern; name it with `id(name)`, which is unique in the file |
 | `underlay(markup)` / `overlay(markup)` | markup under or over the ink. Clip-to-text doesn't cut either. A looping file fades the overlay with the ink but keeps the underlay |
 | `ink(attrs)` | a `<g>` around the ink, after clip-to-text: `filter="url(#…)"`, `opacity="…"` |
-| `style(stroke, { color?, attrs? })` | one stroke's paint (in place of the text's, and of a stroke gradient), and a `<g>` of attributes around it |
+| `style(stroke, { color?, attrs? })` | one stroke's paint in place of the text's (a color, a `url(#…)` paint, or a function of draw progress `(t) => color` for a color that changes along the stroke), and a `<g>` of attributes around it. A later call's color wins |
 | `appear(t)` | what shows an element from timeline second `t` on, whether the file plays once (SMIL), loops (CSS) or is static: put `attrs` in its tag and `inner` inside it |
 | `seconds(t)` / `mode` | the file's own clock (the export's speed) and how it plays, for SMIL of your own |
+| `textBox` | the box the text's lines fill, in the file's px: what a gradient across the text spans |
+| `region` | attributes that size a filter, mask or clip region to the whole file, so a blur isn't cut off at the default region's edge |
 
 ```ts
 const shadow: TegakiPlugin = {
@@ -395,7 +416,10 @@ const shadow: TegakiPlugin = {
   ink({ ctx }) { /* … the canvas shadow … */ },
   svg(svg) {
     const id = svg.id('shadow');
-    svg.defs(`<filter id="${id}"><feDropShadow dx="2" dy="3" stdDeviation="1" flood-opacity="0.4" /></filter>`);
+    svg.defs(
+      `<filter id="${id}" filterUnits="userSpaceOnUse" ${svg.region}>` +
+        '<feDropShadow dx="2" dy="3" stdDeviation="1" flood-opacity="0.4" /></filter>',
+    );
     svg.ink(`filter="url(#${id})"`);
   },
 };
@@ -484,15 +508,19 @@ export const shadow = createPlugin({
 
 Each call makes a new plugin with the options you pass on top of the defaults. `setup` runs once per plugin made, so a cache or other state in its closure belongs to that plugin alone. The options are typed from `params`: `offset` is a `number`, and `cap` is `'round' | 'butt'`.
 
-A param is one of five types, and each has a `default` plus an optional `label` and `description`:
+A param is one of seven types, and each has a `default` plus an optional `label` and `description`:
 
 | `type` | Value | Also takes |
 |--------|-------|------------|
 | `'number'` | a number, kept within `min`–`max` | `min`, `max`, `step` |
+| `'length'` | a size: a bare number in `unit`, or a string with its own unit, `'8px'` or `'0.1em'` | `unit` (`'em'`, the default, or `'px'`), and `min`, `max`, `step` in it |
 | `'boolean'` | `true` or `false` | |
 | `'select'` | one of `options` | `options`: strings, or `{ value, label }` |
 | `'color'` | a CSS color | |
+| `'colors'` | a list of CSS colors (a gradient's stops, a palette), the empty list included | |
 | `'text'` | any string, the empty one included (a list of cue times, say) | `placeholder` |
+
+A length in em is a share of the font size, so it grows with the text; in px it stays put. Turn one into pixels in a hook with `lengthToPx(length, ctx.fontSize)`. The range applies to lengths in the param's own `unit`, which `resolve` writes as a bare number (`'0.2em'` becomes `0.2`). One in the other unit can't be compared before the font size is known, so it's kept as written, except that it isn't let below 0 when `min` isn't.
 
 `presets` are named settings worth trying. Each one lists only the options it changes, and the rest keep their defaults.
 
@@ -500,10 +528,105 @@ The factory also describes the plugin, so a UI can build its controls. The studi
 
 - `name`, `label`, `description`, `params`, `presets`: as defined.
 - `defaults`: every option at its default.
-- `resolve(input)`: every option set from `input`, which can be anything (JSON from a URL, say). Values that are missing, of the wrong type, or not among a select's options get their defaults, numbers are kept in range, and unknown keys are dropped. The factory resolves the options it's called with the same way.
+- `resolve(input)`: every option set from `input`, which can be anything (JSON from a URL, say). Values that are missing, of the wrong type, or not among a select's options get their defaults, numbers and lengths are kept in range, and unknown keys are dropped. The factory resolves the options it's called with the same way.
 - `changed(input)`: just the options in `input` that differ from their defaults, as `resolve` takes them: the part worth saving.
 
 `TegakiPluginFactory` with no type argument is the type of any factory, for a list of several.
+
+### Naming plugins
+
+A factory made with `createPlugin` can be registered by its `name`, the way a font bundle is registered by its family. `plugins` can then name it instead of holding the plugin:
+
+```ts
+import { glowPlugin, TegakiEngine, taperPlugin } from 'tegaki/core';
+
+TegakiEngine.registerPlugin(glowPlugin, taperPlugin);
+
+new TegakiEngine(container, {
+  font: caveat,
+  text: 'Hello',
+  plugins: ['taper', ['glow', { radius: 0.15, color: '#0cf' }]],
+});
+```
+
+- An entry is a name (`'taper'`) or a name and its options (`['glow', { radius: 0.15 }]`). The options are read through the factory's params, as `resolve` reads them: numbers are kept in range and unknown keys dropped.
+- Names and plugin objects can be mixed in one list, and run in the order listed. The same name twice makes two plugins (two glows).
+- A name registered after the renderer is created is picked up when it's registered, so the script that registers a plugin can run after the one that renders. A name still unregistered once the page has loaded is warned about once in the console.
+- Nothing is registered for you, not even the plugins `tegaki/core` ships: register each factory you name.
+
+The built-in factories' names are `glow`, `taper`, `wobble`, `strokeGradient`, `globalGradient`, `variation`, `boil`, `annotate`, `text-path` and `caption`. Your own plugins register the same way, under the `name` you gave `createPlugin`.
+
+Names are plain data, so they reach places a plugin object can't:
+
+- The `<tegaki-renderer>` web component's `plugins` attribute: `plugins="taper glow"`, or JSON with options. See [Web Components](/frameworks/web-components/#plugins).
+- The Astro component's `plugins` prop, which is sent to the browser as JSON. See [Astro](/frameworks/astro/#plugins).
+- The command line's `--plugins` flag, which knows every built-in plugin without registering. See [Command Line](/guides/cli/#plugins).
+- `textToSvg(text, bundle, { plugins })`, which throws on a name no factory is registered as.
+
+### Style plugins
+
+These change how the ink looks: its glow, its width along the stroke, its wobble, its colors. Each is a factory from `tegaki/core` (re-exported from `tegaki` and every framework entry), registered under the name in its heading.
+
+```tsx
+import { glowPlugin, strokeGradientPlugin, taperPlugin } from 'tegaki';
+
+const plugins = [taperPlugin(), strokeGradientPlugin(), glowPlugin({ radius: 0.15, color: '#0cf' })];
+
+<TegakiRenderer font={caveat} plugins={plugins}>Hello</TegakiRenderer>;
+```
+
+#### Glow: `glowPlugin` (`glow`)
+
+A soft light around the ink: a blurred copy of each stroke under it. With clip-to-text on, the clip would cut those copies away, so the glow lights the clipped ink as a whole instead (characters drawn from the fallback font too). To stack two glows, list the plugin twice.
+
+| Option | Default | What it changes |
+|--------|---------|-----------------|
+| `radius` | `0.1` | How far the light spreads (0–1em). |
+| `color` | `''` | The light's color. Unset or `''`, the text's color. |
+| `offsetX` | `0` | Moves the light right (−1–1em). |
+| `offsetY` | `0` | Moves the light down (−1–1em). |
+
+The three are [lengths](#plugins-with-options-createplugindefinition): a bare number is in em, a share of the font size, so the glow grows with the text: `radius: 0.1` at 80px spreads 8px. For a fixed size, give pixels: `radius: '8px'`.
+
+#### Taper: `taperPlugin` (`taper`)
+
+Strokes that thin to a point toward their ends, the way a brush lifts off the page. A dot takes the width of a stroke's middle.
+
+| Option | Default | What it changes |
+|--------|---------|-----------------|
+| `startLength` | `0.15` | Share of the stroke, from its start, that thins toward it (0–1). |
+| `endLength` | `0.15` | Share of the stroke, from its end, that thins toward it (0–1). |
+
+#### Wobble: `wobblePlugin` (`wobble`)
+
+A hand that doesn't hold still: each point of the ink moved by a wave or by smooth noise, each glyph in its own phase (from its seed). With clip-to-text on, the letters' edges wobble with it.
+
+| Option | Default | What it changes |
+|--------|---------|-----------------|
+| `amplitude` | `1.5` | How far a point moves, in font units. |
+| `frequency` | `8` | How many waves run through a glyph (`'sine'` only). |
+| `mode` | `'sine'` | `'sine'` for a regular wave, `'noise'` for smooth noise. |
+
+#### Stroke gradient: `strokeGradientPlugin` (`strokeGradient`)
+
+Each stroke colored along its length: a rainbow, or a run through your colors. Each glyph starts the run in its own place.
+
+| Option | Default | What it changes |
+|--------|---------|-----------------|
+| `colors` | `[]` | Hex colors to run through. None (the default) for a rainbow. |
+| `saturation` | `80` | The rainbow's saturation, in percent. |
+| `lightness` | `55` | The rainbow's lightness, in percent. |
+
+#### Text gradient: `globalGradientPlugin` (`globalGradient`)
+
+One linear gradient across the whole text, as CSS `background-clip: text` would paint it: the first color at one edge of the text and the last at the other, whatever strokes it falls on.
+
+| Option | Default | What it changes |
+|--------|---------|-----------------|
+| `colors` | `['#ff0000', '#0000ff']` | The color stops, in order. |
+| `angle` | `0` | Direction in degrees: `0` runs left to right, `90` top to bottom. |
+
+Both gradients choose the stroke's paint, so if you list both, the one listed later wins. The glow takes the text's color (or its own), not a gradient's. All five reach `toSVG` too: taper and wobble through the ink's shape, the glow as an SVG filter, and the gradients as the strokes' paint. On the canvas, characters drawn from the fallback font are drawn plain, with no gradient or wobble, and no glow unless clip-to-text is on.
 
 ### Variation: `variationPlugin`
 
@@ -625,7 +748,52 @@ const plugins = [captionPlugin({ cues: JSON.stringify(words) })];
 
 A word is the glyphs between spaces on one line, so text without spaces (Chinese, Japanese) takes one cue per line. `parseCues(text)` reads a cue list the way the plugin does. In Remotion, drive the renderer with the time in seconds, as in the [Remotion guide](/frameworks/remotion/), so the writing stays in step with the audio.
 
+## Migrating from `effects`
+
+The `effects` option is gone from the engine and every framework component. Each effect is now a [style plugin](#style-plugins) with the same options. The units are the same too, except for the glow's, which are now em:
+
+| Before | Now |
+|--------|-----|
+| `effects={{ glow: { radius: 8, color: '#0cf' } }}` | `plugins={[glowPlugin({ radius: '8px', color: '#0cf' })]}`, or in em, `radius: 0.1`, to grow with the text |
+| `glow: { radius: '0.1em' }` | `glowPlugin({ radius: 0.1 })` |
+| `glow: { offsetX: 50 }` (font units) | `glowPlugin({ offsetX: 0.05 })` at 1000 units per em, or in px, `offsetX: '4px'` |
+| `wobble: { amplitude: 2, frequency: 6 }` | `wobblePlugin({ amplitude: 2, frequency: 6 })` |
+| `taper: true` | `taperPlugin()` |
+| `strokeGradient: { colors: 'rainbow' }` | `strokeGradientPlugin()` (`colors: []`, the default, is the rainbow) |
+| `globalGradient: { colors: ['#f06', '#40f'], angle: 90 }` | `globalGradientPlugin({ colors: ['#f06', '#40f'], angle: 90 })` |
+| `pressureWidth: { strength: 0.5 }` | the [`pressure`](#pressure) option: `pressure={0.5}` |
+| `pressureWidth: false` | `pressure={0}` |
+| two glows under custom keys (`{ effect: 'glow', … }`) | `glowPlugin` listed twice |
+| `effects` on `<tegaki-renderer>` | the `plugins` property, or the `plugins` attribute with registered names |
+| `--effects '{"glow":{"radius":10}}'` (CLI) | `--plugins '[["glow", {"radius": "10px"}]]'` |
+
+An effect set to `false` or `{ enabled: false }` is a plugin left out of the list. The effects used to run ahead of your plugins, sorted by their `order`. Style plugins run where you list them, so put a `taperPlugin` or `wobblePlugin` ahead of any plugin of yours that should see the tapered or wobbled path. `resolveEffects`, `findEffect`, `findEffects`, `effectPlugins` and the `TegakiEffects` / `TegakiEffectConfigs` / `CSSLength` types are no longer exported.
+
 ## Helper functions
+
+### `textToSvg(text, bundle, options?)`
+
+The text as an animated SVG string, with no DOM: what the [command line](/guides/cli/) writes. `options.plugins` takes plugin objects or [registered names](#naming-plugins), as the renderer's `plugins` does, and throws on a name no factory is registered as. `pressure` defaults to `1`, or to `0` in the default `'loop'` mode.
+
+```ts
+import { glowPlugin, textToSvg } from 'tegaki/core';
+
+const svg = textToSvg('Hello', bundle, { mode: 'once', plugins: [glowPlugin({ radius: 0.12, color: '#f0a' })] });
+```
+
+### `drawGlyph(ctx, glyph, pos, localTime, options?)`
+
+Draws one glyph's strokes onto a canvas context, as far as they're written `localTime` seconds after the glyph starts, with no engine. The strokes go through the same `pressure` step and plugins the engine runs (all but the `ink` hooks, which work on a whole canvas of ink). `pos` is where the glyph goes: `{ x, y, fontSize, unitsPerEm, ascender, descender }`, with `y` the top of the em square. `options` takes `color`, `style` (a gradient or pattern to paint with), `lineCap`, `pressure`, `plugins` (plugin objects only), `seed`, `strokeEasing`, `strokeScale`, and `strokeDelays` / `strokeTimeScale` to fit the strokes to a different slot.
+
+```ts
+import { drawGlyph, taperPlugin } from 'tegaki/core';
+
+const taper = [taperPlugin()];
+drawGlyph(ctx, bundle.glyphData.A, { x: 0, y: 0, fontSize: 96, unitsPerEm: bundle.unitsPerEm, ascender: bundle.ascender, descender: bundle.descender }, 0.4, {
+  color: '#222',
+  plugins: taper,
+});
+```
 
 ### `computeTimeline(text, font, timing?, shaper?)`
 

@@ -15,12 +15,12 @@ Quality defaults now follow the studio:
 New flags:
 
 - `--stroke-easing` / `--glyph-easing`, which take the studio's easing names.
-- `--effects <json>` for glow, wobble, taper, and stroke and global gradients.
+- `--plugins` for glow, wobble, taper, stroke and text gradients, and every other `tegaki/core` plugin, by name (`--plugins "taper glow"`) or as JSON with options.
 - `--letter-spacing` and `--seed`.
 
 The CLI warns about characters the font has no strokes for, and `atma` (Bengali) is now available.
 
 In the library:
 
-- `textToSvg` takes `shaper`, `clipText`, `effects` and `seed`.
+- `textToSvg` takes `shaper`, `clipText`, `plugins` and `seed`.
 - `tegaki/shaper-harfbuzz` exports `createHarfbuzzShaper(bundle, fonts?)`, which builds a shaper from font bytes you already hold (for example read from disk in Node) instead of fetching them.

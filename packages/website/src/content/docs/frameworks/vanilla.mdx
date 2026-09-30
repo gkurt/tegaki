@@ -1,6 +1,6 @@
 ---
 title: Vanilla JS
-description: 'Animate handwriting in plain JavaScript with TegakiEngine: options, controlled time, effects, cleanup and pre-rendering on the server.'
+description: 'Animate handwriting in plain JavaScript with TegakiEngine: options, controlled time, plugins, cleanup and pre-rendering on the server.'
 head:
   - tag: title
     content: 'JavaScript Handwriting Animation Without a Framework | Tegaki'
@@ -41,15 +41,15 @@ The engine creates its DOM elements inside the container.
 
 ## Updating options
 
-Call `update()` to change text, font, time, or effects at any time:
+Call `update()` to change text, font, time, or plugins at any time:
 
 ```js
+import { glowPlugin } from 'tegaki/core';
+
 engine.update({ text: 'New text' });
 
 engine.update({
-  effects: {
-    glow: { radius: 8, color: '#00ccff' },
-  },
+  plugins: [glowPlugin({ radius: 0.1, color: '#00ccff' })],
 });
 ```
 
@@ -75,25 +75,35 @@ animate();
 
 <LiveDemoControlled />
 
-## Effects
+## Plugins
+
+Glows, gradients, tapered ends, wobble and the rest are plugins. Import the factories from `tegaki/core` and pass the plugins in a list:
 
 ```js
+import { glowPlugin, strokeGradientPlugin, TegakiEngine } from 'tegaki/core';
+
 const engine = new TegakiEngine(container, {
-  text: 'Fancy effects',
+  text: 'Glowing rainbow',
   font: bundle,
   time: { mode: 'uncontrolled', speed: 1, loop: true },
-  effects: {
-    glow: { radius: 8, color: '#00ccff' },
-    pressureWidth: true,
-    strokeGradient: { colors: 'rainbow' },
-  },
+  plugins: [strokeGradientPlugin(), glowPlugin({ radius: 0.1, color: '#00ccff' })],
 });
 ```
 
 <LiveDemo
-  text="Fancy effects"
-  effects={{ glow: { radius: 8, color: '#00ccff' }, pressureWidth: true, strokeGradient: { colors: 'rainbow' } }}
+  text="Glowing rainbow"
+  plugins={['strokeGradient', ['glow', { radius: 0.1, color: '#00ccff' }]]}
 />
+
+Register a factory and `plugins` can name it, with or without options. That's handy when the list comes from data (a JSON config, a `data-` attribute):
+
+```js
+TegakiEngine.registerPlugin(glowPlugin, strokeGradientPlugin);
+
+engine.update({ plugins: ['strokeGradient', ['glow', { radius: 0.1, color: '#00ccff' }]] });
+```
+
+See [Style plugins](/api/renderer/#style-plugins) and [Naming plugins](/api/renderer/#naming-plugins). The `pressure` option (`0` to `1`, default `1`) sets how much the ink's width follows the pen's pressure.
 
 ## Cleanup
 

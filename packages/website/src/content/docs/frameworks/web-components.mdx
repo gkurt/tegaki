@@ -1,6 +1,6 @@
 ---
 title: Web Components
-description: 'Animate handwriting in any page with the <tegaki-renderer> custom element: load it from a CDN, control playback with attributes, and drive it with CSS.'
+description: 'Animate handwriting in any page with the <tegaki-renderer> custom element: load it from a CDN, control playback and plugins with attributes, and drive it with CSS.'
 head:
   - tag: title
     content: 'Handwriting Animation Web Component | Tegaki'
@@ -208,24 +208,48 @@ Control uncontrolled playback via attributes:
 </tegaki-renderer>
 ```
 
-## Effects
+## Plugins
 
-Effects are objects and can't be expressed as attributes. Use the `effects` property instead:
+Glows, gradients, tapered ends, wobble and the rest are plugins. Register the factories you want once, next to the font bundle, and the element can name them in its `plugins` attribute:
+
+```js
+import { glowPlugin, registerTegakiElement, strokeGradientPlugin, TegakiEngine, taperPlugin } from 'tegaki/wc';
+import caveat from 'tegaki/fonts/caveat';
+
+TegakiEngine.registerBundle(caveat);
+TegakiEngine.registerPlugin(glowPlugin, strokeGradientPlugin, taperPlugin);
+registerTegakiElement();
+```
+
+List names split by spaces or commas for the defaults, or write a JSON array to give options, with `[name, options]` for each plugin that takes them:
+
+```html
+<tegaki-renderer font="Caveat" text="Tapered" plugins="taper"></tegaki-renderer>
+
+<tegaki-renderer
+  font="Caveat"
+  text="Glowing rainbow"
+  loop
+  plugins='["strokeGradient", ["glow", {"radius": 0.1, "color": "#00ccff"}]]'
+></tegaki-renderer>
+```
+
+<LiveDemo
+  text="Glowing rainbow"
+  plugins='["strokeGradient", ["glow", {"radius": 0.1, "color": "#00ccff"}]]'
+/>
+
+The built-in names are `glow`, `taper`, `wobble`, `strokeGradient`, `globalGradient`, `variation`, `boil`, `annotate`, `text-path` and `caption`, and none is registered until you register it. A plugin registered after the element is on the page is picked up then, so the order of your scripts doesn't matter. A name that's still unregistered once the page has loaded is warned about in the console. See [Style plugins](/api/renderer/#style-plugins) for their options.
+
+Plugin objects, your own included, go on the `plugins` property. It takes names too, and when it's set it takes precedence over the attribute:
 
 ```js
 const el = document.querySelector('tegaki-renderer');
 
-el.effects = {
-  glow: { radius: 8, color: '#00ccff' },
-  pressureWidth: true,
-  strokeGradient: { colors: 'rainbow' },
-};
+el.plugins = [strokeGradientPlugin(), glowPlugin({ radius: 0.1, color: '#00ccff' })];
 ```
 
-<LiveDemo
-  text="Fancy effects"
-  effects={{ glow: { radius: 8, color: '#00ccff' }, pressureWidth: true, strokeGradient: { colors: 'rainbow' } }}
-/>
+The `pressure` attribute (`0` to `1`, default `1`) sets how much the ink's width follows the pen's pressure. The old `effects` property is gone: see [Migrating from `effects`](/api/renderer/#migrating-from-effects).
 
 ## Playback controls
 
@@ -292,7 +316,9 @@ registerTegakiElement('my-handwriting');
 | `reduced-motion` | `"never" \| "user" \| "always"` | Whether to honour reduced motion by showing the text finished (default `"never"`; see [`reducedMotion`](/api/renderer/#reducedmotion)). |
 | `pixel-ratio` | `number` | Supersampling factor on top of devicePixelRatio (shortcut for `quality.pixelRatio`). |
 | `segment-size` | `number` | Max drawn segment length in CSS pixels (shortcut for `quality.segmentSize`). |
-| `seed` | `number \| "random"` | What random choices come from: wobble, gradients, plugins (default `0`; see [`seed`](/api/renderer/#seed)). The element's `engine.seed` is the number it drew with. |
+| `pressure` | `number` | How much the ink's width follows the pen's pressure, `0` to `1` (default `1`; see [`pressure`](/api/renderer/#pressure)). |
+| `plugins` | `string` | Registered plugins by name: `"taper glow"`, or a JSON array with options, `'["taper", ["glow", {"radius": 0.15}]]'` (see [Plugins](#plugins)). The `plugins` property takes precedence. |
+| `seed` | `number \| "random"` | What plugins' random choices come from: a wobble's phase, where a gradient starts (default `0`; see [`seed`](/api/renderer/#seed)). The element's `engine.seed` is the number it drew with. |
 | `show-overlay` | _boolean attribute_ | Show debug text overlay. |
 | `fallback-font` | `string` | CSS font-family list for characters the bundle has no stroke data for (see [`fallbackFont`](/api/renderer/#fallbackfont)). |
 
@@ -303,7 +329,7 @@ These properties are set via JavaScript and support object values that can't be 
 | Property | Type | Description |
 |---|---|---|
 | `font` | `TegakiBundle \| string` | Font bundle object or registered name. |
-| `effects` | `TegakiEffects` | Visual effects configuration. |
+| `plugins` | `TegakiPluginSpec[]` | Plugin objects or registered names. Takes precedence over the `plugins` attribute. |
 | `timing` | `TimelineConfig` | Timeline timing configuration. |
 | `quality` | `TegakiQuality` | Render-quality knobs (`pixelRatio`, `segmentSize`). |
 | `onComplete` | `() => void` | Callback when animation completes. |

@@ -1,6 +1,6 @@
 ---
 title: Astro
-description: Add a handwriting animation to an Astro site with the server-rendered TegakiRenderer component, font registration and effects.
+description: Add a handwriting animation to an Astro site with the server-rendered TegakiRenderer component, font registration and plugins.
 head:
   - tag: title
     content: 'Astro Handwriting Animation | Tegaki'
@@ -77,7 +77,9 @@ Add `loadFont` to inject an `@font-face` rule so the browser starts downloading 
 <TegakiRenderer font={bundle} bundle loadFont />
 ```
 
-## Effects
+## Plugins
+
+Glows, gradients, tapered ends, wobble and the rest are plugins. The component renders on the server and sends its props to the browser as JSON, so it can't take plugin objects (they're functions). It takes plugins by name instead: register the factories in a client `<script>` on the page, and name them in `plugins`, as a name or `[name, options]`:
 
 ```astro
 ---
@@ -87,21 +89,27 @@ import bundle from 'tegaki/fonts/caveat';
 
 <TegakiRenderer
   font={bundle}
-  text="Fancy effects"
+  text="Glowing rainbow"
   time={{ mode: 'uncontrolled', speed: 1, loop: true }}
-  effects={{
-    glow: { radius: 8, color: '#00ccff' },
-    pressureWidth: true,
-    strokeGradient: { colors: 'rainbow' },
-  }}
+  plugins={['strokeGradient', ['glow', { radius: 0.1, color: '#00ccff' }]]}
   style="font-size: 48px"
 />
+
+<script>
+  import { glowPlugin, strokeGradientPlugin, TegakiEngine } from 'tegaki/core';
+
+  TegakiEngine.registerPlugin(glowPlugin, strokeGradientPlugin);
+</script>
 ```
 
 <LiveDemo
-  text="Fancy effects"
-  effects={{ glow: { radius: 8, color: '#00ccff' }, pressureWidth: true, strokeGradient: { colors: 'rainbow' } }}
+  text="Glowing rainbow"
+  plugins={['strokeGradient', ['glow', { radius: 0.1, color: '#00ccff' }]]}
 />
+
+The renderer picks a plugin up when its factory is registered, so it doesn't matter which script runs first. A name that's still unregistered once the page has loaded is warned about in the console, and a plugin object passed to `plugins` is dropped, with a warning when the page renders. Your own plugins work the same way: make them with [`createPlugin`](/api/renderer/#plugins-with-options-createplugindefinition), register them in the script, and name them by the `name` you gave them. See [Style plugins](/api/renderer/#style-plugins) for the built-in ones' options.
+
+The `pressure` prop (`0` to `1`, default `1`) sets how much the ink's width follows the pen's pressure. The old `effects` prop is gone: see [Migrating from `effects`](/api/renderer/#migrating-from-effects).
 
 ## How it works
 
@@ -112,7 +120,7 @@ import bundle from 'tegaki/fonts/caveat';
 
 ## Props
 
-The Astro component accepts all [`TegakiEngineOptions`](/api/renderer/) plus:
+The Astro component accepts all [`TegakiEngineOptions`](/api/renderer/) except the callbacks (`onComplete`, `onChangeTimeline`), with `plugins` taking names only, plus:
 
 | Prop | Type | Description |
 |------|------|-------------|

@@ -18,7 +18,6 @@ import { TegakiEngine } from '../core/engine.ts';
 import type { TegakiEngineOptions } from '../core/types.ts';
 import type { Coercible } from '../lib/utils.ts';
 import { coerceToString } from '../lib/utils.ts';
-import type { TegakiEffects } from '../types.ts';
 
 /** Imperative handle exposed via the `ref` prop. */
 export interface TegakiRendererHandle {
@@ -28,12 +27,9 @@ export interface TegakiRendererHandle {
   readonly element: HTMLElement | null;
 }
 
-interface TegakiRendererBaseProps<E extends TegakiEffects<E> = Record<string, never>> extends Omit<TegakiEngineOptions, 'effects'> {
+interface TegakiRendererBaseProps extends TegakiEngineOptions {
   /** Children coerced to string. Strings and numbers are kept; everything else is ignored. */
   children?: Coercible;
-
-  /** Visual effects applied during canvas rendering. */
-  effects?: E;
 
   /** When true, the rendered text is editable via contentEditable. */
   editable?: boolean;
@@ -42,10 +38,10 @@ interface TegakiRendererBaseProps<E extends TegakiEffects<E> = Record<string, ne
   onTextChange?: (text: string) => void;
 }
 
-export type TegakiRendererProps<C extends ElementType = 'div', E extends TegakiEffects<E> = Record<string, never>> = {
+export type TegakiRendererProps<C extends ElementType = 'div'> = {
   as?: C;
-} & TegakiRendererBaseProps<E> &
-  Omit<ComponentPropsWithoutRef<C>, keyof TegakiRendererBaseProps<Record<string, never>> | 'as'>;
+} & TegakiRendererBaseProps &
+  Omit<ComponentPropsWithoutRef<C>, keyof TegakiRendererBaseProps | 'as'>;
 
 // `useLayoutEffect` warns during SSR on React 18; the caret only exists in the browser anyway.
 const useClientLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
@@ -89,11 +85,11 @@ function reactCreateElement(tag: string, props: Record<string, any>, ...children
  * Implemented with `forwardRef` (not React 19's ref-as-prop) so the handle works
  * on React 18 as well as 19 — the declared `react: >=18` peer. The render
  * function is inlined into `forwardRef` (so lint recognizes it as a component),
- * and the `as` cast on the export restores the generic `C`/`E` parameters that
+ * and the `as` cast on the export restores the generic `C` parameter that
  * `forwardRef` erases (the standard generic-forwardRef workaround).
  */
-export const TegakiRenderer = forwardRef(function TegakiRendererInner<const E extends TegakiEffects<E> = Record<string, never>>(
-  props: TegakiRendererProps<ElementType, E>,
+export const TegakiRenderer = forwardRef(function TegakiRendererInner(
+  props: TegakiRendererProps<ElementType>,
   forwardedRef: ForwardedRef<TegakiRendererHandle>,
 ) {
   const {
@@ -105,7 +101,7 @@ export const TegakiRenderer = forwardRef(function TegakiRendererInner<const E ex
     reducedMotion,
     onComplete,
     onChangeTimeline,
-    effects,
+    pressure,
     quality,
     plugins,
     seed,
@@ -117,7 +113,7 @@ export const TegakiRenderer = forwardRef(function TegakiRendererInner<const E ex
     editable,
     onTextChange,
     ...elementProps
-  } = props as TegakiRendererProps<ElementType, E>;
+  } = props as TegakiRendererProps<ElementType>;
 
   const containerRef = useRef<HTMLElement>(null);
   const engineRef = useRef<TegakiEngine | null>(null);
@@ -139,7 +135,7 @@ export const TegakiRenderer = forwardRef(function TegakiRendererInner<const E ex
     font,
     time: timeProp,
     reducedMotion,
-    effects: effects as Record<string, any>,
+    pressure,
     quality,
     plugins,
     seed,
@@ -228,6 +224,4 @@ export const TegakiRenderer = forwardRef(function TegakiRendererInner<const E ex
   const mergedStyle = { ...rootStyle, ...elementProps.style };
 
   return createElement(Tag, { ...rootAttrs, ...elementProps, ref: containerRef, style: mergedStyle } as any, content);
-}) as <const C extends ElementType = 'div', const E extends TegakiEffects<E> = Record<string, never>>(
-  props: TegakiRendererProps<C, E> & { ref?: Ref<TegakiRendererHandle> },
-) => ReactNode;
+}) as <const C extends ElementType = 'div'>(props: TegakiRendererProps<C> & { ref?: Ref<TegakiRendererHandle> }) => ReactNode;

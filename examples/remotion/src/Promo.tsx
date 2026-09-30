@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { AbsoluteFill, Easing, interpolate, Series, useCurrentFrame } from 'remotion';
-import { TegakiRenderer } from 'tegaki';
+import { glowPlugin, strokeGradientPlugin, TegakiRenderer, taperPlugin, wobblePlugin } from 'tegaki';
 import caveat from 'tegaki/fonts/caveat';
 import italianno from 'tegaki/fonts/italianno';
 import parisienne from 'tegaki/fonts/parisienne';
@@ -77,7 +77,6 @@ interface WritingSceneProps {
   text: string;
   fontSize?: number;
   ink?: string;
-  effects?: Record<string, unknown>;
   /** Fraction of scene length used to draw the strokes (rest is hold). */
   writeFraction?: number;
   eyebrow?: string;
@@ -91,7 +90,6 @@ const WritingScene: React.FC<WritingSceneProps> = ({
   text,
   fontSize = 200,
   ink = INK,
-  effects,
   writeFraction = 0.65,
   eyebrow,
   caption,
@@ -129,7 +127,6 @@ const WritingScene: React.FC<WritingSceneProps> = ({
         text={text}
         style={{ fontSize, color: ink, lineHeight: 1.15, textAlign: 'center', maxWidth: 1500 }}
         time={{ mode: 'controlled', value: progress, unit: 'progress' }}
-        effects={effects as never}
       />
       {caption && (
         <div
@@ -151,6 +148,16 @@ const WritingScene: React.FC<WritingSceneProps> = ({
 // ---------------------------------------------------------------------------
 // Specialty scenes
 // ---------------------------------------------------------------------------
+
+// Plugins made once, outside the components: Remotion renders every frame, and
+// a new plugin each render would lay the text out again each time. A glow's
+// radius is in em, so the same glow suits the hero and the outro at their sizes.
+const WARM_GLOW = 'rgba(224, 165, 102, 0.35)';
+const HERO_PLUGINS = [glowPlugin({ radius: 0.12, color: WARM_GLOW })];
+const OUTRO_PLUGINS = HERO_PLUGINS;
+const VIBRANT = [strokeGradientPlugin({ saturation: 90, lightness: 70 })];
+const LUMINOUS = [taperPlugin({ startLength: 0.05, endLength: 0.05 }), glowPlugin({ radius: 0.18, color: 'rgba(255, 196, 120, 0.7)' })];
+const ALIVE = [wobblePlugin({ amplitude: 0.6, frequency: 8, mode: 'sine' })];
 
 /** Opening: brand mark writes itself, then a kanji subtitle whispers in. */
 const Hero: React.FC<{ duration: number }> = ({ duration }) => {
@@ -177,9 +184,7 @@ const Hero: React.FC<{ duration: number }> = ({ duration }) => {
         text="tegaki"
         style={{ fontSize: 320, color: INK }}
         time={{ mode: 'controlled', value: progress, unit: 'progress' }}
-        effects={{
-          glow: { enabled: true, radius: '0.12em', color: 'rgba(224, 165, 102, 0.35)' },
-        }}
+        plugins={HERO_PLUGINS}
       />
       <div
         style={{
@@ -198,7 +203,7 @@ const Hero: React.FC<{ duration: number }> = ({ duration }) => {
   );
 };
 
-/** Effects showcase: the same word, three vibes. */
+/** Plugins showcase: three words, three vibes. */
 const EffectsShowcase: React.FC<{ duration: number }> = ({ duration }) => {
   const frame = useCurrentFrame();
   const writeEnd = Math.floor(duration * 0.55);
@@ -222,38 +227,18 @@ const EffectsShowcase: React.FC<{ duration: number }> = ({ duration }) => {
           textTransform: 'uppercase',
         }}
       >
-        Effects, built in
+        Plugins, built in
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 28, alignItems: 'center' }}>
-        <TegakiRenderer
-          font={caveat}
-          text="vibrant"
-          style={{ ...baseStyle, color: INK }}
-          time={time}
-          effects={{
-            strokeGradient: { enabled: true, colors: 'rainbow', saturation: 90, lightness: 70 },
-          }}
-        />
+        <TegakiRenderer font={caveat} text="vibrant" style={{ ...baseStyle, color: INK }} time={time} plugins={VIBRANT} />
         <TegakiRenderer
           font={italianno}
           text="luminous"
           style={{ ...baseStyle, fontSize: 180, color: '#fff5e1' }}
           time={time}
-          effects={{
-            glow: { enabled: true, radius: '0.18em', color: 'rgba(255, 196, 120, 0.7)' },
-            taper: { enabled: true, startLength: 0.05, endLength: 0.05 },
-          }}
+          plugins={LUMINOUS}
         />
-        <TegakiRenderer
-          font={parisienne}
-          text="alive"
-          style={{ ...baseStyle, color: INK }}
-          time={time}
-          effects={{
-            wobble: { enabled: true, amplitude: 0.6, frequency: 8, mode: 'sine' },
-            pressureWidth: { enabled: true, strength: 0.6 },
-          }}
-        />
+        <TegakiRenderer font={parisienne} text="alive" style={{ ...baseStyle, color: INK }} time={time} pressure={0.6} plugins={ALIVE} />
       </div>
     </SceneBox>
   );
@@ -288,9 +273,7 @@ const Outro: React.FC<{ duration: number }> = ({ duration }) => {
         text="start writing"
         style={{ fontSize: 220, color: INK, textAlign: 'center' }}
         time={{ mode: 'controlled', value: progress, unit: 'progress' }}
-        effects={{
-          glow: { enabled: true, radius: '0.12em', color: 'rgba(224, 165, 102, 0.35)' },
-        }}
+        plugins={OUTRO_PLUGINS}
       />
       <div
         style={{

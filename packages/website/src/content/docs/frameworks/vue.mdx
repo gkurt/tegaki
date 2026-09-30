@@ -1,6 +1,6 @@
 ---
 title: Vue
-description: 'Add a handwriting animation to a Vue 3 app with the TegakiRenderer component: v-model time, effects, streaming text and the exposed instance.'
+description: 'Add a handwriting animation to a Vue 3 app with the TegakiRenderer component: v-model time, plugins, streaming text and the exposed instance.'
 head:
   - tag: title
     content: 'Vue Handwriting Animation | Tegaki'
@@ -63,24 +63,24 @@ const time = ref(0);
 
 <LiveDemoControlled client:only="vue" />
 
-## Effects
+## Plugins
+
+Glows, gradients, tapered ends, wobble and the rest are plugins. Import the factories from `tegaki/vue` and pass the plugins in a list:
 
 ```vue
 <script setup>
-import { TegakiRenderer } from 'tegaki/vue';
+import { glowPlugin, strokeGradientPlugin, TegakiRenderer } from 'tegaki/vue';
 import bundle from 'tegaki/fonts/caveat';
+
+const plugins = [strokeGradientPlugin(), glowPlugin({ radius: 0.1, color: '#00ccff' })];
 </script>
 
 <template>
   <TegakiRenderer
     :font="bundle"
-    text="Fancy effects"
+    text="Glowing rainbow"
     :time="{ mode: 'uncontrolled', speed: 1, loop: true }"
-    :effects="{
-      glow: { radius: 8, color: '#00ccff' },
-      pressureWidth: true,
-      strokeGradient: { colors: 'rainbow' },
-    }"
+    :plugins="plugins"
     :style="{ fontSize: '48px' }"
   />
 </template>
@@ -88,9 +88,11 @@ import bundle from 'tegaki/fonts/caveat';
 
 <LiveDemo
   client:only="vue"
-  text="Fancy effects"
-  effects={{ glow: { radius: 8, color: '#00ccff' }, pressureWidth: true, strokeGradient: { colors: 'rainbow' } }}
+  text="Glowing rainbow"
+  plugins={['strokeGradient', ['glow', { radius: 0.1, color: '#00ccff' }]]}
 />
+
+Make the list in `<script setup>`, not inline in the template, so the plugins aren't made again on every render. Registered plugins can also be named, and a list of names is fine inline: `:plugins="['taper', ['glow', { radius: 0.1 }]]"`. See [Style plugins](/api/renderer/#style-plugins) and [Naming plugins](/api/renderer/#naming-plugins). The `pressure` prop (`0` to `1`, default `1`) sets how much the ink's width follows the pen's pressure.
 
 ## Streaming text
 

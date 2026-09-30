@@ -1,8 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { TegakiRenderer } from 'tegaki';
+import { glowPlugin, strokeGradientPlugin, TegakiEngine, TegakiRenderer } from 'tegaki';
 import bundle from 'tegaki/fonts/caveat';
+
+// Plugin factories are functions, which a Server Component can't pass to the
+// client, so page.tsx names them and the client registers them here.
+TegakiEngine.registerPlugin(strokeGradientPlugin, glowPlugin);
 
 export function ScrubDemo() {
   const [time, setTime] = useState(0);

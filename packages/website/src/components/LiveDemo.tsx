@@ -1,5 +1,19 @@
 import { useEffect, useState } from 'react';
-import { type TegakiBundle, TegakiRenderer, type TimeControlProp } from 'tegaki';
+import {
+  globalGradientPlugin,
+  glowPlugin,
+  registerPlugin,
+  strokeGradientPlugin,
+  type TegakiBundle,
+  type TegakiPluginSpec,
+  TegakiRenderer,
+  type TimeControlProp,
+  taperPlugin,
+  wobblePlugin,
+} from 'tegaki';
+
+// The docs name the style plugins in MDX props (plain data), so register them here.
+registerPlugin(glowPlugin, taperPlugin, wobblePlugin, strokeGradientPlugin, globalGradientPlugin);
 
 type BundleImporter = () => Promise<{ default: TegakiBundle }>;
 
@@ -19,8 +33,8 @@ export interface LiveDemoProps {
   fontSize?: number;
   /** Time control config. */
   time?: TimeControlProp;
-  /** Effects config. */
-  effects?: Record<string, any>;
+  /** Plugins, by registered name (see the `registerPlugin` call above). */
+  plugins?: readonly TegakiPluginSpec[];
   /** Caption shown below the demo. */
   caption?: string;
 }
@@ -30,7 +44,7 @@ export function LiveDemo({
   fontKey = 'caveat',
   fontSize = 48,
   time = { mode: 'uncontrolled', speed: 1, loop: true },
-  effects,
+  plugins,
   caption,
 }: LiveDemoProps) {
   const [bundle, setBundle] = useState<TegakiBundle | null>(null);
@@ -60,7 +74,7 @@ export function LiveDemo({
         }}
       >
         {bundle ? (
-          <TegakiRenderer font={bundle} time={time} effects={effects} style={{ fontSize }}>
+          <TegakiRenderer font={bundle} time={time} plugins={plugins} style={{ fontSize }}>
             {text}
           </TegakiRenderer>
         ) : (

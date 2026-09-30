@@ -57,11 +57,11 @@ function keyFacts(): string[] {
     `- Package: \`tegaki\` on npm (${NPM_URL}), MIT licensed. Install with \`npm i tegaki\`. Source: ${REPO_URL}`,
     `- Entry points: ${importPaths.join(', ')}. Remotion uses the React component directly.`,
     `- Bundled fonts (import from \`tegaki/fonts/<name>\`): ${BUNDLED_FONTS.map(([id, font, script]) => `\`${id}\` (${font}, ${script})`).join(', ')}.`,
-    '- CLI: `npx tegaki "Hello" -o hello.svg` writes an animated SVG (`--font`, `--mode loop|once|static`, `--size`, `--color`, `--effects`) with no project setup.',
+    '- CLI: `npx tegaki "Hello" -o hello.svg` writes an animated SVG (`--font`, `--mode loop|once|static`, `--size`, `--color`, `--plugins`) with no project setup.',
     `- Any other font: generate a bundle in Tegaki Studio (${STUDIO_URL}) and import its \`bundle.ts\`.`,
     '- Rendering: a canvas draws the strokes over real DOM text, so the text stays selectable, copyable and readable by screen readers.',
     "- Time: uncontrolled (plays on its own, `speed`, `loop`, `catchUp` for streaming text), controlled (seconds or `'50%'`), or `'css'` (reads the `--tegaki-progress` custom property, e.g. from a scroll timeline).",
-    '- Effects: glow, wobble, pressure width, taper, per-stroke and whole-text gradients; custom `TegakiPlugin`s can reshape and paint strokes, and `createPlugin` gives one typed options and presets. `variationPlugin` makes each glyph a little different, `boilPlugin` makes the lines boil (hand-drawn animation shimmer), `annotatePlugin` underlines, circles, boxes, strikes or highlights the text once written, `textPathPlugin` lays it on an arc, a circle or a (flowing) wave, `captionPlugin` writes each word in time with speech from word timings; a fixed `seed` (default 0) draws the same every time, `seed: "random"` anew on each load.',
+    "- Plugins: everything that styles the ink is a plugin in the `plugins` list, run in order. Style plugins from `tegaki/core`: `glowPlugin`, `taperPlugin`, `wobblePlugin`, `strokeGradientPlugin` (a rainbow by default), `globalGradientPlugin`; `pressure` (0 to 1) sets how much the width follows the pen. Register factories (`TegakiEngine.registerPlugin(glowPlugin)`) to name them as data: `plugins: ['taper', ['glow', { radius: 0.15 }]]`, the web component's `plugins=\"taper glow\"` attribute, the Astro component, the CLI's `--plugins`. Custom `TegakiPlugin`s can reshape and paint strokes, and `createPlugin` gives one typed options and presets. `variationPlugin` makes each glyph a little different, `boilPlugin` makes the lines boil (hand-drawn animation shimmer), `annotatePlugin` underlines, circles, boxes, strikes or highlights the text once written, `textPathPlugin` lays it on an arc, a circle or a (flowing) wave, `captionPlugin` writes each word in time with speech from word timings; a fixed `seed` (default 0) draws the same every time, `seed: \"random\"` anew on each load.",
   ];
 }
 
@@ -242,7 +242,7 @@ export function skillMd(): string {
     '- Scrub it yourself: `time={seconds}` or `time="50%"`; `time="css"` reads the `--tegaki-progress` custom property (scroll-driven animations).',
     "- Streaming text (LLM output): keep updating the text and pass `time={{ mode: 'uncontrolled', catchUp: 0.6 }}` so the pen keeps up.",
     '- `onComplete` fires when an uncontrolled animation ends; `reducedMotion="user"` respects `prefers-reduced-motion`.',
-    "- Effects: `effects={{ glow: { radius: 8, color: '#0cf' }, pressureWidth: { strength: 1 }, taper: { startLength: 0.2, endLength: 0.2 } }}`.",
+    "- Style it with plugins from `tegaki` (the `effects` prop is gone): `const plugins = [taperPlugin({ startLength: 0.2, endLength: 0.2 }), glowPlugin({ radius: 0.1, color: '#0cf' })];` defined outside the component, then `plugins={plugins}`. `pressure={0}` draws even-width strokes.",
     '- Ligatures, contextual alternates, Arabic and Indic scripts: install `harfbuzzjs` and register the shaper from `tegaki/shaper-harfbuzz` (see the Text Shaping guide).',
     '',
     '## 5. Verify',
@@ -254,7 +254,7 @@ export function skillMd(): string {
     '',
     `- Getting started: ${markdownUrl('getting-started')}`,
     `- Component API (props, plugins, engine): ${markdownUrl('api/renderer')}`,
-    `- Rendering guide (timing, effects): ${markdownUrl('guides/rendering')}`,
+    `- Rendering guide (timing, plugins):${markdownUrl('guides/rendering')}`,
     `- Streaming guide: ${markdownUrl('guides/streaming')}`,
     `- Bundler setup: ${markdownUrl('guides/bundlers')}`,
     `- Command line (animated SVG files): ${markdownUrl('guides/cli')}`,

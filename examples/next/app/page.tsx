@@ -24,15 +24,11 @@ export default function Home() {
       </section>
 
       <section>
-        <h2>With effects</h2>
+        <h2>With plugins (by name)</h2>
         <TegakiRenderer
           font={bundle}
           time={{ mode: 'uncontrolled', speed: 1, loop: true, loopGap: 1 }}
-          effects={{
-            glow: { radius: 8, color: '#00ccff' },
-            pressureWidth: true,
-            strokeGradient: { colors: 'rainbow' },
-          }}
+          plugins={['strokeGradient', ['glow', { radius: 0.1, color: '#00ccff' }]]}
           style={{ fontSize: '56px' }}
         >
           Fancy!

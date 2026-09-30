@@ -8,17 +8,16 @@ import {
   PADDING_H_EM,
   registerCssProperties,
 } from '../lib/css-properties.ts';
-import { drawFallbackGlyph, fallbackTextStyle } from '../lib/drawFallbackGlyph.ts';
-import { findEffect, globalGradientGeometry, type ResolvedEffect, resolveEffects } from '../lib/effects.ts';
+import { drawFallbackGlyph } from '../lib/drawFallbackGlyph.ts';
 import { fallbackRuns } from '../lib/fallbackRuns.ts';
 import { LETTER_SPACED_OFF_FEATURES, toCssFeatureSettings, UNSHAPED_OFF_FEATURES } from '../lib/features.ts';
+import { flattenPath } from '../lib/flattenPath.ts';
 import { ensureFont, ensureFontFace, fontDataUri } from '../lib/font.ts';
 import { type CanvasOverflow, glyphInkBounds, inkOverflow, NO_OVERFLOW } from '../lib/inkBounds.ts';
 import { paintStroke } from '../lib/paintStroke.ts';
 import { seededRandom } from '../lib/random.ts';
 import type { BundleShaper, ShapeOptions } from '../lib/shaper.ts';
 import { type SubdividedStroke, subdivideStroke } from '../lib/strokeCache.ts';
-import { flattenPath } from '../lib/strokeEffects.ts';
 import { type Box, expandBox, type StrokePath, unionBoxes } from '../lib/strokePath.ts';
 import {
   type PlacedStroke,
@@ -32,8 +31,6 @@ import {
 } from '../lib/strokeTimeline.ts';
 import {
   placementsToSvg,
-  type SvgClock,
-  type SvgDecoration,
   type SvgExportConfig,
   type SvgFallbackText,
   type SvgGlyphOutline,
@@ -48,20 +45,23 @@ import { computeTimeline } from '../lib/timeline.ts';
 import { cssFontFamily, drawsFallbackGlyphs, graphemes, lookupGlyphData } from '../lib/utils.ts';
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
-import { effectPlugins } from './effectPlugins.ts';
+import { getPlugin, namesAny, onPluginRegistered, PluginResolver, registerPlugin } from './plugin-registry.ts';
 import {
   type Attachment,
   allPluginSteps,
   outlineWith,
   type PluginSteps,
+  paintsAhead,
   paintWith,
   pluginStepsAt,
   reshapeWith,
   shapeSteps,
   steppedPlugins,
+  svgDecoration,
   syncAttachments,
   timingWith,
 } from './plugins.ts';
+import { pressurePlugin, resolvePressure } from './pressure.ts';
 import { buildChildren, buildRootProps, canvasBoxStyle, domCreateElement } from './render-elements.ts';
 import { getShaperForBundle, registerShaper, settledShaperForBundle } from './shaper-registry.ts';
 import type {
@@ -71,9 +71,9 @@ import type {
   TegakiEngineOptions,
   TegakiPaintContext,
   TegakiPlugin,
+  TegakiPluginSpec,
   TegakiQuality,
   TegakiStrokePaintContext,
-  TegakiSvgContext,
   TegakiSvgOptions,
   TimeControlMode,
   TimeControlProp,
@@ -162,7 +162,6 @@ interface FallbackClip {
   left: number;
   right: number;
   direction: 'ltr' | 'rtl';
-  seed: number;
 }
 
 /** Far enough past any canvas edge to leave a clip rectangle's side open (canvas rects take no Infinity). */
@@ -235,6 +234,19 @@ export class TegakiEngine {
   /** Look up a registered bundle by family name. */
   static getBundle = getBundle;
 
+  // --- Plugin registry (delegates to plugin-registry module) ---
+
+  /**
+   * Register plugin factories (made with `createPlugin`) so `plugins` can
+   * name them — `'glow'`, or `['glow', { radius: 0.15 }]` — where a function
+   * can't go: an HTML attribute, an Astro prop, a CLI flag. Renderers already
+   * naming one pick it up when it's registered.
+   */
+  static registerPlugin = registerPlugin;
+
+  /** Look up a registered plugin factory by name. */
+  static getPlugin = getPlugin;
+
   // --- Shaper registry (delegates to shaper-registry module) ---
 
   /**
@@ -289,7 +301,7 @@ export class TegakiEngine {
   private _text = '';
   private _font: TegakiBundle | null = null;
   private _timeControl: TimeControlMode[keyof TimeControlMode] = { mode: 'uncontrolled' };
-  private _effects: Record<string, any> | undefined;
+  private _pressure = 1;
   private _timing: TimelineConfig | undefined;
   private _quality: TegakiQuality | undefined;
   private _showOverlay = false;
@@ -299,7 +311,6 @@ export class TegakiEngine {
   private _fallbackFont: string | undefined;
 
   // --- Derived / cached ---
-  private _resolvedEffects: ResolvedEffect[] = resolveEffects(undefined);
   private _seed = 0;
   /** The `seed` option as given — `'random'` keeps the number it picked until the option changes. */
   private _seedOption: number | 'random' = 0;
@@ -321,7 +332,7 @@ export class TegakiEngine {
   private _shaperEnabled = true;
 
   // Stroke subdivision cache. Shared across every instance of the same glyph
-  // at the current (font, fontSize, segmentSize, effects-need-subdivision)
+  // at the current (font, fontSize, segmentSize, whether the ink varies)
   // state. Replaced wholesale when that state changes — entries in the old
   // WeakMap are orphaned and GC'd along with the map.
   private _strokeCache: WeakMap<TegakiGlyphData['s'][number], SubdividedStroke> = new WeakMap();
@@ -338,14 +349,16 @@ export class TegakiEngine {
   private _clockOrigin = typeof performance !== 'undefined' ? performance.now() : 0;
   /** The loop that redraws while a plugin's steps cycle on their own (`steps.idle`). */
   private _idleRafId = 0;
+  /** The `plugins` option as given. */
+  private _pluginSpecs: readonly TegakiPluginSpec[] = [];
+  /** Makes `_plugins` from `_pluginSpecs`, keeping the plugin a named entry made while it's named the same way. */
+  private _pluginResolver = new PluginResolver();
+  /** Stops listening for plugin registrations — set while `plugins` names any. */
+  private _offRegistry: (() => void) | null = null;
+  /** The `plugins` option's plugins. */
   private _plugins: readonly TegakiPlugin[] = [];
-  /** The built-in effects' plugins followed by the user's, memoized for the effects and plugins they came from. */
-  private _allPluginsCache: {
-    effects: ResolvedEffect[];
-    user: readonly TegakiPlugin[];
-    clipText: boolean;
-    list: readonly TegakiPlugin[];
-  } | null = null;
+  /** The pressure step followed by the user's plugins, memoized for what they came from. */
+  private _allPluginsCache: { pressure: number; user: readonly TegakiPlugin[]; list: readonly TegakiPlugin[] } | null = null;
   /** Paths drawn wider by clip-to-text's factor, by the path and factor. */
   private _widenedPaths = new WeakMap<StrokePath, { factor: number; path: StrokePath }>();
 
@@ -581,9 +594,9 @@ export class TegakiEngine {
    * Serialize the current text to an SVG string that draws what the canvas
    * draws, reusing the engine's measured layout and timeline so glyph
    * positions and timing match exactly: speed, glyph and stroke easing,
-   * deferred dots and stagger, every effect (pressure width, taper, nib
-   * stamps, stroke and global gradients, wobble, glow), clip-to-text and
-   * characters drawn from the fallback font.
+   * deferred dots and stagger, the ink as the plugins' `geometry` shapes it
+   * (pressure width and nib stamps with it), what their `svg` hooks add (a
+   * glow, a gradient), clip-to-text and characters drawn from the fallback font.
    *
    * `animated: true` (default) emits a self-drawing SVG that plays once
    * (SMIL). `animated: false` emits the finished artwork. `loop: true` emits
@@ -612,11 +625,7 @@ export class TegakiEngine {
     const scale = fontSize / font.unitsPerEm;
     const characters = graphemes(this._text);
     const color = this._currentColor || 'black';
-    const effects = this._resolvedEffects;
-
-    const pressureEffect = findEffect(effects, 'pressureWidth');
-    const pressure = pressureEffect ? Math.max(0, Math.min(pressureEffect.config.strength ?? 1, 1)) : 0;
-    const { maxSegLenFU, smoothing } = this._subdivision(scale);
+    const { maxSegLenFU } = this._subdivision(scale);
     const clipText = this._quality?.clipText;
     const strokeScale = typeof clipText === 'number' ? clipText : 1;
 
@@ -672,8 +681,7 @@ export class TegakiEngine {
           strokeDelays: entry.strokeDelays,
           strokeDurations: entry.strokeDurations,
           strokeTimeScale: entry.strokeTimeScale,
-          seed: this._seed + charIdx,
-          inks: inks.get(ei),
+          inks: inks.get(ei) ?? [],
           entryIndex: ei,
         });
       } else if (!entry.hasGlyph && /\S/u.test(entry.char)) {
@@ -682,31 +690,19 @@ export class TegakiEngine {
         if (clip === null) continue;
         const left = clip?.x ?? x;
         const baseline = y + halfLeading + (font.ascender / font.unitsPerEm) * fontSize;
-        const style = fallbackTextStyle(left, baseline, fontSize, color, effects, clip?.seed ?? this._seed + charIdx);
         const boxLeft = clip && clip.left > -CLIP_REACH ? clip.left : (layout.charOffsets[charIdx] ?? 0) * fontSize;
         const boxRight = clip && clip.right < CLIP_REACH ? clip.right : boxLeft + (layout.charWidths[charIdx] ?? 0.5) * fontSize;
         fallbackTexts.push({
           text: clip?.text ?? entry.char,
-          x: padH + left + style.dx,
-          y: padV + baseline + style.dy,
+          x: padH + left,
+          y: padV + baseline,
           direction: clip?.direction ?? layout.direction ?? 'ltr',
-          fill: style.fill,
-          glows: style.glows,
+          fill: color,
           at: entry.offset + entry.duration,
           clip: clip ? [clip.left > -CLIP_REACH ? padH + clip.left : null, clip.right < CLIP_REACH ? padH + clip.right : null] : undefined,
           box: [padH + boxLeft, padV + y, padH + boxRight, padV + y + lineHeight],
         });
       }
-    }
-
-    // Layout-wide paint from `globalGradient`, over the same box `_render` gives it.
-    const gg = findEffect(effects, 'globalGradient');
-    const ggColors = gg?.config.colors;
-    let globalGradient: SvgExportConfig['globalGradient'];
-    if (Array.isArray(ggColors) && ggColors.length > 0) {
-      const bbox = computeLayoutBbox(layout, fontSize, lineHeight);
-      const g = globalGradientGeometry({ ...bbox, x: bbox.x + padH, y: bbox.y + padV }, ggColors, gg?.config.angle ?? 0);
-      globalGradient = { x1: g.x1, y1: g.y1, x2: g.x2, y2: g.y2, stops: g.stops };
     }
 
     // `_render` clips to the text filled in its font: the shaped glyphs'
@@ -750,69 +746,28 @@ export class TegakiEngine {
       height,
       lineCap: font.lineCap,
       color,
-      pressure,
-      segmentLengthFU: maxSegLenFU,
-      smoothing,
       strokeScale,
       animated: opts.animated ?? true,
       loop: opts.loop ?? false,
       totalDuration: this._timeline.totalDuration,
-      effects,
-      fontSize,
       speed,
       strokeEasing: this._timing?.strokeEasing,
       glyphEasing: this._timing?.glyphEasing,
       loopHold: opts.loopHold,
       crop: opts.crop,
-      globalGradient,
       clipText: clip,
       fallback: fallbackTexts.length > 0 ? { font: textFont, texts: fallbackTexts } : undefined,
       fontFaces: opts.fontFaces,
-      decorate: plugins.some((p) => p.svg) ? (clock) => this._svgDecoration(plugins, strokes, clock, color) : undefined,
+      decorate: plugins.some((p) => p.svg)
+        ? (clock) => {
+            const box = this._textBox(layout, fontSize, lineHeight);
+            const textBox = { minX: box.minX + padH, minY: box.minY + padV, maxX: box.maxX + padH, maxY: box.maxY + padV };
+            const random = (key: string | number) => seededRandom(this._seed, key);
+            const base = { duration: this._timeline.totalDuration, fontSize, color, textBox, random };
+            return svgDecoration(plugins, strokes, clock, base, this._reportPluginError);
+          }
+        : undefined,
     });
-  }
-
-  /** What the plugins' `svg` hooks add to the file, and the boxes of those with `bounds` for the crop. */
-  private _svgDecoration(
-    plugins: readonly TegakiPlugin[],
-    strokes: readonly PlacedStroke[],
-    clock: SvgClock,
-    color: string,
-  ): SvgDecoration {
-    const deco: SvgDecoration = { defs: [], underlay: [], overlay: [], ink: [], strokes: new Map(), boxes: [] };
-    const fontSize = this._fontSize;
-    let ids = 0;
-    const svg: TegakiSvgContext = {
-      strokes,
-      duration: this._timeline.totalDuration,
-      fontSize,
-      color,
-      mode: clock.mode,
-      random: (key) => seededRandom(this._seed, key),
-      id: (name) => `${name}-${ids++}`,
-      defs: (markup) => deco.defs.push(markup),
-      underlay: (markup) => deco.underlay.push(markup),
-      overlay: (markup) => deco.overlay.push(markup),
-      ink: (attrs) => deco.ink.push(attrs),
-      style: (stroke, style) => {
-        const prev = deco.strokes.get(stroke.id);
-        const attrs = [prev?.attrs, style.attrs].filter(Boolean).join(' ');
-        deco.strokes.set(stroke.id, { color: style.color ?? prev?.color, attrs: attrs || undefined });
-      },
-      appear: (t) => clock.appear(t),
-      seconds: (t) => clock.seconds(t),
-    };
-    for (const plugin of plugins) {
-      if (!plugin.svg) continue;
-      this._runHook(plugin, 'svg', () => plugin.svg!(svg));
-      if (plugin.bounds) {
-        this._runHook(plugin, 'bounds', () => {
-          const box = plugin.bounds!({ strokes, fontSize });
-          if (box) deco.boxes.push(box);
-        });
-      }
-    }
-    return deco;
   }
 
   /**
@@ -975,9 +930,8 @@ export class TegakiEngine {
       dirtyPlayback = true;
     }
 
-    if ('effects' in options && options.effects !== this._effects) {
-      this._effects = options.effects as Record<string, any>;
-      this._resolvedEffects = resolveEffects(this._effects);
+    if ('pressure' in options && resolvePressure(options.pressure) !== this._pressure) {
+      this._pressure = resolvePressure(options.pressure);
       dirtyRender = true;
     }
 
@@ -991,11 +945,8 @@ export class TegakiEngine {
       dirtyRender = true;
     }
 
-    if ('plugins' in options && (options.plugins ?? []) !== this._plugins) {
-      this._plugins = options.plugins ?? [];
-      syncAttachments(this._attached, this._plugins, this._attachContext, this._reportPluginError);
+    if ('plugins' in options && (options.plugins ?? []) !== this._pluginSpecs && this._setPlugins(options.plugins ?? []))
       dirtyRender = true;
-    }
 
     if ('seed' in options) {
       const next = nextSeed(options.seed, { option: this._seedOption, seed: this._seed });
@@ -1045,6 +996,8 @@ export class TegakiEngine {
 
   destroy(): void {
     this._destroyed = true;
+    this._offRegistry?.();
+    this._offRegistry = null;
     syncAttachments(this._attached, [], this._attachContext, this._reportPluginError);
     if (this._redrawRafId) cancelAnimationFrame(this._redrawRafId);
     this._redrawRafId = 0;
@@ -1407,7 +1360,6 @@ export class TegakiEngine {
    * left edge, clipped to the character's own box so each still appears when
    * its time comes. The run's outer edges aren't clipped: ink reaching past
    * the advance boxes (a swash, a final tail) belongs to the end letters.
-   * The run shares one effect seed, so a wobble moves it as one piece.
    * A character with several entries (a cluster of code points the font
    * lacks) is drawn by its first; the rest map to `null`.
    */
@@ -1422,7 +1374,6 @@ export class TegakiEngine {
     const { runs } = fallbackRuns(entries, characters, (g) => graphemeToLine[g] ?? -1);
     for (const run of runs) {
       if (run.entries.length < 2) continue;
-      const first = entries[run.entries[0]!]!;
       // One box per character, where the layout measured it.
       const boxes: { ei: number; left: number; right: number }[] = [];
       let lastGrapheme = -1;
@@ -1446,7 +1397,6 @@ export class TegakiEngine {
           left: box.left === runLeft ? -CLIP_REACH : box.left,
           right: box.right === runRight ? CLIP_REACH : box.right,
           direction,
-          seed: this._seed + first.graphemeIndex,
         });
       }
     }
@@ -1916,26 +1866,19 @@ export class TegakiEngine {
   /**
    * The stroke subdivision threshold in font units — Infinity for the raw
    * polyline. It collapses every input that matters (segmentSize in CSS px,
-   * fontSize, unitsPerEm, whether any effect needs subdivision) into one value.
+   * fontSize, unitsPerEm, whether the ink varies along a stroke) into one value.
    */
   private _subdivision(scale: number): { maxSegLenFU: number; smoothing: boolean } {
-    const effects = this._resolvedEffects;
-    const pressure = findEffect(effects, 'pressureWidth');
-    const effectsNeedSubdivision =
-      !!findEffect(effects, 'wobble') ||
-      !!findEffect(effects, 'strokeGradient') ||
-      !!findEffect(effects, 'taper') ||
-      (!!pressure && Math.max(0, Math.min(pressure.config.strength ?? 1, 1)) > 0);
-    const pluginsNeedSubdivision = this._plugins.some((p) => p.geometry || p.paint);
+    // Pressure, or a plugin reshaping or painting the ink, can vary it along a stroke.
+    const varies = this._pressure > 0 || this._plugins.some((p) => p.geometry || p.paint);
     const smoothing = this._quality?.smoothing === true;
-    const resolvedSegmentSize =
-      this._quality?.segmentSize ?? (effectsNeedSubdivision || pluginsNeedSubdivision || smoothing ? 2 : undefined);
+    const resolvedSegmentSize = this._quality?.segmentSize ?? (varies || smoothing ? 2 : undefined);
     return { maxSegLenFU: resolvedSegmentSize != null ? resolvedSegmentSize / scale : Infinity, smoothing };
   }
 
   /**
    * Every stroke placed in the current layout (see `placeStrokes`) and
-   * reshaped by the plugins' `geometry` (the built-in effects' among them),
+   * reshaped by the plugins' `geometry` (the pressure step's first),
    * memoized for everything that moves or reshapes the ink: the strokes, the
    * layout, font size and line height, the plugins, quality (subdivision,
    * clip-to-text width) and the seed.
@@ -2042,14 +1985,42 @@ export class TegakiEngine {
     this._updateIdleLoop();
   };
 
-  /** The built-in effects' plugins, then the user's: every plugin the engine runs, in order. */
+  /** The pressure step, then the user's plugins: every plugin the engine runs, in order. */
   private _allPlugins(): readonly TegakiPlugin[] {
     const cached = this._allPluginsCache;
-    const clipText = !!this._quality?.clipText;
-    if (cached?.effects === this._resolvedEffects && cached.user === this._plugins && cached.clipText === clipText) return cached.list;
-    const list = [...effectPlugins(this._resolvedEffects, { clipText }), ...this._plugins];
-    this._allPluginsCache = { effects: this._resolvedEffects, user: this._plugins, clipText, list };
+    if (cached?.pressure === this._pressure && cached.user === this._plugins) return cached.list;
+    const list = [pressurePlugin(this._pressure), ...this._plugins];
+    this._allPluginsCache = { pressure: this._pressure, user: this._plugins, list };
     return list;
+  }
+
+  /**
+   * Take `specs` as the `plugins` option: resolve its named entries through
+   * the registry, and listen for registrations while it names any, so a name
+   * registered later (or again) is picked up. Whether the plugins changed.
+   */
+  private _setPlugins(specs: readonly TegakiPluginSpec[]): boolean {
+    this._pluginSpecs = specs;
+    const named = specs.some((s) => typeof s === 'string' || Array.isArray(s));
+    if (named && !this._offRegistry) {
+      this._offRegistry = onPluginRegistered((names) => {
+        if (this._destroyed || !namesAny(this._pluginSpecs, names)) return;
+        if (this._setPlugins(this._pluginSpecs)) {
+          this._render();
+          this._updateIdleLoop();
+        }
+      });
+    } else if (!named && this._offRegistry) {
+      this._offRegistry();
+      this._offRegistry = null;
+    }
+    const { plugins } = this._pluginResolver.resolve(specs);
+    const prev = this._plugins;
+    // The same plugins in the same order — a new array of the same names every render — keep every cache keyed on the list.
+    if (plugins.length === prev.length && plugins.every((p, i) => p === prev[i])) return false;
+    this._plugins = plugins;
+    syncAttachments(this._attached, plugins, this._attachContext, this._reportPluginError);
+    return true;
   }
 
   /** The box a placed stroke's ink covers, worked out once per placement. */
@@ -2129,6 +2100,7 @@ export class TegakiEngine {
     plugins: readonly TegakiPlugin[],
     fontSize: number,
     color: string,
+    clipped: boolean,
     bounds: Box | null,
     frame: TegakiFrame,
   ): void {
@@ -2138,6 +2110,7 @@ export class TegakiEngine {
       bounds,
       fontSize,
       color,
+      clipped,
       frame,
       random: (key: string | number) => seededRandom(this._seed, key),
       step: 0,
@@ -2162,9 +2135,10 @@ export class TegakiEngine {
     frame: TegakiFrame,
     fontSize: number,
     color: string,
+    clipped: boolean,
   ): void {
     const steps = this._steps.steps;
-    const paint: TegakiPaintContext = { ctx, frame, fontSize, color, random: (key) => seededRandom(this._seed, key), step: 0 };
+    const paint: TegakiPaintContext = { ctx, frame, fontSize, color, clipped, random: (key) => seededRandom(this._seed, key), step: 0 };
 
     if (plugins.some((p) => p.underlay)) {
       const canvas = this._canvasEl;
@@ -2208,7 +2182,7 @@ export class TegakiEngine {
   /**
    * The engine's cached stroke subdivision at `scale`. `maxSegLenFU` (see
    * `_subdivision`), the subdivision threshold in font units, collapses every input that matters (segmentSize in CSS px,
-   * fontSize, unitsPerEm, whether any effect needs subdivision) into a single
+   * fontSize, unitsPerEm, whether the ink varies along a stroke) into a single
    * value, so the cache key is just (font family, maxSegLenFU, smoothing).
    * When anything that affects subdivision changes, the key changes and the
    * WeakMap is swapped out.
@@ -2301,12 +2275,12 @@ export class TegakiEngine {
     const paint = paintWith(plugins, this._reportPluginError, painter, this._steps.steps);
     // `paint` sees every stroke, drawn or not. A plugin's `paint` may show a
     // stroke before the pen gets to it, so with one the ink may be anywhere a
-    // stroke is; the built-in effects paint only what's drawn.
-    const paintsAhead = this._plugins.some((p) => p.paint);
+    // stroke is; a plugin made with `paintsDrawnOnly` (a color, a glow) paints only what's drawn.
+    const ahead = this._plugins.some(paintsAhead);
     // With clip-to-text, a layer the mask doesn't cut, for plugins to paint on
     // (the paint context's `unclipped`); without it, the canvas itself.
     let unclipped = ctx;
-    if (clipText && paintsAhead) {
+    if (clipText && ahead) {
       if (!this._unclippedCanvas) this._unclippedCanvas = document.createElement('canvas');
       const layer = this._unclippedCanvas;
       if (layer.width !== canvas.width || layer.height !== canvas.height) {
@@ -2320,8 +2294,7 @@ export class TegakiEngine {
       unclipped = lctx;
     }
     const textBox = this._textBox(layout, fontSize, lineHeight);
-    // Clipped ink glows as a whole (the glow plugin's `ink`), fallback text with it.
-    const fallbackEffects = clipText ? this._resolvedEffects.filter((e) => e.effect !== 'glow') : this._resolvedEffects;
+    const clipped = !!clipText;
     // What the ink drawn so far covers, for the `ink` hooks.
     const inkBoxes: (Box | null)[] = [];
 
@@ -2347,10 +2320,10 @@ export class TegakiEngine {
         while (si < strokes.length && strokes[si]!.entryIndex < ei) si++;
         for (; si < strokes.length && strokes[si]!.entryIndex === ei; si++) {
           const stroke = strokes[si]!;
-          // The built-in effects paint only what's drawn: without a plugin's `paint`, a pending stroke has nothing to show.
-          if (stroke.state === 'pending' && !paintsAhead) continue;
-          paint({ ctx, unclipped, stroke, style: color, lineCap: font.lineCap, color, fontSize, textBox, frame, random });
-          if (stroke.state !== 'pending' || paintsAhead) inkBoxes.push(this._inkBox(stroke));
+          // Without a plugin painting ahead of the pen, a pending stroke has nothing to show.
+          if (stroke.state === 'pending' && !ahead) continue;
+          paint({ ctx, unclipped, stroke, style: color, lineCap: font.lineCap, color, clipped, fontSize, textBox, frame, random });
+          if (stroke.state !== 'pending' || ahead) inkBoxes.push(this._inkBox(stroke));
         }
       } else if (currentTime >= entry.offset + entry.duration) {
         const { x, y } = entryOrigin(entry, layout, lineIdx, fontSize, lineHeight, halfLeading);
@@ -2373,8 +2346,6 @@ export class TegakiEngine {
           fontSize,
           cssFontFamily(font, this._fallbackFont),
           color,
-          fallbackEffects,
-          clip?.seed ?? this._seed + charIdx,
           clip?.direction ?? layout.direction ?? 'ltr',
         );
         if (clip) ctx.restore();
@@ -2478,11 +2449,9 @@ export class TegakiEngine {
 
       // Masked only where ink was drawn — the rest of the canvas is empty, and
       // the composite costs what it covers. (Grown a little: a square cap
-      // reaches past its half-width box.) A plugin's `paint` may draw past its
-      // stroke's ink, so with one the whole canvas is masked.
-      const region = this._plugins.some((p) => p.paint)
-        ? { minX: -padH, minY: -padV, maxX: w - padH, maxY: h - padV }
-        : expandBox(drawn, 0.05 * fontSize);
+      // reaches past its half-width box.) A plugin painting ahead of the pen
+      // may draw past its stroke's ink, so with one the whole canvas is masked.
+      const region = ahead ? { minX: -padH, minY: -padV, maxX: w - padH, maxY: h - padV } : expandBox(drawn, 0.05 * fontSize);
       if (region) {
         const m = ctx.getTransform();
         const x0 = Math.max(0, Math.floor(m.a * region.minX + m.e) - 1);
@@ -2512,8 +2481,8 @@ export class TegakiEngine {
       ctx.restore();
     }
 
-    // --- Plugins: the finished ink (the built-in glow), then underlays, overlays, onFrame ---
-    if (plugins.some((p) => p.ink)) this._renderInk(ctx, plugins, fontSize, color, drawn, frame);
-    if (plugins.some((p) => p.underlay || p.overlay || p.onFrame)) this._renderPlugins(ctx, plugins, frame, fontSize, color);
+    // --- Plugins: the finished ink (a glow with clip-to-text), then underlays, overlays, onFrame ---
+    if (plugins.some((p) => p.ink)) this._renderInk(ctx, plugins, fontSize, color, clipped, drawn, frame);
+    if (plugins.some((p) => p.underlay || p.overlay || p.onFrame)) this._renderPlugins(ctx, plugins, frame, fontSize, color, clipped);
   }
 }

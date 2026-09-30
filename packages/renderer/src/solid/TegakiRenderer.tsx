@@ -2,11 +2,8 @@
 import { createEffect, createMemo, type JSX, on, onCleanup, onMount, splitProps } from 'solid-js';
 import { TegakiEngine } from '../core/engine.ts';
 import type { TegakiEngineOptions } from '../core/types.ts';
-import type { TegakiEffects } from '../types.ts';
 
-export interface TegakiRendererProps extends Omit<TegakiEngineOptions, 'effects'> {
-  /** Visual effects applied during canvas rendering. */
-  effects?: TegakiEffects<Record<string, any>>;
+export interface TegakiRendererProps extends TegakiEngineOptions {
   class?: string;
   ref?: (handle: TegakiRendererHandle) => void;
   [key: string]: any;
@@ -58,7 +55,7 @@ export function TegakiRenderer(props: TegakiRendererProps) {
     'reducedMotion',
     'onComplete',
     'onChangeTimeline',
-    'effects',
+    'pressure',
     'quality',
     'plugins',
     'seed',
@@ -78,7 +75,7 @@ export function TegakiRenderer(props: TegakiRendererProps) {
     font: local.font,
     time: local.time,
     reducedMotion: local.reducedMotion,
-    effects: local.effects as Record<string, any>,
+    pressure: local.pressure,
     quality: local.quality,
     plugins: local.plugins,
     seed: local.seed,

@@ -1,9 +1,17 @@
-import type { TegakiBundle } from '../types.ts';
+import { PluginResolver } from '../core/plugin-registry.ts';
+import { outlineWith, reshapeWith, svgDecoration, timingWith } from '../core/plugins.ts';
+import { pressurePlugin } from '../core/pressure.ts';
+import type { TegakiPlugin, TegakiPluginSpec } from '../core/types.ts';
+import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { paragraphDirection } from './bidi.ts';
 import { MIN_LINE_HEIGHT_EM, MIN_PADDING_V_EM, PADDING_H_EM } from './css-properties.ts';
-import { findEffect, globalGradientGeometry, resolveEffects } from './effects.ts';
+import { flattenPath } from './flattenPath.ts';
+import { seededRandom } from './random.ts';
 import type { BundleShaper } from './shaper.ts';
-import { placementsToSvg, type SvgExportConfig, type SvgGlyphOutline, type SvgGlyphPlacement } from './svgExport.ts';
+import { type SubdividedStroke, subdivideStroke } from './strokeCache.ts';
+import type { Box } from './strokePath.ts';
+import { placeStrokes, retimeTimeline, strokeInstances } from './strokeTimeline.ts';
+import { placementsToSvg, type SvgGlyphOutline, type SvgGlyphPlacement, type SvgStrokeInk } from './svgExport.ts';
 import { headlessShapedLayout } from './textLayout.ts';
 import { computeTimeline, type TimelineConfig } from './timeline.ts';
 import { graphemes, lookupGlyphData } from './utils.ts';
@@ -38,8 +46,8 @@ export interface TextToSvgOptions {
   smoothing?: boolean;
   /**
    * Stroke subdivision threshold in px. Smaller = more vertices = smoother
-   * variable width at a larger file size. Default: `2` when `pressure > 0` or
-   * `smoothing`, otherwise the raw bundled polyline.
+   * variable width at a larger file size. Default: `2` when `pressure > 0`, a
+   * plugin reshapes or paints the ink, or `smoothing`; otherwise the raw bundled polyline.
    */
   segmentSize?: number;
   /** Timeline timing config (gaps, easing, stagger). Forwarded to `computeTimeline`; its easings shape the reveal. */
@@ -64,9 +72,14 @@ export interface TextToSvgOptions {
    * when a drawn glyph has none, the strokes are left unclipped.
    */
   clipText?: boolean | number;
-  /** Effects, as the renderer's `effects` prop: glow, wobble, taper, strokeGradient, globalGradient. Width blending is `pressure`. */
-  effects?: Record<string, unknown>;
-  /** Effect seed (wobble phase, gradient hue); each character adds its index. Default `0`, so output is reproducible. */
+  /**
+   * Plugins, as the renderer's `plugins`: plugin objects, or names of
+   * registered factories (see `registerPlugin`) — `['taper', ['glow', { radius: 0.15 }]]`.
+   * The file draws the ink as their `geometry` shapes it and `timing` times
+   * it, and what their `svg` hooks add. A name no factory is registered as throws.
+   */
+  plugins?: readonly TegakiPluginSpec[];
+  /** The seed plugins draw with (a wobble's phase, where a gradient starts); each character adds its index. Default `0`, so output is reproducible. */
   seed?: number;
 }
 
@@ -206,39 +219,87 @@ export function textToSvg(text: string, font: TegakiBundle, options: TextToSvgOp
     for (const charIdx of lines[li]!) graphemeToLine[charIdx] = li;
   }
 
-  const effects = resolveEffects({ pressureWidth: false, ...options.effects });
   const pressure = Math.max(0, Math.min(options.pressure ?? (loop ? 0 : 1), 1));
+  const resolved = new PluginResolver().resolve(options.plugins, { warn: false });
+  if (resolved.missing.length > 0) {
+    throw new Error(
+      `textToSvg: no plugin registered as ${resolved.missing.map((n) => `"${n}"`).join(', ')}. Register it with registerPlugin().`,
+    );
+  }
+  const plugins = [pressurePlugin(pressure), ...resolved.plugins];
   const smoothing = options.smoothing === true;
-  const effectsNeedSubdivision =
-    pressure > 0 || !!findEffect(effects, 'wobble') || !!findEffect(effects, 'strokeGradient') || !!findEffect(effects, 'taper');
-  const resolvedSegmentSize = options.segmentSize ?? (effectsNeedSubdivision || smoothing ? 2 : undefined);
+  const varies = pressure > 0 || resolved.plugins.some((p) => p.geometry || p.paint);
+  const resolvedSegmentSize = options.segmentSize ?? (varies || smoothing ? 2 : undefined);
   const segmentLengthFU = resolvedSegmentSize != null ? resolvedSegmentSize / scale : Infinity;
   let clip = options.clipText && shaper?.glyphPath ? options.clipText : false;
+  const seed = options.seed ?? 0;
+  const random = (key: string | number) => seededRandom(seed, key);
+  const onError = (plugin: TegakiPlugin, hook: keyof TegakiPlugin, error: unknown) => {
+    throw new Error(`textToSvg: plugin "${plugin.name}" threw in ${hook}: ${error instanceof Error ? error.message : String(error)}`);
+  };
+  const textBox = { minX: padH, minY: padV, maxX: padH + widthEm * fontSize, maxY: padV + lines.length * lineHeight };
 
+  // Where each entry's glyph is drawn, in the file's px.
+  const origins = new Map<number, { x: number; glyphY: number }>();
+  timeline.entries.forEach((entry, ei) => {
+    if (entry.char === '\n' || !entry.hasGlyph) return;
+    const charIdx = entry.graphemeIndex;
+    const lineIdx = charIdx < totalChars ? graphemeToLine[charIdx]! : -1;
+    if (lineIdx < 0) return;
+    const lineLeftEm = lineLefts?.[lineIdx];
+    const xEm = entry.xOffsetEm !== undefined && lineLeftEm !== undefined ? lineLeftEm + entry.xOffsetEm : (charOffsets[charIdx] ?? 0);
+    origins.set(ei, { x: padH + xEm * fontSize, glyphY: padV + lineIdx * lineHeight + halfLeading + (entry.yOffsetEm ?? 0) * fontSize });
+  });
+
+  // The ink as the renderer draws it: every stroke placed and reshaped by the plugins, then retimed by them.
+  const subdivided = new WeakMap<TegakiGlyphData['s'][number], SubdividedStroke>();
+  const placedInk = placeStrokes(strokeInstances(timeline, font), {
+    reshape: reshapeWith(plugins, { fontSize, random, textBox }, onError),
+    getSubdivided: (stroke) => {
+      let sub = subdivided.get(stroke);
+      if (!sub) subdivided.set(stroke, (sub = subdivideStroke(stroke, segmentLengthFU, smoothing)));
+      return sub;
+    },
+    placeEntry: (ei) => {
+      const at = origins.get(ei);
+      const entry = timeline.entries[ei]!;
+      return at ? { x: at.x, y: at.glyphY, scale, ascender: font.ascender, seed: seed + entry.graphemeIndex } : null;
+    },
+  });
+  const retime = timingWith(plugins, { fontSize, random }, onError);
+  const timed = retime?.(placedInk, timeline.totalDuration);
+  const played = timed ? retimeTimeline(timeline, placedInk, timed.strokes, timed.duration) : timeline;
+  const strokes = timed?.strokes ?? placedInk;
+  const inks = new Map<number, SvgStrokeInk[]>();
+  for (const s of strokes) {
+    let list = inks.get(s.entryIndex);
+    if (!list) inks.set(s.entryIndex, (list = []));
+    list[s.strokeIndex] = { path: s.path, nibs: s.nibs };
+  }
+
+  const reshapeOutline = clip ? outlineWith(plugins, onError) : undefined;
   const placements: SvgGlyphPlacement[] = [];
   const outlines: SvgGlyphOutline[] = [];
   const charGlyphCache = new Map<string, CharGlyph[] | null>();
-  for (const entry of timeline.entries) {
-    if (entry.char === '\n' || !entry.hasGlyph) continue;
+  played.entries.forEach((entry, ei) => {
+    const at = origins.get(ei);
+    if (!at) return;
     const charIdx = entry.graphemeIndex;
-    const lineIdx = charIdx < totalChars ? graphemeToLine[charIdx]! : -1;
-    if (lineIdx < 0) continue;
     const glyph = (entry.glyphId !== undefined ? font.glyphDataById?.[entry.glyphId] : undefined) ?? lookupGlyphData(font, entry.char);
-    if (!glyph) continue;
-    const lineLeftEm = lineLefts?.[lineIdx];
-    const xEm = entry.xOffsetEm !== undefined && lineLeftEm !== undefined ? lineLeftEm + entry.xOffsetEm : (charOffsets[charIdx] ?? 0);
-    const glyphY = lineIdx * lineHeight + halfLeading + (entry.yOffsetEm ?? 0) * fontSize;
+    if (!glyph) return;
     placements.push({
       glyph,
-      ox: padH + xEm * fontSize,
-      oy: padV + glyphY,
+      ox: at.x,
+      oy: at.glyphY,
       scale,
       ascender: font.ascender,
       offset: entry.offset,
       duration: entry.duration,
       strokeDelays: entry.strokeDelays,
+      strokeDurations: entry.strokeDurations,
       strokeTimeScale: entry.strokeTimeScale,
-      seed: (options.seed ?? 0) + charIdx,
+      inks: inks.get(ei) ?? [],
+      entryIndex: ei,
     });
     if (clip && shaper && /\S/u.test(entry.char)) {
       const glyphs = entry.glyphId !== undefined ? [{ g: entry.glyphId, dx: 0, dy: 0 }] : charGlyphs(shaper, entry.char, charGlyphCache);
@@ -248,52 +309,63 @@ export function textToSvg(text: string, font: TegakiBundle, options: TextToSvgOp
       if (!glyphs || !paths || paths.includes(null)) clip = false;
       else
         glyphs.forEach((g, i) => {
-          outlines.push({
+          const outline: SvgGlyphOutline = {
             d: paths[i]!,
-            x: padH + xEm * fontSize + g.dx * scale,
-            y: padV + glyphY + (font.ascender - g.dy) * scale,
+            x: at.x + g.dx * scale,
+            y: at.glyphY + (font.ascender - g.dy) * scale,
             scale,
-            seed: (options.seed ?? 0) + charIdx,
-          });
+            seed: seed + charIdx,
+          };
+          outlines.push(
+            reshapeOutline ? reshapedOutline(outline, segmentLengthFU, font.ascender, fontSize, textBox, reshapeOutline) : outline,
+          );
         });
     }
-  }
+  });
   const strokeScale = typeof clip === 'number' ? clip : 1;
 
   const width = padH * 2 + widthEm * fontSize;
   const height = padV * 2 + lines.length * lineHeight;
-
-  let globalGradient: SvgExportConfig['globalGradient'];
-  const gg = findEffect(effects, 'globalGradient');
-  if (Array.isArray(gg?.config.colors) && gg.config.colors.length > 0) {
-    const g = globalGradientGeometry(
-      { x: padH, y: padV, width: widthEm * fontSize, height: lines.length * lineHeight },
-      gg.config.colors,
-      gg.config.angle ?? 0,
-    );
-    globalGradient = { x1: g.x1, y1: g.y1, x2: g.x2, y2: g.y2, stops: g.stops };
-  }
 
   return placementsToSvg(placements, {
     width,
     height,
     lineCap: font.lineCap,
     color,
-    pressure,
-    segmentLengthFU,
-    smoothing,
     strokeScale,
     animated,
     loop,
-    totalDuration: timeline.totalDuration,
-    effects,
-    fontSize,
+    totalDuration: played.totalDuration,
     speed: options.speed,
     strokeEasing: options.timing?.strokeEasing,
     glyphEasing: options.timing?.glyphEasing,
     loopHold: options.loopHold,
     crop: options.crop,
-    globalGradient,
     clipText: clip ? { glyphs: outlines } : undefined,
+    decorate: plugins.some((p) => p.svg)
+      ? (clock) => svgDecoration(plugins, strokes, clock, { duration: played.totalDuration, fontSize, color, textBox, random }, onError)
+      : undefined,
   });
+}
+
+/** A glyph outline reshaped by the plugins' `outline` hooks, as the renderer's clip-to-text mask is: flattened, in absolute px. */
+function reshapedOutline(
+  g: SvgGlyphOutline,
+  segmentLengthFU: number,
+  ascender: number,
+  fontSize: number,
+  textBox: Box,
+  reshape: NonNullable<ReturnType<typeof outlineWith>>,
+): SvgGlyphOutline {
+  const place = { x: g.x, y: g.y - ascender * g.scale, scale: g.scale, ascender };
+  const fmt = (n: number) => (Math.round(n * 100) / 100).toString();
+  const d = flattenPath(g.d, segmentLengthFU)
+    .map((contour) => {
+      const pts: { x: number; y: number }[] = [];
+      for (let i = 0; i < contour.length; i += 2) pts.push({ x: g.x + contour[i]! * g.scale, y: g.y - contour[i + 1]! * g.scale });
+      const moved = reshape(pts, { place, seed: g.seed ?? 0, fontSize, textBox });
+      return `M ${moved.map((p) => `${fmt(p.x)} ${fmt(p.y)}`).join(' L ')} Z`;
+    })
+    .join(' ');
+  return { d, x: 0, y: 0, scale: 1, placed: true };
 }

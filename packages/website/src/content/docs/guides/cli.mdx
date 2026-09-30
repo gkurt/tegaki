@@ -23,8 +23,9 @@ npx tegaki "ABC" --stagger 80% --size 140 --color "#222"
 # Right-to-left text is shaped and joined correctly
 npx tegaki "مرحبا بالعالم" --font amiri --mode once
 
-# Effects use the same options as the renderer
-npx tegaki "Glow" --effects '{"glow":{"radius":10,"color":"#f0a"}}'
+# Plugins by name, with or without options
+npx tegaki "Brush" --plugins "taper wobble"
+npx tegaki "Glow" --plugins '[["glow", {"radius": 0.12, "color": "#f0a"}], "taper"]'
 
 # Write to stdout, for piping
 npx tegaki "Hi" -o - > hi.svg
@@ -47,11 +48,25 @@ npx tegaki "Hi" -o - > hi.svg
 | `--stroke-easing`, `--glyph-easing` | `ease-out-quad`, `linear` | Easing of each stroke and of each glyph's time |
 | `--pressure <0-1>` | `1` | Variable stroke width |
 | `--clip <scale>` / `--no-clip` | `1.2` | Clip strokes to the letter outlines |
-| `--effects <json>` | none | Renderer effects: glow, wobble, taper, strokeGradient, globalGradient |
-| `--seed <n>` | `0` | Seed for wobble and gradient variation |
+| `--plugins <list>` | none | Plugins by name, split by spaces or commas (`"taper glow"`), or a JSON array of names and `[name, options]` pairs. See [Plugins](#plugins) |
+| `--seed <n>` | `0` | The seed plugins draw with: a wobble's phase, where a gradient starts, how `variation` changes each glyph |
 | `--no-shaping` | off | One glyph per character, no ligatures, joining or bidi |
 
 Run `npx tegaki --help` for the full list.
+
+## Plugins
+
+`--plugins` takes the plugins `tegaki/core` ships, by name: `glow`, `taper`, `wobble`, `strokeGradient`, `globalGradient`, `variation`, `boil`, `annotate`, `text-path` and `caption`. They take the same options as in the renderer (see [Style plugins](/api/renderer/#style-plugins) and the sections after it) and run in the order you list them. The file draws the ink as their `geometry` shapes it and `timing` times it, plus what their `svg` hooks add, so a glow comes out as an SVG filter and a gradient as SVG gradients.
+
+```sh
+# A rainbow along each stroke, thinning toward the ends
+npx tegaki "Rainbow" --plugins "strokeGradient taper"
+
+# Underline the text once it's written
+npx tegaki "Note this" --plugins '[["annotate", {"mark": "underline", "color": "#e5484d"}]]'
+```
+
+`--plugins` replaces the old `--effects <json>` flag: `--effects '{"glow":{"radius":10}}'` is now `--plugins '[["glow", {"radius": "10px"}]]'` (a glow's sizes are em unless they say px, so `0.12` grows with `--font-size`). Pressure width has its own flag, `--pressure`.
 
 ## What it does not do
 

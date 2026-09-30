@@ -1,7 +1,4 @@
 import type { LineCap, TegakiGlyphData } from '../types.ts';
-import { findEffect, type ResolvedEffect } from './effects.ts';
-import { subdivideStroke } from './strokeCache.ts';
-import { type GlowPass, glowPasses, type StrokeEffects, strokeEffects, wobbledOutline } from './strokeEffects.ts';
 import type { Box, StrokePath } from './strokePath.ts';
 import { glyphLocalTime, type StrokeNib, strokeProgressAt, strokeWindow } from './strokeTimeline.ts';
 
@@ -31,15 +28,12 @@ export interface SvgGlyphPlacement {
   strokeDurations?: (number | undefined)[];
   /** Multiplier on every bundled stroke delay and duration (stagger with a fixed duration). Default `1`. */
   strokeTimeScale?: number;
-  /** Effect seed — wobble phase, gradient hue. The engine's is its seed + the grapheme index. Default `0`. */
-  seed?: number;
   /**
    * Each stroke's ink as the canvas draws it — reshaped by the plugins'
-   * `geometry` — by stroke index. A stroke with one is drawn from it instead
-   * of the bundle's points, and takes no wobble, taper or pressure of its own:
-   * they're in it already.
+   * `geometry`, pressure width among them — by stroke index. A stroke without
+   * one isn't drawn.
    */
-  inks?: (SvgStrokeInk | undefined)[];
+  inks: readonly (SvgStrokeInk | undefined)[];
   /** The glyph's entry in the timeline: what {@link SvgDecoration.strokes} are keyed by. */
   entryIndex?: number;
 }
@@ -52,8 +46,8 @@ export interface SvgStrokeInk {
 
 /** How a plugin restyles one stroke. */
 export interface SvgStrokeStyle {
-  /** Paint in place of the text's (and a stroke gradient's). */
-  color?: string;
+  /** Paint in place of the text's: a paint for the whole stroke, or a color per draw progress along it. */
+  color?: string | ((t: number) => string);
   /** Attributes for a `<g>` around the stroke's elements, e.g. `opacity="0.5"`. */
   attrs?: string;
 }
@@ -111,16 +105,15 @@ export interface SvgGlyphOutline {
   y: number;
   /** fontSize / unitsPerEm. */
   scale: number;
-  /** Effect seed of the glyph drawn here (its strokes' `seed`), so a wobble moves the outline in step. Default `0`. */
+  /** The seed of the glyph drawn here (its strokes' `seed`), which an `outline` hook reshapes it by. Default `0`. */
   seed?: number;
-  /** `d` is already in absolute px, reshaped by the plugins' `outline`: drawn as is, with no transform or wobble. */
+  /** `d` is already in absolute px, reshaped by the plugins' `outline`: drawn as is, with no transform. */
   placed?: boolean;
 }
 
 /** A character the bundle has no strokes for, drawn as text in the fallback font. */
 export interface SvgFallbackText extends SvgTextRun {
   fill: string;
-  glows: GlowPass[];
   /** Timeline seconds at which it appears. */
   at: number;
   /** Horizontal clip in px — one character cut from a run drawn whole; `null` leaves that side open. */
@@ -136,11 +129,6 @@ export interface SvgExportConfig {
   height: number;
   lineCap: LineCap;
   color: string;
-  /** Per-point width blend (0 = uniform mean width, 1 = full per-point). Mirrors pressureWidth. */
-  pressure: number;
-  /** Subdivision threshold in font units (Infinity to skip). */
-  segmentLengthFU: number;
-  smoothing: boolean;
   /** Multiplier on every width (mirrors quality.clipText stroke scale). */
   strokeScale: number;
   /** When true, emit a self-drawing animation. */
@@ -154,10 +142,6 @@ export interface SvgExportConfig {
   loop?: boolean;
   /** Total timeline duration in seconds. */
   totalDuration: number;
-  /** Effects to draw: glow, wobble, taper, strokeGradient. Width blending comes from `pressure`. */
-  effects?: ResolvedEffect[];
-  /** Font size in px, which CSS-length glow radii resolve against. Default `100`. */
-  fontSize?: number;
   /** Playback speed multiplier — every time in the file is divided by it. Default `1`. */
   speed?: number;
   /** Each stroke's draw progress easing. Default: ease-out quad, as the canvas. */
@@ -168,8 +152,6 @@ export interface SvgExportConfig {
   loopHold?: number;
   /** Crop the viewBox to the ink (plus a small margin) rather than the full `width` × `height`. Default `true`. */
   crop?: boolean;
-  /** A layout-wide `globalGradient` paint, in absolute px. */
-  globalGradient?: { x1: number; y1: number; x2: number; y2: number; stops: [number, string][] };
   /**
    * Clip every stroke to the text drawn in its font (quality `clipText`):
    * the glyphs' outlines, or words set as `<text>` in `font` (which then
@@ -193,21 +175,8 @@ const LOOP_GAP = 0.7;
 /** Stands in for a mask / filter region's attributes until the viewBox is known. */
 const REGION = '\u0000REGION\u0000';
 
-/**
- * The glow of clipped ink: each pass is the clipped ink recolored in the glow
- * color with its drop shadow, stacked under the ink in order — what each
- * stroke draws when nothing is clipped, taken after the clip so the clip
- * doesn't cut the glow away.
- */
-function clipGlowFilter(id: string, glows: GlowPass[]): string {
-  const passes = glows.map(
-    (g, i) =>
-      `<feFlood flood-color="${g.color}" /><feComposite in2="SourceAlpha" operator="in" result="tk-t${i}" />` +
-      `<feDropShadow in="tk-t${i}" dx="${fmt(g.dx)}" dy="${fmt(g.dy)}" stdDeviation="${fmt(g.blur / 2)}" flood-color="${g.color}" result="tk-g${i}" />`,
-  );
-  const merge = glows.map((_, i) => `<feMergeNode in="tk-g${i}" />`).join('');
-  return `<filter id="${id}" filterUnits="userSpaceOnUse" ${REGION}>${passes.join('')}<feMerge>${merge}<feMergeNode in="SourceGraphic" /></feMerge></filter>`;
-}
+/** What a plugin's `svg` hook writes for a filter, mask or clip region the size of the file (see `TegakiSvgContext.region`). */
+export const SVG_REGION = REGION;
 
 function fmt(n: number): string {
   return (Math.round(n * 100) / 100).toString();
@@ -467,8 +436,6 @@ function el(tag: string, attrs: string, anim: Anim): string {
 // Serializer
 // ---------------------------------------------------------------------------
 
-type SvgStroke = TegakiGlyphData['s'][number];
-
 interface NibStamp {
   cx: number;
   cy: number;
@@ -477,44 +444,6 @@ interface NibStamp {
   deg: number;
   /** Stroke progress (0–1) at which the pen reaches it. */
   at: number;
-  /** Drawn length (font units) that reaches it. */
-  passed: number;
-}
-
-/** The stroke's nib stamps (see `Nib`), following its wobble and taper as `drawGlyph`'s `fillNibs` does. */
-function nibStamps(
-  stroke: SvgStroke,
-  pointCumLen: number[] | undefined,
-  totalLen: number,
-  px: (fx: number) => number,
-  py: (fy: number) => number,
-  scale: number,
-  strokeScale: number,
-  fx: StrokeEffects,
-): NibStamp[] {
-  if (!stroke.n) return [];
-  const out: NibStamp[] = [];
-  for (const nib of stroke.n) {
-    const k = nib[0]!;
-    const p = stroke.p[k];
-    if (!p) continue;
-    const passed = pointCumLen?.[k] ?? 0;
-    const at = totalLen > 0 ? passed / totalLen : 0.5;
-    const m = scale * strokeScale * fx.taper(at);
-    const rx = (nib[3]! / 2) * m;
-    const ry = (nib[4]! / 2) * m;
-    if (rx <= 0 || ry <= 0) continue;
-    out.push({
-      cx: px(p[0]! + nib[1]! + fx.wobbleDx(p[0]!, p[1]!, k)),
-      cy: py(p[1]! + nib[2]! + fx.wobbleDy(p[0]!, p[1]!, k)),
-      rx,
-      ry,
-      deg: (nib[5]! * 180) / Math.PI,
-      at,
-      passed,
-    });
-  }
-  return out;
 }
 
 /** An ink's nib stamps, where the canvas puts them: on its path, sized by the ink's width there. */
@@ -525,7 +454,7 @@ function inkStamps(ink: SvgStrokeInk, strokeScale: number): NibStamp[] {
     const rx = nib.rx * at.width * strokeScale;
     const ry = nib.ry * at.width * strokeScale;
     if (rx <= 0 || ry <= 0) continue;
-    out.push({ cx: at.x + nib.dx, cy: at.y + nib.dy, rx, ry, deg: (nib.angle * 180) / Math.PI, at: nib.t, passed: nib.t });
+    out.push({ cx: at.x + nib.dx, cy: at.y + nib.dy, rx, ry, deg: (nib.angle * 180) / Math.PI, at: nib.t });
   }
   return out;
 }
@@ -568,9 +497,9 @@ function textEl(run: SvgTextRun, font: SvgTextFont, fill: string, extra: string,
 /**
  * Serialize positioned glyphs to a standalone SVG string that draws what the
  * canvas renderer draws: the same timing (speed, glyph and stroke easing, the
- * scheduler's deferred and stretched strokes), widths (pressure, taper, nib
- * stamps), paint (strokeGradient, globalGradient), wobble, glow, clip-to-text
- * and fallback characters.
+ * scheduler's deferred and stretched strokes), the ink as the plugins shaped
+ * it (nib stamps with it), what their `svg` hooks add, clip-to-text and
+ * fallback characters.
  *
  * A stroke with one width and one paint is a dashed `<path>` revealed along
  * its length. A stroke whose width or color varies is one `<line>` per
@@ -580,32 +509,12 @@ function textEl(run: SvgTextRun, font: SvgTextFont, fill: string, extra: string,
  */
 export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig): string {
   const anim = new Animator(cfg);
-  const pressure = Math.max(0, Math.min(cfg.pressure, 1));
-  const effects = cfg.effects ?? [];
-  const fontSize = cfg.fontSize ?? 100;
-  const paint = cfg.globalGradient ? 'url(#tk-gg)' : cfg.color;
   const endTime = cfg.totalDuration;
   const deco = cfg.decorate?.({ mode: anim.mode, seconds: (t) => anim.out(t), appear: (t) => anim.appear(t) });
 
   const body: string[] = [];
   const defs: string[] = [];
-  const filters = new Map<string, string>();
   let maskId = 0;
-
-  // Glow passes become drop-shadow filters, one per distinct shadow.
-  const filterFor = (g: GlowPass): string => {
-    const key = `${g.color}|${g.blur}|${g.dx}|${g.dy}`;
-    let id = filters.get(key);
-    if (!id) {
-      id = `tk-glow${filters.size}`;
-      filters.set(key, id);
-      defs.push(
-        `<filter id="${id}" filterUnits="userSpaceOnUse" ${REGION}>` +
-          `<feDropShadow dx="${fmt(g.dx)}" dy="${fmt(g.dy)}" stdDeviation="${fmt(g.blur / 2)}" flood-color="${g.color}" /></filter>`,
-      );
-    }
-    return ` filter="url(#${id})"`;
-  };
 
   // Ink bounds (px), so the viewBox can crop to what is drawn.
   let minX = Infinity;
@@ -620,132 +529,53 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
   };
 
   for (const item of items) {
-    const { glyph, ox, oy, scale, ascender } = item;
-    const px = (fx: number) => ox + fx * scale;
-    const py = (fy: number) => oy + (fy + ascender) * scale;
-    const fx = strokeEffects(effects, item.seed ?? 0, cfg.color);
-    // Clipped ink glows as a whole, past the clip — see `clipGlowFilter`.
-    const glows = cfg.clipText ? [] : glowPasses(effects, cfg.color, fontSize, scale);
-    const needsPerSegment = pressure > 0 || fx.hasTaper;
-
-    for (let si = 0; si < glyph.s.length; si++) {
-      const stroke = glyph.s[si]!;
-      const rawPts = stroke.p;
-      if (rawPts.length === 0) continue;
+    for (let si = 0; si < item.glyph.s.length; si++) {
+      const ink = item.inks[si];
+      const pts = ink?.path.points;
+      if (!ink || !pts || pts.length === 0) continue;
       const clock = strokeClock(item, si, cfg);
       // A stroke the timeline never reaches is never drawn.
       if (clock.at(Math.max(clock.t1, endTime)) < 0) continue;
       const style = item.entryIndex === undefined ? undefined : deco?.strokes.get(`${item.entryIndex}:${si}`);
-      const strokePaint = style?.color ?? paint;
-      const graded = fx.hasStrokeGradient && !style?.color;
-      const colorAt = (at: number) => (graded ? fx.colorAt(at) : strokePaint);
-      const ink = item.inks?.[si];
+      const styled = style?.color;
+      const graded = typeof styled === 'function';
+      const strokePaint = typeof styled === 'string' ? styled : cfg.color;
+      const colorAt = (at: number) => (graded ? styled(at) : strokePaint);
       const out: string[] = [];
-
-      // The stroke's shape: from its ink when the plugins reshaped it, else from the bundle's points.
-      let dot: { cx: number; cy: number; w: number } | null = null;
-      let line: {
-        xs: number[];
-        ys: number[];
-        base: number;
-        segmented: boolean;
-        segment: (i: number) => { w: number; mid: number };
-        lenAt?: (p: number) => number;
-      } | null = null;
-      let stamps: NibStamp[];
-      let reached: (p: number, s: NibStamp) => boolean;
-      if (ink) {
-        const pts = ink.path.points;
-        if (pts.length === 0) continue;
-        const p0 = pts[0]!;
-        stamps = inkStamps(ink, cfg.strokeScale);
-        reached = (p, s) => p >= s.at;
-        if (pts.length === 1 || pts.every((p) => p.x === p0.x && p.y === p0.y)) {
-          dot = { cx: p0.x, cy: p0.y, w: p0.width * cfg.strokeScale };
-        } else {
-          const xs = pts.map((p) => p.x);
-          const ys = pts.map((p) => p.y);
-          const cum = [0];
-          for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1]! + Math.hypot(xs[i]! - xs[i - 1]!, ys[i]! - ys[i - 1]!));
-          if (cum[cum.length - 1]! <= 0) continue;
-          let sum = 0;
-          for (const p of pts) sum += p.width;
-          line = {
-            xs,
-            ys,
-            base: (ink.path.uniformWidth ? p0.width : sum / pts.length) * cfg.strokeScale,
-            segmented: !ink.path.uniformWidth || graded,
-            segment: (i) => ({ w: ((pts[i - 1]!.width + pts[i]!.width) / 2) * cfg.strokeScale, mid: (pts[i - 1]!.t + pts[i]!.t) / 2 }),
-            lenAt: (p) => lengthAt(pts, cum, p),
-          };
-        }
-      } else {
-        const isDegenerate = rawPts.length > 1 && rawPts.every((p) => p[0] === rawPts[0]![0] && p[1] === rawPts[0]![1]);
-        if (rawPts.length === 1 || isDegenerate) {
-          const p = rawPts[0]!;
-          dot = {
-            cx: px(p[0]! + fx.wobbleDx(p[0]!, p[1]!, 0)),
-            cy: py(p[1]! + fx.wobbleDy(p[0]!, p[1]!, 0)),
-            w: Math.max(p[2]!, 0.5) * scale * cfg.strokeScale * fx.taper(0.5),
-          };
-          stamps = nibStamps(stroke, undefined, 0, px, py, scale, cfg.strokeScale, fx);
-          reached = (p) => p > 0;
-        } else {
-          const { vertices, totalLen, avgWidth, pointCumLen } = subdivideStroke(stroke, cfg.segmentLengthFU, cfg.smoothing);
-          if (vertices.length < 2 || totalLen <= 0) continue;
-          const base = Math.max(avgWidth, 0.5) * scale * cfg.strokeScale;
-          stamps = nibStamps(stroke, pointCumLen, totalLen, px, py, scale, cfg.strokeScale, fx);
-          reached = (p, s) => p * totalLen >= s.passed;
-          line = {
-            xs: vertices.map((v) => px(v.x + fx.wobbleDx(v.x, v.y, v.idx))),
-            ys: vertices.map((v) => py(v.y + fx.wobbleDy(v.x, v.y, v.idx))),
-            base,
-            segmented: needsPerSegment || fx.hasStrokeGradient,
-            segment: (i) => {
-              const a = vertices[i - 1]!;
-              const b = vertices[i]!;
-              const mid = ((a.cumLen + b.cumLen) * 0.5) / totalLen;
-              if (!needsPerSegment) return { w: base, mid };
-              const perPoint = (a.width + b.width) * 0.5 * scale * cfg.strokeScale;
-              return { w: Math.max(base + (perPoint - base) * pressure, 0.5 * scale * cfg.strokeScale) * fx.taper(mid), mid };
-            },
-          };
-        }
-      }
+      const stamps = inkStamps(ink, cfg.strokeScale);
+      const p0 = pts[0]!;
 
       // --- Dot ---
-      if (dot) {
+      if (pts.length === 1 || pts.every((p) => p.x === p0.x && p.y === p0.y)) {
         const shown = firstTime(clock, (p) => p > 0);
         if (shown === null) continue;
         const reveal = anim.appear(shown);
-        const { cx, cy, w } = dot;
-        const disc = (fill: string, extra: string) =>
-          cfg.lineCap === 'round'
-            ? el('circle', `cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(w / 2)}" fill="${fill}"${extra}`, reveal)
-            : el(
-                'rect',
-                `x="${fmt(cx - w / 2)}" y="${fmt(cy - w / 2)}" width="${fmt(w)}" height="${fmt(w)}" fill="${fill}"${extra}`,
-                reveal,
-              );
-        grow(cx, cy, w / 2);
-        for (const g of glows) {
-          const filter = filterFor(g);
-          out.push(disc(g.color, filter));
-          for (const s of stamps) out.push(ellipse(s, g.color, filter, reveal));
-        }
+        const cx = p0.x;
+        const cy = p0.y;
+        const w = p0.width * cfg.strokeScale;
         const fill = colorAt(0);
-        out.push(disc(fill, ''));
+        grow(cx, cy, w / 2);
+        out.push(
+          cfg.lineCap === 'round'
+            ? el('circle', `cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(w / 2)}" fill="${fill}"`, reveal)
+            : el('rect', `x="${fmt(cx - w / 2)}" y="${fmt(cy - w / 2)}" width="${fmt(w)}" height="${fmt(w)}" fill="${fill}"`, reveal),
+        );
         for (const s of stamps) {
           grow(s.cx, s.cy, Math.max(s.rx, s.ry));
           out.push(ellipse(s, fill, '', reveal));
         }
-      }
-
-      // --- Multi-point stroke ---
-      if (line) {
-        const { xs, ys, base, segmented } = line;
-        let plen = 0;
-        for (let i = 1; i < xs.length; i++) plen += Math.hypot(xs[i]! - xs[i - 1]!, ys[i]! - ys[i - 1]!);
+      } else {
+        // --- Multi-point stroke ---
+        const xs = pts.map((p) => p.x);
+        const ys = pts.map((p) => p.y);
+        const cum = [0];
+        for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1]! + Math.hypot(xs[i]! - xs[i - 1]!, ys[i]! - ys[i - 1]!));
+        const plen = cum[cum.length - 1]!;
+        if (plen <= 0) continue;
+        let sum = 0;
+        for (const p of pts) sum += p.width;
+        const base = (ink.path.uniformWidth ? p0.width : sum / pts.length) * cfg.strokeScale;
+        const segmented = !ink.path.uniformWidth || graded;
         const d = `M ${fmt(xs[0]!)} ${fmt(ys[0]!)} ${xs
           .slice(1)
           .map((x, i) => `L ${fmt(x)} ${fmt(ys[i + 1]!)}`)
@@ -759,9 +589,10 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
         if (segmented) {
           const last = xs.length - 1;
           for (let i = 1; i < xs.length; i++) {
-            const { w, mid } = line.segment(i);
+            const w = ((pts[i - 1]!.width + pts[i]!.width) / 2) * cfg.strokeScale;
+            const mid = (pts[i - 1]!.t + pts[i]!.t) / 2;
             if (w > maxW) maxW = w;
-            const color = graded ? fx.colorAt(mid) : null;
+            const color = graded ? colorAt(mid) : null;
             const end = cfg.lineCap !== 'round' && (i === 1 || i === last);
             segs.push(
               `<line x1="${fmt(xs[i - 1]!)}" y1="${fmt(ys[i - 1]!)}" x2="${fmt(xs[i]!)}" y2="${fmt(ys[i]!)}" ` +
@@ -777,28 +608,15 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
         }
         for (let i = 0; i < xs.length; i++) grow(xs[i]!, ys[i]!, maxW / 2);
 
-        // Reveal: one dash animation shared by the stroke, its glow copies and its mask.
+        // Reveal: one dash animation shared by the stroke and its mask.
         const coverW = maxW + 4;
         let reveal = NO_ANIM;
         if (anim.mode !== 'static') {
           const keys = progressKeys(clock);
-          reveal = anim.dash(keys, plen + Math.max(coverW, base) + 1, plen, line.lenAt);
+          reveal = anim.dash(keys, plen + Math.max(coverW, base) + 1, plen, (p) => lengthAt(pts, cum, p));
         }
         const pathAttrs = (color: string, width: number, cap: string) =>
           `d="${d}" fill="none" stroke="${color}" stroke-width="${fmt(width)}" stroke-linecap="${cap}" stroke-linejoin="round"`;
-        const stampReveal = (s: NibStamp) => {
-          const t = firstTime(clock, (p) => p > 0 && reached(p, s));
-          return t === null ? null : anim.appear(t);
-        };
-
-        for (const g of glows) {
-          const filter = filterFor(g);
-          out.push(el('path', `${pathAttrs(g.color, base, cfg.lineCap)}${filter}`, reveal));
-          for (const s of stamps) {
-            const r = stampReveal(s);
-            if (r) out.push(ellipse(s, g.color, filter, r));
-          }
-        }
 
         if (!segmented) {
           out.push(el('path', pathAttrs(strokePaint, base, cfg.lineCap), reveal));
@@ -815,10 +633,10 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
           }
         }
         for (const s of stamps) {
-          const r = stampReveal(s);
-          if (!r) continue;
+          const t = firstTime(clock, (p) => p > 0 && p >= s.at);
+          if (t === null) continue;
           grow(s.cx, s.cy, Math.max(s.rx, s.ry));
-          out.push(ellipse(s, colorAt(s.at), '', r));
+          out.push(ellipse(s, colorAt(s.at), '', anim.appear(t)));
         }
       }
 
@@ -844,9 +662,8 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
       const [l, top, r, bottom] = t.box;
       grow(l, top, 0);
       grow(r, bottom, 0);
-      const glowParts = (cfg.clipText ? [] : t.glows).map((g) => textEl(t, font, g.color, filterFor(g), reveal));
       const main = textEl(t, font, t.fill, '', reveal);
-      body.push(clip ? `<g${clip}>${glowParts.join('')}${main}</g>` : [...glowParts, main].join('\n'));
+      body.push(clip ? `<g${clip}>${main}</g>` : main);
     }
   }
 
@@ -862,11 +679,8 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
   let vbW = cfg.width;
   let vbH = cfg.height;
   if ((cfg.crop ?? true) && hasInk) {
-    // A glow paints past its stroke by its blur and offset.
-    let margin = 8;
-    for (const g of glowPasses(effects, cfg.color, fontSize, items[0]?.scale ?? 1)) {
-      margin = Math.max(margin, 8 + g.blur + Math.max(Math.abs(g.dx), Math.abs(g.dy)));
-    }
+    // What paints past the ink (a glow) has its plugin's `bounds` in the boxes above.
+    const margin = 8;
     vbX = minX - margin;
     vbY = minY - margin;
     vbW = maxX - minX + margin * 2;
@@ -874,35 +688,19 @@ export function placementsToSvg(items: SvgGlyphPlacement[], cfg: SvgExportConfig
   }
   const region = `x="${fmt(vbX)}" y="${fmt(vbY)}" width="${fmt(vbW)}" height="${fmt(vbH)}"`;
 
-  if (cfg.globalGradient) {
-    const g = cfg.globalGradient;
-    defs.push(
-      `<linearGradient id="tk-gg" gradientUnits="userSpaceOnUse" x1="${fmt(g.x1)}" y1="${fmt(g.y1)}" x2="${fmt(g.x2)}" y2="${fmt(g.y2)}">` +
-        g.stops.map(([o, c]) => `<stop offset="${fmtFine(o)}" stop-color="${c}" />`).join('') +
-        '</linearGradient>',
-    );
-  }
-
   let content = body.join('\n');
   if (cfg.clipText) {
     const { glyphs = [], font, words = [] } = cfg.clipText;
-    // A wobble moves the letters' edges with the strokes inside them.
-    const wobble = findEffect(effects, 'wobble');
     const shapes = glyphs
       .filter((g) => g.d)
-      .map((g) => {
-        if (g.placed) return `<path d="${g.d}" />`;
-        const d = wobble ? wobbledOutline(g.d, strokeEffects(effects, g.seed ?? 0, cfg.color), cfg.segmentLengthFU) : g.d;
-        return `<path d="${d}" transform="translate(${fmt(g.x)} ${fmt(g.y)}) scale(${fmtFine(g.scale)} ${fmtFine(-g.scale)})" />`;
-      });
+      .map((g) =>
+        g.placed
+          ? `<path d="${g.d}" />`
+          : `<path d="${g.d}" transform="translate(${fmt(g.x)} ${fmt(g.y)}) scale(${fmtFine(g.scale)} ${fmtFine(-g.scale)})" />`,
+      );
     if (font) shapes.push(...words.map((w) => textEl(w, font, '#fff', '', NO_ANIM)));
     defs.push(`<mask id="tk-clip" maskUnits="userSpaceOnUse" ${REGION}><g fill="#fff">${shapes.join('')}</g></mask>`);
     content = `<g mask="url(#tk-clip)">\n${content}\n</g>`;
-    const glows = glowPasses(effects, cfg.color, fontSize, items[0]?.scale ?? 1);
-    if (glows.length > 0) {
-      defs.push(clipGlowFilter('tk-clip-glow', glows));
-      content = `<g filter="url(#tk-clip-glow)">\n${content}\n</g>`;
-    }
   }
   if (deco) {
     defs.push(...deco.defs);

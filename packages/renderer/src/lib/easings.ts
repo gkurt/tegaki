@@ -16,3 +16,8 @@ export const EASINGS = {
 } satisfies Record<string, (t: number) => number>;
 
 export type EasingName = keyof typeof EASINGS;
+
+/** Default stroke easing: ease-out quad. */
+export function defaultStrokeEasing(t: number): number {
+  return 1 - (1 - t) * (1 - t);
+}

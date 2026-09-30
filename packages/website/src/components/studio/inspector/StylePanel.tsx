@@ -1,6 +1,6 @@
 import { ColorControl, SelectControl, Slider, Toggle } from 'dialkit';
 import { useState } from 'react';
-import { buildEffects } from '../../preview/utils.ts';
+import { inkStyleProps } from '../../preview/utils.ts';
 import {
   type CustomEffect,
   DEFAULT_EFFECTS_STATE,
@@ -36,9 +36,9 @@ export function StylePanel({ settings, set }: { settings: UrlState; set: SetSett
     set('customEffects', (list) => list.map((e) => (e.key === key ? { ...e, ...update } : e)));
   const removeCustom = (key: string) => set('customEffects', (list) => list.filter((e) => e.key !== key));
 
+  // The props that draw it: `pressure` and the plugins by name (register their factories to name them).
   const copyEffects = () => {
-    const effects = buildEffects(fx, customEffects);
-    navigator.clipboard.writeText(effects ? JSON.stringify(effects, null, 2) : '{}');
+    navigator.clipboard.writeText(JSON.stringify(inkStyleProps(fx, customEffects), null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -107,7 +107,7 @@ export function StylePanel({ settings, set }: { settings: UrlState; set: SetSett
           set('seed', URL_DEFAULTS.seed);
         }}
         actions={
-          <IconButton label={copied ? 'Copied' : 'Copy effects prop as JSON'} onClick={copyEffects} className="size-7">
+          <IconButton label={copied ? 'Copied' : 'Copy the pressure and plugins props as JSON'} onClick={copyEffects} className="size-7">
             {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
           </IconButton>
         }
@@ -338,10 +338,10 @@ function GlowControls({
 }) {
   return (
     <>
-      <Slider label="Radius" value={config.radius} min={1} max={30} step={1} onChange={(v) => onChange({ radius: v })} />
+      <Slider label="Radius (px)" value={config.radius} min={1} max={30} step={1} onChange={(v) => onChange({ radius: v })} />
       <ColorControl label="Color" value={config.color} onChange={(v) => onChange({ color: v })} />
-      <Slider label="Offset X" value={config.offsetX} min={-20} max={20} step={1} onChange={(v) => onChange({ offsetX: v })} />
-      <Slider label="Offset Y" value={config.offsetY} min={-20} max={20} step={1} onChange={(v) => onChange({ offsetY: v })} />
+      <Slider label="Offset X (px)" value={config.offsetX} min={-20} max={20} step={1} onChange={(v) => onChange({ offsetX: v })} />
+      <Slider label="Offset Y (px)" value={config.offsetY} min={-20} max={20} step={1} onChange={(v) => onChange({ offsetY: v })} />
     </>
   );
 }

@@ -2,7 +2,6 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'r
 import {
   BUNDLE_VERSION,
   type TegakiBundle,
-  type TegakiEffects,
   TegakiEngine,
   type TegakiGlyphData,
   type TegakiPlugin,
@@ -40,6 +39,7 @@ import { useDrawnDatasets } from './drawn-datasets.ts';
 import { fontCacheId } from './font-cache-id.ts';
 import { collectShapedGlyphs, type ShapedGlyphRef } from './shaped-glyphs.ts';
 import { referencesKey, strokeOrderProviders } from './stroke-order-providers.ts';
+import type { InkStyle } from './utils.ts';
 
 TegakiEngine.registerShaper(harfbuzzShaper);
 
@@ -96,12 +96,13 @@ export interface TegakiTextPreviewProps {
   pipeline?: Pipeline;
   geometryOptions?: GeometryOptions;
   time?: TimeControlProp;
-  effects?: TegakiEffects<Record<string, any>>;
+  /** The Style tab's ink: the renderer's `pressure`, and plugins run ahead of `plugins` (see `buildInkStyle`). */
+  inkStyle?: InkStyle;
   timing?: TimelineConfig;
   quality?: TegakiQuality;
   /** Plugins for the renderer — keep the array the same between renders unless it changes: a new one re-lays the text. */
   plugins?: readonly TegakiPlugin[];
-  /** The renderer's seed — what the wobble, gradients and plugins draw their randomness from. */
+  /** The renderer's seed — what the plugins (the wobble and gradients among them) draw their randomness from. */
   seed?: number;
   showOverlay?: boolean;
   fontSizePx?: number;
@@ -181,7 +182,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     pipeline = 'raster',
     geometryOptions = DEFAULT_GEOMETRY_OPTIONS,
     time,
-    effects,
+    inkStyle,
     plugins,
     seed,
     timing,
@@ -204,6 +205,11 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // screen uses it: the renderer keeps drawing the previous bundle until the
   // next is complete, and may still fetch its fonts.
   const fontUrl = useMemo(() => URL.createObjectURL(new Blob([fontBuffer], { type: 'font/ttf' })), [fontBuffer]);
+  // The Style tab's plugins first, then the showcase's: the same array while neither changes.
+  const allPlugins = useMemo(
+    () => (inkStyle?.plugins.length ? [...inkStyle.plugins, ...(plugins ?? [])] : plugins),
+    [inkStyle?.plugins, plugins],
+  );
   const extraFontUrls = useMemo(
     () => (extraFontBuffers ?? []).map((buf) => URL.createObjectURL(new Blob([buf], { type: 'font/ttf' }))),
     [extraFontBuffers],
@@ -565,9 +571,9 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
       time={time}
       font={shown.bundle}
       showOverlay={showOverlay}
-      effects={effects}
+      pressure={inkStyle?.pressure}
       quality={quality}
-      plugins={plugins}
+      plugins={allPlugins}
       seed={seed}
       timing={timing}
       shaper={useShaper}

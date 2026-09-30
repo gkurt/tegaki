@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { subdivideStroke } from '../lib/strokeCache.ts';
+import { placeStrokes } from '../lib/strokeTimeline.ts';
 import { placementsToSvg, type SvgExportConfig } from '../lib/svgExport.ts';
 import type { TegakiGlyphData } from '../types.ts';
 import { drawGlyph } from './drawGlyph.ts';
@@ -49,11 +50,11 @@ describe('drawGlyph nib stamps', () => {
 
   test('a stamp appears only once the pen reaches its point', () => {
     const before = recordingContext();
-    drawGlyph(before.ctx, glyph, pos, 0.4, 'round', '#000', [], 0, undefined, linear);
+    drawGlyph(before.ctx, glyph, pos, 0.4, { strokeEasing: linear });
     expect(before.ellipses.length).toBe(0);
 
     const after = recordingContext();
-    drawGlyph(after.ctx, glyph, pos, 0.6, 'round', '#000', [], 0, undefined, linear);
+    drawGlyph(after.ctx, glyph, pos, 0.6, { strokeEasing: linear });
     expect(after.ellipses.length).toBe(1);
     const [cx, cy, rx, ry, rotation] = after.ellipses[0]!;
     // Point (50,0) + offset (0,−6), at scale 1; radii are half the diameters.
@@ -63,7 +64,7 @@ describe('drawGlyph nib stamps', () => {
 
   test('stamps scale with the font size and the stroke scale', () => {
     const { ctx, ellipses } = recordingContext();
-    drawGlyph(ctx, glyph, { ...pos, fontSize: 200 }, 1, 'round', '#000', [], 0, undefined, linear, 1.5);
+    drawGlyph(ctx, glyph, { ...pos, fontSize: 200 }, 1, { strokeEasing: linear, strokeScale: 1.5 });
     const [, , rx, ry] = ellipses[0]!;
     expect(rx).toBeCloseTo(12 * 2 * 1.5);
     expect(ry).toBeCloseTo(4 * 2 * 1.5);
@@ -76,14 +77,15 @@ describe('placementsToSvg nib stamps', () => {
     height: 100,
     lineCap: 'round',
     color: '#123',
-    pressure: 1,
-    segmentLengthFU: Infinity,
-    smoothing: false,
     strokeScale: 1,
     animated: false,
     totalDuration: 1,
   };
-  const items = [{ glyph, ox: 0, oy: 50, scale: 1, ascender: 0, offset: 0 }];
+  const entry = { char: 'a', graphemeIndex: 0, offset: 0, duration: 1, hasGlyph: true };
+  const [placed] = placeStrokes([{ id: '0:0', entryIndex: 0, entry, glyph, strokeIndex: 0, stroke, start: 0, duration: 1 }], {
+    placeEntry: () => ({ x: 0, y: 50, scale: 1, ascender: 0, seed: 0 }),
+  });
+  const items = [{ glyph, ox: 0, oy: 50, scale: 1, ascender: 0, offset: 0, inks: [{ path: placed!.path, nibs: placed!.nibs }] }];
 
   test('static artwork draws the stamp as a rotated ellipse', () => {
     const svg = placementsToSvg(items, cfg);

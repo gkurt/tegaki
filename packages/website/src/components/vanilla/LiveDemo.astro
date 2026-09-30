@@ -1,12 +1,15 @@
 ---
+import type { TegakiPluginSpec } from 'tegaki/core';
+
 interface Props {
   text?: string;
   fontSize?: number;
-  effects?: Record<string, any>;
+  /** Plugins by name: the script below registers the style plugins. */
+  plugins?: readonly TegakiPluginSpec[];
   caption?: string;
 }
 
-const { text = 'Hello World', fontSize = 48, effects, caption } = Astro.props;
+const { text = 'Hello World', fontSize = 48, plugins, caption } = Astro.props;
 const id = `vanilla-demo-${Math.random().toString(36).slice(2, 8)}`;
 ---
 
@@ -21,12 +24,14 @@ const id = `vanilla-demo-${Math.random().toString(36).slice(2, 8)}`;
   is:inline
   data-vanilla-demo={id}
   data-text={text}
-  data-effects={effects ? JSON.stringify(effects) : undefined}
+  data-plugins={plugins ? JSON.stringify(plugins) : undefined}
 ></script>
 
 <script>
-  import { TegakiEngine } from 'tegaki/core';
+  import { globalGradientPlugin, glowPlugin, strokeGradientPlugin, TegakiEngine, taperPlugin, wobblePlugin } from 'tegaki/core';
   import type { TegakiBundle } from 'tegaki/core';
+
+  TegakiEngine.registerPlugin(glowPlugin, taperPlugin, wobblePlugin, strokeGradientPlugin, globalGradientPlugin);
 
   let bundlePromise: Promise<TegakiBundle> | null = null;
   function getBundle(): Promise<TegakiBundle> {
@@ -44,14 +49,14 @@ const id = `vanilla-demo-${Math.random().toString(36).slice(2, 8)}`;
     container.dataset.initialized = '';
 
     const text = script.dataset.text || 'Hello World';
-    const effects = script.dataset.effects ? JSON.parse(script.dataset.effects) : undefined;
+    const plugins = script.dataset.plugins ? JSON.parse(script.dataset.plugins) : undefined;
 
     getBundle().then((bundle) => {
       new TegakiEngine(container, {
         text,
         font: bundle,
         time: { mode: 'uncontrolled', speed: 1, loop: true },
-        effects,
+        plugins,
       });
     });
   }

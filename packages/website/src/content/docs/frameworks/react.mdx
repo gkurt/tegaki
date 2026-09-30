@@ -1,6 +1,6 @@
 ---
 title: React
-description: 'Add a handwriting animation to a React or Next.js app with the TegakiRenderer component: controlled time, effects, streaming text and the imperative handle.'
+description: 'Add a handwriting animation to a React or Next.js app with the TegakiRenderer component: controlled time, plugins, streaming text and the imperative handle.'
 head:
   - tag: title
     content: 'React Handwriting Animation | Tegaki'
@@ -102,28 +102,33 @@ The handle exposes:
 - `ref.current.engine`: the `TegakiEngine` instance (or `null` before mount)
 - `ref.current.element`: the container `HTMLDivElement`
 
-## Effects
+## Plugins
+
+Glows, gradients, tapered ends, wobble and the rest are plugins. Import the factories from `tegaki` and pass the plugins in a list:
 
 ```tsx
+import { glowPlugin, strokeGradientPlugin, TegakiRenderer } from 'tegaki';
+
+// Outside the component, so the list stays the same from render to render.
+const plugins = [strokeGradientPlugin(), glowPlugin({ radius: 0.1, color: '#00ccff' })];
+
 <TegakiRenderer
   font={bundle}
   time={{ mode: 'uncontrolled', speed: 1, loop: true }}
-  effects={{
-    glow: { radius: 8, color: '#00ccff' },
-    pressureWidth: true,
-    strokeGradient: { colors: 'rainbow' },
-  }}
+  plugins={plugins}
   style={{ fontSize: 48 }}
 >
-  Fancy effects
+  Glowing rainbow
 </TegakiRenderer>
 ```
 
 <LiveDemo
   client:load
-  text="Fancy effects"
-  effects={{ glow: { radius: 8, color: '#00ccff' }, pressureWidth: true, strokeGradient: { colors: 'rainbow' } }}
+  text="Glowing rainbow"
+  plugins={['strokeGradient', ['glow', { radius: 0.1, color: '#00ccff' }]]}
 />
+
+A new list of new plugins on every render redraws the canvas, so define it outside the component or in `useMemo`. Registered plugins can also be named (`plugins={['taper', ['glow', { radius: 0.1 }]]}`), and a list of names is fine inline. See [Style plugins](/api/renderer/#style-plugins) and [Naming plugins](/api/renderer/#naming-plugins). The `pressure` prop (`0` to `1`, default `1`) sets how much the ink's width follows the pen's pressure.
 
 ## Streaming text
 

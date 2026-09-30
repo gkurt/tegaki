@@ -1,5 +1,4 @@
 export { paragraphDirection } from '../lib/bidi.ts';
-export { findEffect, findEffects, type ResolvedEffect, resolveEffects } from '../lib/effects.ts';
 export { LETTER_SPACED_OFF_FEATURES, toCssFeatureSettings, UNSHAPED_OFF_FEATURES } from '../lib/features.ts';
 export { ensureFontFace } from '../lib/font.ts';
 export { type InkStyle, paintStroke, type StrokePaint } from '../lib/paintStroke.ts';
@@ -64,18 +63,32 @@ export {
 } from '../plugins/annotate.ts';
 export { boilPlugin } from '../plugins/boil.ts';
 export { type CaptionCue, type CaptionFit, type CaptionOptions, captionPlugin, parseCues } from '../plugins/caption.ts';
+export { glowPlugin } from '../plugins/glow.ts';
+export {
+  globalGradientPlugin,
+  type StrokeGradientOptions,
+  strokeGradientAt,
+  strokeGradientPlugin,
+} from '../plugins/gradient.ts';
 export { type GroupableStroke, groupStrokes, type StrokeGroup, type StrokeGroupBy } from '../plugins/groups.ts';
+export { type TaperOptions, taperAt, taperPlugin } from '../plugins/taper.ts';
 export { type CurvePoint, type TextPathGlyphs, type TextPathOptions, type TextPathShape, textPathPlugin } from '../plugins/textPath.ts';
 export { variationPlugin } from '../plugins/variation.ts';
+export { type WobbleOptions, wobbleField, wobblePlugin } from '../plugins/wobble.ts';
 export type * from '../types.ts';
-export type { TegakiEffectConfigs, TegakiEffects } from '../types.ts';
 export { BUNDLE_VERSION, COMPATIBLE_BUNDLE_VERSIONS } from '../types.ts';
 export { getBundle, registerBundle, resolveBundle } from './bundle-registry.ts';
 export { createBundle } from './createBundle.ts';
 export {
   createPlugin,
+  lengthToPx,
+  parseLength,
   type TegakiBooleanParam,
   type TegakiColorParam,
+  type TegakiColorsParam,
+  type TegakiLength,
+  type TegakiLengthParam,
+  type TegakiLengthUnit,
   type TegakiNumberParam,
   type TegakiPluginDefinition,
   type TegakiPluginFactory,
@@ -85,9 +98,10 @@ export {
   type TegakiSelectParam,
   type TegakiTextParam,
 } from './createPlugin.ts';
-export { drawGlyph } from './drawGlyph.ts';
-export { effectPlugins } from './effectPlugins.ts';
+export { type DrawGlyphOptions, drawGlyph, type GlyphPosition } from './drawGlyph.ts';
 export { TegakiEngine } from './engine.ts';
+export { getPlugin, isDeclarative, parsePluginSpecs, registerPlugin } from './plugin-registry.ts';
+export { paintsDrawnOnly } from './plugins.ts';
 export { buildChildren, buildRootProps, domCreateElement } from './render-elements.ts';
 export type { ShaperFactory } from './shaper-registry.ts';
 export type {
@@ -101,6 +115,7 @@ export type {
   TegakiOutlineContext,
   TegakiPaintContext,
   TegakiPlugin,
+  TegakiPluginSpec,
   TegakiPluginSteps,
   TegakiQuality,
   TegakiStrokePaintContext,

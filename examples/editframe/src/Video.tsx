@@ -1,6 +1,6 @@
 import { Text, Timegroup } from '@editframe/react';
 import { type CSSProperties, type ElementRef, type RefObject, useEffect, useRef } from 'react';
-import type { TegakiBundle, TegakiEngine } from 'tegaki/react';
+import { glowPlugin, strokeGradientPlugin, type TegakiBundle, type TegakiEngine, type TegakiPlugin } from 'tegaki/react';
 import { fonts } from './fonts';
 import { Ink } from './Handwriting';
 
@@ -9,16 +9,7 @@ import { Ink } from './Handwriting';
 const QUALITY = { pixelRatio: 2, smoothing: true } as const;
 
 // White ink + a soft halo — reads beautifully on the vivid gradient scenes.
-const WHITE_INK = {
-  pressureWidth: { strength: 1.4 },
-  glow: { radius: '14px', color: 'rgba(255,255,255,0.5)' },
-} as const;
-
-// Colored ink for the "paper" multi-script panel.
-const inkGradient = (colors: string[]) => ({
-  pressureWidth: { strength: 1.4 },
-  strokeGradient: { colors },
-});
+const WHITE_INK = [glowPlugin({ radius: '14px', color: 'rgba(255,255,255,0.5)' })];
 
 /**
  * Crossfade the whole scene in CSS (not JS timing) so it survives export. The
@@ -107,7 +98,7 @@ const SceneIntro = () => {
           }}
           font={fonts.caveat}
           text="Tegaki"
-          effects={WHITE_INK}
+          plugins={WHITE_INK}
           quality={QUALITY}
           style={{ fontSize: 260, color: 'white', lineHeight: 1 }}
         />
@@ -152,7 +143,7 @@ const SceneHero = () => {
           }}
           font={fonts.italianno}
           text="Hello!"
-          effects={WHITE_INK}
+          plugins={WHITE_INK}
           quality={QUALITY}
           style={{ fontSize: 320, color: 'white', lineHeight: 1 }}
         />
@@ -169,6 +160,8 @@ const SCRIPT_ROWS: ScriptRow[] = [
   { font: fonts.nanumPenScript, text: '안녕하세요', label: '한국어', colors: ['#f59e0b', '#f97316'], start: 0.31 },
   { font: fonts.suezOne, text: 'שלום', label: 'עברית', colors: ['#7c3aed', '#8b5cf6'], start: 0.44, direction: 'rtl' },
 ];
+// Colored ink for the "paper" multi-script panel, made once per row.
+const SCRIPT_INKS: TegakiPlugin[][] = SCRIPT_ROWS.map((r) => [strokeGradientPlugin({ colors: [...r.colors] })]);
 const SCRIPT_WINDOWS = SCRIPT_ROWS.map((r) => [r.start, r.start + 0.38] as const);
 
 const SceneScripts = () => {
@@ -201,7 +194,7 @@ const SceneScripts = () => {
                 font={r.font}
                 text={r.text}
                 direction={r.direction}
-                effects={inkGradient([...r.colors])}
+                plugins={SCRIPT_INKS[i]}
                 quality={QUALITY}
                 style={{ fontSize: 120, lineHeight: 1 }}
               />
@@ -251,7 +244,7 @@ const SceneAnyFont = () => {
                 }}
                 font={l.font}
                 text="beautiful"
-                effects={WHITE_INK}
+                plugins={WHITE_INK}
                 quality={QUALITY}
                 style={{ fontSize: l.size, color: 'white', lineHeight: 1 }}
               />
@@ -285,7 +278,7 @@ const SceneOutro = () => {
           }}
           font={fonts.kleeOne}
           text="手書き"
-          effects={WHITE_INK}
+          plugins={WHITE_INK}
           quality={QUALITY}
           style={{ fontSize: 240, color: 'white', lineHeight: 1 }}
         />

@@ -1,8 +1,7 @@
-import type { ResolvedEffect } from '../lib/effects.ts';
+import { defaultStrokeEasing } from '../lib/easings.ts';
 import { paintStroke } from '../lib/paintStroke.ts';
 import { seededRandom } from '../lib/random.ts';
 import type { SubdividedStroke } from '../lib/strokeCache.ts';
-import { defaultStrokeEasing } from '../lib/strokeEffects.ts';
 import type { StrokePath } from '../lib/strokePath.ts';
 import {
   type ActiveStroke,
@@ -15,13 +14,14 @@ import {
 } from '../lib/strokeTimeline.ts';
 import type { TimelineEntry } from '../lib/timeline.ts';
 import type { LineCap, TegakiGlyphData } from '../types.ts';
-import { effectPlugins } from './effectPlugins.ts';
 import { paintWith, reshapeWith, timingWith } from './plugins.ts';
+import { pressurePlugin } from './pressure.ts';
 import type { TegakiPlugin, TegakiStrokePaintContext } from './types.ts';
 
 type Stroke = TegakiGlyphData['s'][number];
 
-interface GlyphPosition {
+/** Where a glyph is drawn, and at what size. */
+export interface GlyphPosition {
   /** X offset in CSS pixels */
   x: number;
   /** Y offset in CSS pixels (top of em square) */
@@ -36,45 +36,60 @@ interface GlyphPosition {
   descender: number;
 }
 
-const linear = (t: number) => t;
+/** How {@link drawGlyph} draws. */
+export interface DrawGlyphOptions {
+  /** The bundle's `lineCap`. Default `'round'`. */
+  lineCap?: LineCap;
+  /** The ink's color. Default `'#000'`. */
+  color?: string;
+  /** A gradient or pattern to paint the strokes with in place of `color` (which the plugins still see). */
+  style?: string | CanvasGradient | CanvasPattern;
+  /** How much the ink's width follows the bundle's pen pressure, 0–1, as the renderer's `pressure`. Default `1`. */
+  pressure?: number;
+  /** Plugins the strokes go through, as the renderer runs them — except the `ink` hooks, which post-process a whole canvas of ink. */
+  plugins?: readonly TegakiPlugin[];
+  /** The glyph's seed: what plugins shape it by, and draw `random(key)` from. Default `0`. */
+  seed?: number;
+  /** A shared, cached subdivision of each stroke (in font units). Default: the strokes as the bundle has them. */
+  getSubdivided?: (stroke: Stroke) => SubdividedStroke;
+  /** Each stroke's draw progress easing. Default: ease-out quad, as the renderer. */
+  strokeEasing?: (t: number) => number;
+  /** A multiplier on the painted width (clip-to-text's widening), not the stroke's own. Default `1`. */
+  strokeScale?: number;
+  /** A sparse per-stroke override of the bundled `d` field (see `TimelineEntry.strokeDelays`). */
+  strokeDelays?: (number | undefined)[];
+  /** Multiplies the bundled `d` and `a`, so the strokes fit a stretched or compressed slot. Default `1`. */
+  strokeTimeScale?: number;
+}
 
 /**
- * Draw a single glyph's strokes onto a canvas context, animated up to `localTime`.
- * `localTime` is seconds relative to this glyph's start (0 = glyph begins).
- *
- * The strokes go through the same plugins the engine runs — `effects` as the
- * built-in effect plugins, then `plugins` — except the `ink` hooks (the glow
- * among them), which post-process a whole canvas of finished ink, not a glyph.
- * A `timing` hook retimes the glyph's strokes, in seconds from `localTime` 0.
- *
- * `getSubdivided` returns a shared, cached subdivision of each stroke (in font
- * units, pre-wobble); if omitted, strokes are drawn as the bundle has them.
- *
- * `strokeDelays` is a sparse per-stroke override of the bundled `d` field (see
- * `TimelineEntry.strokeDelays`), and `strokeTimeScale` multiplies the bundled
- * `d` and `a` so the strokes fit a stretched or compressed slot.
- * `strokeStyleOverride` paints the strokes with a gradient or pattern instead
- * of `color` (and replaces `globalGradient`, which otherwise spans the glyph's em box).
+ * Draw a single glyph's strokes onto a canvas context, animated up to `localTime`
+ * — seconds relative to this glyph's start (0 = glyph begins). The strokes go
+ * through the same plugins the engine runs, after the same pressure step. A
+ * `timing` hook retimes the glyph's strokes, in seconds from `localTime` 0.
  */
 export function drawGlyph(
   ctx: CanvasRenderingContext2D,
   glyph: TegakiGlyphData,
   pos: GlyphPosition,
   localTime: number,
-  lineCap: LineCap,
-  color: string,
-  effects: ResolvedEffect[] = [],
-  seed = 0,
-  getSubdivided?: (stroke: Stroke) => SubdividedStroke,
-  strokeEasing: ((t: number) => number) | undefined = defaultStrokeEasing,
-  strokeScale = 1,
-  strokeStyleOverride?: string | CanvasGradient | CanvasPattern,
-  strokeDelays?: (number | undefined)[],
-  strokeTimeScale = 1,
-  plugins: readonly TegakiPlugin[] = [],
+  options: DrawGlyphOptions = {},
 ): void {
+  const {
+    lineCap = 'round',
+    color = '#000',
+    style,
+    pressure = 1,
+    plugins = [],
+    seed = 0,
+    getSubdivided,
+    strokeEasing = defaultStrokeEasing,
+    strokeScale = 1,
+    strokeDelays,
+    strokeTimeScale = 1,
+  } = options;
   const scale = pos.fontSize / pos.unitsPerEm;
-  const all = [...effectPlugins(strokeStyleOverride ? effects.filter((e) => e.effect !== 'globalGradient') : effects), ...plugins];
+  const all = [pressurePlugin(pressure), ...plugins];
   const random = (key: string | number) => seededRandom(seed, key);
   const onError = (plugin: TegakiPlugin, hook: keyof TegakiPlugin, error: unknown) =>
     console.error(`[tegaki] plugin "${plugin.name}" threw in ${hook}:`, error);
@@ -118,7 +133,7 @@ export function drawGlyph(
         };
   const paint = paintWith(all, onError, painter);
   const strokes: StrokeFrame[] = placed.map((stroke) => {
-    const sample = strokeProgressAt(localTime, stroke.start, stroke.duration, strokeEasing ?? linear);
+    const sample = strokeProgressAt(localTime, stroke.start, stroke.duration, strokeEasing);
     return { ...stroke, ...sample, head: sample.state === 'pending' ? null : stroke.path.pointAt(sample.progress) };
   });
   const frame: TegakiFrame = {
@@ -130,9 +145,10 @@ export function drawGlyph(
     paint({
       ctx,
       stroke,
-      style: strokeStyleOverride ?? color,
+      style: style ?? color,
       lineCap,
       color,
+      clipped: false,
       fontSize: pos.fontSize,
       textBox,
       frame,

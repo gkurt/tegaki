@@ -1,4 +1,3 @@
-import type { TegakiEffectConfigs, TegakiMultiEffectName } from 'tegaki';
 import {
   CHARSET_PRESETS,
   DEFAULT_CHARS,
@@ -25,8 +24,23 @@ import {
 /** All state that gets persisted to the URL */
 export type TimeMode = 'controlled' | 'uncontrolled' | 'css';
 
+/**
+ * The Style tab's ink settings, each drawn by a `tegaki/core` plugin (see
+ * `buildInkStyle` in preview/utils.ts) — `pressureWidth` by the renderer's
+ * `pressure`. Kept in the shape the `fx` param has always had, so old links open.
+ */
+interface InkStyleConfigs {
+  /** In px (offsets were font units before the plugins; the glow plugin's own bare numbers are em). */
+  glow: { radius: number; color: string; offsetX: number; offsetY: number };
+  wobble: { amplitude: number; frequency: number; mode: 'sine' | 'noise' };
+  pressureWidth: { strength: number };
+  taper: { startLength: number; endLength: number };
+  strokeGradient: { colors: string[] | 'rainbow'; saturation: number; lightness: number };
+  globalGradient: { colors: string[]; angle: number };
+}
+
 export type EffectsState = {
-  [K in keyof TegakiEffectConfigs]: { enabled: boolean } & Required<TegakiEffectConfigs[K]>;
+  [K in keyof InkStyleConfigs]: { enabled: boolean } & InkStyleConfigs[K];
 };
 
 export const DEFAULT_EFFECTS_STATE: EffectsState = {
@@ -38,16 +52,16 @@ export const DEFAULT_EFFECTS_STATE: EffectsState = {
   globalGradient: { enabled: false, colors: ['#ff0000', '#0000ff'], angle: 0 },
 };
 
-/** A duplicated (custom-keyed) effect instance. */
+/** Another glow, besides the Style tab's own. */
 export interface CustomEffect {
   key: string;
-  effect: TegakiMultiEffectName;
+  effect: 'glow';
   enabled: boolean;
   config: Record<string, number | string>;
 }
 
 /** Default configs for creating new custom effect instances. */
-export const EFFECT_DEFAULTS: Record<TegakiMultiEffectName, Record<string, number | string>> = {
+export const EFFECT_DEFAULTS: Record<CustomEffect['effect'], Record<string, number | string>> = {
   glow: { radius: 8, color: '#00ccff', offsetX: 0, offsetY: 0 },
 };
 
@@ -371,7 +385,13 @@ export function parseUrlState(search: string | URLSearchParams = window.location
   if (p.has('cu')) state.catchUp = Number(p.get('cu'));
   if (p.has('fx')) {
     try {
-      state.effectsState = { ...DEFAULT_EFFECTS_STATE, ...JSON.parse(p.get('fx')!) };
+      // Each effect over its defaults, so a hand-written `{"glow":{"enabled":true}}` has a radius.
+      const fx: Partial<Record<keyof EffectsState, object>> = JSON.parse(p.get('fx')!);
+      const merged = { ...DEFAULT_EFFECTS_STATE };
+      for (const key of Object.keys(DEFAULT_EFFECTS_STATE) as (keyof EffectsState)[]) {
+        if (fx[key] && typeof fx[key] === 'object') Object.assign(merged, { [key]: { ...DEFAULT_EFFECTS_STATE[key], ...fx[key] } });
+      }
+      state.effectsState = merged;
     } catch {}
   }
   if (p.has('cx')) {

@@ -1,4 +1,5 @@
 import { TegakiEngine } from '../core/engine.ts';
+import { parsePluginSpecs } from '../core/plugin-registry.ts';
 import type { TegakiEngineOptions, TimeControlProp } from '../core/types.ts';
 import type { TegakiBundle } from '../types.ts';
 
@@ -17,7 +18,10 @@ import type { TegakiBundle } from '../types.ts';
  * - `pixel-ratio`: supersampling factor on top of devicePixelRatio (quality knob, default `1`)
  * - `segment-size`: segment size for rendering (quality knob)
  * - `smoothing`: smooth strokes with a centripetal Catmull-Rom spline (quality knob)
- * - `seed`: the number random choices come from (wobble, gradients, plugins) — a number, or `"random"` for a new look each time (default `0`); the element's `engine.seed` reads the one drawn with
+ * - `pressure`: how much the ink's width follows the bundle's pen pressure, `0`–`1` (default `1`)
+ * - `plugins`: plugins by registered name (see {@link TegakiEngine.registerPlugin}) — `"taper glow"`, or a JSON
+ *   array with options, `'["taper", ["glow", {"radius": 0.15}]]'`. The `plugins` property, when set, takes precedence
+ * - `seed`: the number plugins' random choices come from — a number, or `"random"` for a new look each time (default `0`); the element's `engine.seed` reads the one drawn with
  * - `show-overlay`: show debug overlay
  * - `direction`: text direction (`"ltr"` or `"rtl"`)
  * - `no-shaper`: disable text shaping for this instance (use the char-keyed grapheme path)
@@ -40,6 +44,8 @@ const OBSERVED_ATTRS = [
   'pixel-ratio',
   'segment-size',
   'smoothing',
+  'pressure',
+  'plugins',
   'seed',
   'show-overlay',
   'direction',
@@ -53,7 +59,6 @@ export class TegakiElement extends HTMLElement {
   private _engine: TegakiEngine | null = null;
   private _container: HTMLDivElement;
   private _font: TegakiBundle | string | undefined;
-  private _effects: TegakiEngineOptions['effects'];
   private _timing: TegakiEngineOptions['timing'];
   private _quality: TegakiEngineOptions['quality'];
   private _plugins: TegakiEngineOptions['plugins'];
@@ -109,16 +114,6 @@ export class TegakiElement extends HTMLElement {
     this._engine?.update(this._buildOptions());
   }
 
-  /** Visual effects configuration. */
-  get effects(): TegakiEngineOptions['effects'] {
-    return this._effects;
-  }
-
-  set effects(value: TegakiEngineOptions['effects']) {
-    this._effects = value;
-    this._engine?.update(this._buildOptions());
-  }
-
   /** Timeline timing configuration. */
   get timing(): TegakiEngineOptions['timing'] {
     return this._timing;
@@ -139,7 +134,7 @@ export class TegakiElement extends HTMLElement {
     this._engine?.update(this._buildOptions());
   }
 
-  /** Plugins that paint under or over the ink, or react to the frames drawn. */
+  /** Plugins that reshape, retime or paint the ink — plugin objects or registered names. Takes precedence over the `plugins` attribute. */
   get plugins(): TegakiEngineOptions['plugins'] {
     return this._plugins;
   }
@@ -220,10 +215,10 @@ export class TegakiElement extends HTMLElement {
       font,
       time,
       reducedMotion: reducedMotionAttr === 'user' || reducedMotionAttr === 'always' ? reducedMotionAttr : undefined,
-      effects: this._effects,
+      pressure: this._getNumberAttr('pressure'),
       timing: this._timing,
       quality: this._resolveQuality(),
-      plugins: this._plugins,
+      plugins: this._plugins ?? parsePluginSpecs(this.getAttribute('plugins')),
       seed: this._resolveSeed(),
       showOverlay: this.hasAttribute('show-overlay'),
       direction: directionAttr === 'rtl' || directionAttr === 'ltr' ? directionAttr : undefined,

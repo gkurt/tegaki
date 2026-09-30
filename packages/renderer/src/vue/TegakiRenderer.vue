@@ -1,8 +1,8 @@
-<script setup lang="ts" generic="E extends TegakiEffects<E> = Record<string, never>">
+<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { TegakiEngine } from '../core/engine.ts';
-import type { ReducedMotionProp, TegakiEngineOptions, TegakiPlugin, TegakiQuality, TimeControlProp } from '../core/types.ts';
-import type { TegakiBundle, TegakiEffects } from '../types.ts';
+import type { ReducedMotionProp, TegakiEngineOptions, TegakiPluginSpec, TegakiQuality, TimeControlProp } from '../core/types.ts';
+import type { TegakiBundle } from '../types.ts';
 import type { Timeline, TimelineConfig } from '../lib/timeline.ts';
 
 const props = defineProps<{
@@ -10,10 +10,10 @@ const props = defineProps<{
   font?: TegakiBundle | string;
   time?: TimeControlProp;
   reducedMotion?: ReducedMotionProp;
-  effects?: E;
+  pressure?: number;
   timing?: TimelineConfig;
   quality?: TegakiQuality;
-  plugins?: readonly TegakiPlugin[];
+  plugins?: readonly TegakiPluginSpec[];
   seed?: number | 'random';
   showOverlay?: boolean;
   onComplete?: () => void;
@@ -33,7 +33,7 @@ const engineOptions = computed<TegakiEngineOptions>(() => ({
   font: props.font,
   time: props.time,
   reducedMotion: props.reducedMotion,
-  effects: props.effects as Record<string, any>,
+  pressure: props.pressure,
   quality: props.quality,
   plugins: props.plugins,
   seed: props.seed,

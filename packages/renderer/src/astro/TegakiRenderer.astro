@@ -1,8 +1,14 @@
 ---
-import { TegakiEngine, type TegakiEngineOptions } from '../core/index.ts';
+import { isDeclarative, TegakiEngine, type TegakiEngineOptions, type TegakiPluginSpec } from '../core/index.ts';
 import type { TegakiBundle } from '../types.ts';
 
 interface Props extends Omit<TegakiEngineOptions, 'onComplete' | 'onChangeTimeline' | 'plugins'> {
+  /**
+   * Plugins by registered name, sent to the browser as data: `['taper', ['glow', { radius: 0.15 }]]`.
+   * Register their factories in a client script (`TegakiEngine.registerPlugin(glowPlugin)`);
+   * a plugin object can't be sent, so it's left out.
+   */
+  plugins?: readonly TegakiPluginSpec[];
   /** When true, registers the font bundle for client-side lookup by name. If no text is provided, renders nothing else. */
   bundle?: boolean;
   /** When true, injects an @font-face rule so the browser starts loading the font immediately. */
@@ -11,7 +17,14 @@ interface Props extends Omit<TegakiEngineOptions, 'onComplete' | 'onChangeTimeli
   [key: string]: any;
 }
 
-const { text, font, bundle: registerBundle, loadFont, time, reducedMotion, effects, timing, quality, seed, showOverlay, shaper, fallbackFont, class: className, style: userStyle, ...attrs } = Astro.props;
+const { text, font, bundle: registerBundle, loadFont, time, reducedMotion, pressure, plugins, timing, quality, seed, showOverlay, shaper, fallbackFont, class: className, style: userStyle, ...attrs } = Astro.props;
+
+// Only named plugins survive the trip to the browser.
+let clientPlugins = plugins;
+if (plugins && !isDeclarative(plugins)) {
+  clientPlugins = plugins.filter((p) => typeof p === 'string' || Array.isArray(p));
+  console.warn('[tegaki] <TegakiRenderer> in Astro takes plugins by name only; register the factory in a client script and pass its name.');
+}
 
 // Resolve the font bundle for SSR
 let resolvedFont: TegakiBundle | undefined;
@@ -37,12 +50,13 @@ if (resolvedFont && [resolvedFont.fontUrl, resolvedFont.fullFontUrl].some((url) 
 
 const shouldRender = !!text || !(registerBundle || loadFont);
 
-const engineOptions: Omit<TegakiEngineOptions, 'onComplete' | 'onChangeTimeline' | 'plugins'> = {
+const engineOptions: Omit<TegakiEngineOptions, 'onComplete' | 'onChangeTimeline'> = {
   text,
   font: resolvedFont,
   time,
   reducedMotion,
-  effects: effects as Record<string, any>,
+  pressure,
+  plugins: clientPlugins,
   timing,
   quality,
   seed,

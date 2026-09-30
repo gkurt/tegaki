@@ -1,18 +1,30 @@
 <script lang="ts">
 import { TegakiRenderer } from 'tegaki/svelte';
-import type { TegakiBundle } from 'tegaki/core';
+import {
+  globalGradientPlugin,
+  glowPlugin,
+  registerPlugin,
+  strokeGradientPlugin,
+  type TegakiBundle,
+  type TegakiPluginSpec,
+  taperPlugin,
+  wobblePlugin,
+} from 'tegaki/core';
+
+// The docs name the style plugins in MDX props (plain data), so register them here.
+registerPlugin(glowPlugin, taperPlugin, wobblePlugin, strokeGradientPlugin, globalGradientPlugin);
 
 let {
   text = 'Hello World',
   fontSize = 48,
   time = { mode: 'uncontrolled' as const, speed: 1, loop: true },
-  effects,
+  plugins,
   caption,
 }: {
   text?: string;
   fontSize?: number;
   time?: any;
-  effects?: Record<string, any>;
+  plugins?: readonly TegakiPluginSpec[];
   caption?: string;
 } = $props();
 
@@ -28,7 +40,7 @@ $effect(() => {
 <div class="not-content live-demo">
   <div class="live-demo-card">
     {#if bundle}
-      <TegakiRenderer font={bundle} {text} {time} {effects} style="font-size: {fontSize}px" />
+      <TegakiRenderer font={bundle} {text} {time} {plugins} style="font-size: {fontSize}px" />
     {:else}
       <div class="live-demo-loading">Loading...</div>
     {/if}

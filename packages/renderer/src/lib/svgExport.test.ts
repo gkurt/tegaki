@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { TegakiGlyphData } from '../types.ts';
-import { resolveEffects } from './effects.ts';
+import { subdivideStroke } from './strokeCache.ts';
 import { StrokePath } from './strokePath.ts';
+import { rawStrokePath } from './strokeTimeline.ts';
 import { placementsToSvg, type SvgDecoration, type SvgExportConfig, type SvgGlyphPlacement } from './svgExport.ts';
 
 // A 1s horizontal line, then a dot at 1s.
@@ -26,15 +27,17 @@ const cfg: SvgExportConfig = {
   height: 100,
   lineCap: 'round',
   color: '#123',
-  pressure: 0,
-  segmentLengthFU: Infinity,
-  smoothing: false,
   strokeScale: 1,
   animated: true,
   totalDuration: 1.1,
 };
 
-const item: SvgGlyphPlacement = { glyph, ox: 0, oy: 50, scale: 1, ascender: 0, offset: 0, duration: 1.1 };
+// Each stroke's ink as the bundle has it, placed at (0, 50).
+const inks = glyph.s.map((s) => ({
+  path: rawStrokePath(s, subdivideStroke(s, Infinity), { x: 0, y: 50, scale: 1, ascender: 0 })!,
+  nibs: [],
+}));
+const item: SvgGlyphPlacement = { glyph, ox: 0, oy: 50, scale: 1, ascender: 0, offset: 0, duration: 1.1, inks };
 
 const svgOf = (over: Partial<SvgExportConfig> = {}, it: Partial<SvgGlyphPlacement> = {}) =>
   placementsToSvg([{ ...item, ...it }], { ...cfg, ...over });
@@ -97,62 +100,7 @@ describe('placementsToSvg timing', () => {
   });
 });
 
-describe('placementsToSvg effects', () => {
-  const segmentLengthFU = 10;
-
-  test('taper narrows the stroke toward its ends', () => {
-    const svg = svgOf({ animated: false, segmentLengthFU, effects: resolveEffects({ taper: true }) });
-    const widths = [...svg.matchAll(/<line [^>]*stroke-width="([\d.]+)"/g)].map((m) => Number(m[1]));
-    expect(widths.length).toBe(10);
-    expect(widths[0]!).toBeLessThan(widths[5]!);
-    expect(widths[9]!).toBeLessThan(widths[5]!);
-  });
-
-  test('strokeGradient colors each segment along the stroke', () => {
-    const svg = svgOf({
-      animated: false,
-      segmentLengthFU,
-      effects: resolveEffects({ strokeGradient: { colors: ['#ff0000', '#0000ff'] } }),
-    });
-    const colors = new Set([...svg.matchAll(/<line [^>]*stroke="(rgb[^"]+)"/g)].map((m) => m[1]));
-    expect(colors.size).toBeGreaterThan(5);
-  });
-
-  test('glow draws a drop-shadowed copy under the stroke', () => {
-    const svg = svgOf({ animated: false, effects: resolveEffects({ glow: { radius: 8, color: '#f0f' } }) });
-    expect(svg).toContain('<feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#f0f" />');
-    const glowAt = svg.indexOf('stroke="#f0f"');
-    const mainAt = svg.indexOf('stroke="#123"');
-    expect(glowAt).toBeGreaterThan(0);
-    expect(glowAt).toBeLessThan(mainAt);
-  });
-
-  test('wobble displaces the stroke', () => {
-    const d = (svg: string) => /<path d="([^"]+)"/.exec(svg)?.[1];
-    const plain = svgOf({ animated: false, segmentLengthFU });
-    const wobbly = svgOf({ animated: false, segmentLengthFU, effects: resolveEffects({ wobble: { amplitude: 5 } }) }, { seed: 3 });
-    expect(d(wobbly)).not.toBe(d(plain));
-  });
-
-  test('a global gradient paints every stroke with one user-space gradient', () => {
-    const svg = svgOf({
-      animated: false,
-      globalGradient: {
-        x1: 0,
-        y1: 0,
-        x2: 100,
-        y2: 0,
-        stops: [
-          [0, '#f00'],
-          [1, '#00f'],
-        ],
-      },
-    });
-    expect(svg).toContain('<linearGradient id="tk-gg" gradientUnits="userSpaceOnUse"');
-    expect(svg).toContain('stroke="url(#tk-gg)"');
-    expect(svg).toContain('fill="url(#tk-gg)"');
-  });
-
+describe('placementsToSvg caps', () => {
   test('a square cap draws dots square', () => {
     expect(svgOf({ animated: false, lineCap: 'square' })).toContain('<rect ');
   });
@@ -167,29 +115,6 @@ describe('placementsToSvg text', () => {
     expect(svg).toContain('<path d="M0,0L100,0L100,700Z" transform="translate(10 80) scale(0.1 -0.1)" />');
     expect(svg).toContain('<g mask="url(#tk-clip)">');
     expect(svg).not.toContain('<text');
-  });
-
-  test('a clipped glow is filtered from the clipped ink, outside the mask', () => {
-    const svg = svgOf({
-      animated: false,
-      effects: resolveEffects({ glow: { radius: 8, color: '#f0f' } }),
-      clipText: { glyphs: [{ d: 'M0,0L100,0L100,700Z', x: 10, y: 80, scale: 0.1 }] },
-    });
-    // No per-stroke glow copies for the mask to cut away…
-    expect(svg).not.toContain('stroke="#f0f"');
-    // …but one filter wrapping the masked group.
-    expect(svg).toContain('<filter id="tk-clip-glow"');
-    expect(svg).toContain('<feDropShadow in="tk-t0"');
-    expect(svg.indexOf('<g filter="url(#tk-clip-glow)">')).toBeLessThan(svg.indexOf('<g mask="url(#tk-clip)">'));
-  });
-
-  test('a wobble moves the clip outlines with the strokes', () => {
-    const d = 'M0,0L100,0L100,700Z';
-    const clipText = { glyphs: [{ d, x: 10, y: 80, scale: 0.1 }] };
-    const wobbly = svgOf({ segmentLengthFU: 20, effects: resolveEffects({ wobble: { amplitude: 5 } }), clipText });
-    expect(wobbly).not.toContain(`<path d="${d}"`);
-    expect(wobbly).toMatch(/<mask id="tk-clip"[^>]*><g fill="#fff"><path d="M[^"]*Z" transform/);
-    expect(svgOf({ segmentLengthFU: 20, clipText })).toContain(`<path d="${d}"`);
   });
 
   test('without outlines, clip-to-text sets the words in the font', () => {
@@ -210,7 +135,7 @@ describe('placementsToSvg text', () => {
     const svg = svgOf({
       fallback: {
         font,
-        texts: [{ text: '€', x: 120, y: 80, direction: 'ltr', fill: '#123', glows: [], at: 1.5, box: [120, 0, 170, 100] }],
+        texts: [{ text: '€', x: 120, y: 80, direction: 'ltr', fill: '#123', at: 1.5, box: [120, 0, 170, 100] }],
       },
     });
     expect(svg).toMatch(/<text [^>]*opacity="0">€<set attributeName="opacity" to="1" begin="1.5s" fill="freeze" \/><\/text>/);
@@ -248,7 +173,7 @@ describe('placementsToSvg plugin ink and decoration', () => {
     ...over,
   });
 
-  test("a stroke with ink is drawn from it, not from the bundle's points", () => {
+  test("a stroke is drawn from its ink, not from the bundle's points", () => {
     const svg = svgOf({ animated: false }, { inks: [{ path: slanted, nibs: [] }] });
     expect(svg).toContain('d="M 0 50 L 100 20"');
     expect(svg).not.toContain('L 100 50');
@@ -258,6 +183,22 @@ describe('placementsToSvg plugin ink and decoration', () => {
     const tapered = slanted.map((p) => ({ ...p, width: p.t === 0 ? 2 : 10 }));
     const svg = svgOf({ animated: false }, { inks: [{ path: tapered, nibs: [] }] });
     expect(svg).toContain('<line x1="0" y1="50" x2="100" y2="20" stroke-width="6"');
+  });
+
+  test('a stroke without ink is left out', () => {
+    expect(svgOf({ animated: false }, { inks: [undefined, inks[1]] })).not.toContain('<path ');
+  });
+
+  test('a stroke style with a color per draw progress colors each segment along the stroke', () => {
+    const points = Array.from({ length: 11 }, (_, i) => ({ x: i * 10, y: 50, width: 10, t: i / 10 }));
+    const svg = svgOf(
+      { animated: false, decorate: () => deco({ strokes: new Map([['0:0', { color: (t: number) => (t < 0.5 ? '#f00' : '#00f') }]]) }) },
+      { entryIndex: 0, inks: [{ path: new StrokePath(points), nibs: [] }, inks[1]] },
+    );
+    const colors = [...svg.matchAll(/<line [^>]*stroke="(#[^"]+)"/g)].map((m) => m[1]);
+    expect(colors.length).toBe(10);
+    expect(colors[0]).toBe('#f00');
+    expect(colors[9]).toBe('#00f');
   });
 
   test("a stroke style repaints the stroke and wraps it in the style's attributes", () => {

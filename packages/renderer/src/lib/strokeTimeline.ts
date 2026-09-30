@@ -1,6 +1,6 @@
 import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
+import { defaultStrokeEasing } from './easings.ts';
 import { type SubdividedStroke, subdivideStroke } from './strokeCache.ts';
-import { defaultStrokeEasing } from './strokeEffects.ts';
 import { type Box, type PathSample, StrokePath, unionBoxes } from './strokePath.ts';
 import type { Timeline, TimelineEntry } from './timeline.ts';
 import { lookupGlyphData } from './utils.ts';
@@ -349,15 +349,15 @@ const NO_NIBS: StrokeNib[] = [];
 export interface PlacedStroke extends StrokeInstance {
   /**
    * The ink as the canvas draws it, in CSS px from the top-left of the text
-   * box: `rawPath` reshaped by every plugin's `geometry` (the built-in
-   * wobble, pressure width and taper among them).
+   * box: `rawPath` reshaped by every plugin's `geometry` (pressure width
+   * first).
    */
   path: StrokePath;
   /** The stroke as the bundle has it, before any plugin reshapes it (see {@link rawStrokePath}). */
   rawPath: StrokePath;
   /** Nib stamps along `path`. */
   nibs: readonly StrokeNib[];
-  /** A number fixed per glyph, for effects that vary from glyph to glyph. */
+  /** A number fixed per glyph, for plugins that vary from glyph to glyph. */
   seed: number;
   /** Where its glyph sits — the same for every stroke of the glyph (see {@link StrokeGeometryContext.place}). */
   place: GlyphPlacement;
@@ -378,7 +378,7 @@ export interface StrokeGeometryContext {
 
 export interface PlaceContext {
   /**
-   * Where entry `entryIndex` is drawn, and the seed its effects use (the
+   * Where entry `entryIndex` is drawn, and the seed its plugins use (the
    * engine's seed plus the grapheme index). `null` for an entry the layout
    * doesn't place; its strokes are left out.
    */

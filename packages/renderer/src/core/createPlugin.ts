@@ -49,20 +49,64 @@ export interface TegakiTextParam extends ParamBase {
   placeholder?: string;
 }
 
-export type TegakiPluginParam = TegakiNumberParam | TegakiBooleanParam | TegakiSelectParam | TegakiColorParam | TegakiTextParam;
+/** A list of CSS colors: a gradient's stops, a palette. */
+export interface TegakiColorsParam extends ParamBase {
+  type: 'colors';
+  default: readonly string[];
+}
+
+/** What a length is measured in: `em`, a share of the font size (so it grows with the text), or `px`. */
+export type TegakiLengthUnit = 'em' | 'px';
+
+/** A length: a bare number, in its param's `unit`, or a number with its own unit, `'8px'` or `'0.1em'`. */
+export type TegakiLength = number | `${number}${TegakiLengthUnit}`;
+
+/**
+ * A length (see {@link TegakiLength}): a size that can follow the text, as a
+ * share of the font size, or stay a number of pixels. Turn it into pixels with
+ * {@link lengthToPx} and the context's `fontSize`.
+ */
+export interface TegakiLengthParam extends ParamBase {
+  type: 'length';
+  default: TegakiLength;
+  /** What a bare number is measured in. Default `'em'`. */
+  unit?: TegakiLengthUnit;
+  /**
+   * The range, in `unit`. A length given in the other unit can't be compared
+   * with it before the font size is known, so it's kept as given — except that
+   * it isn't let below 0 when `min` isn't.
+   */
+  min?: number;
+  max?: number;
+  /** The increment a slider moves by, in `unit`. */
+  step?: number;
+}
+
+export type TegakiPluginParam =
+  | TegakiNumberParam
+  | TegakiLengthParam
+  | TegakiBooleanParam
+  | TegakiSelectParam
+  | TegakiColorParam
+  | TegakiTextParam
+  | TegakiColorsParam;
 
 /** A plugin's params, by key. */
 export type TegakiPluginParams = Record<string, TegakiPluginParam>;
 
 type ParamValue<P> = P extends TegakiNumberParam
   ? number
-  : P extends TegakiBooleanParam
-    ? boolean
-    : P extends TegakiSelectParam<infer V>
-      ? V
-      : P extends TegakiColorParam | TegakiTextParam
-        ? string
-        : never;
+  : P extends TegakiLengthParam
+    ? TegakiLength
+    : P extends TegakiBooleanParam
+      ? boolean
+      : P extends TegakiSelectParam<infer V>
+        ? V
+        : P extends TegakiColorParam | TegakiTextParam
+          ? string
+          : P extends TegakiColorsParam
+            ? string[]
+            : never;
 
 /** The values a plugin's params are set to, one per key. */
 export type TegakiPluginOptions<P extends TegakiPluginParams> = { -readonly [K in keyof P]: ParamValue<P[K]> };
@@ -162,8 +206,48 @@ export function createPlugin<const P extends TegakiPluginParams = {}>(definition
 /** Each param's default. */
 export function pluginDefaults<P extends TegakiPluginParams>(params: P): TegakiPluginOptions<P> {
   const out: Record<string, unknown> = {};
-  for (const [key, param] of Object.entries(params)) out[key] = param.default;
+  for (const [key, param] of Object.entries(params)) out[key] = defaultOf(param);
   return out as TegakiPluginOptions<P>;
+}
+
+/** A param's default as {@link resolveParam} would give it back: a colors list copied, a length in its param's unit written bare. */
+function defaultOf(param: TegakiPluginParam): TegakiPluginParam['default'] {
+  if (param.type === 'colors') return [...param.default];
+  if (param.type === 'length') return resolveParam(param, param.default) ?? param.default;
+  return param.default;
+}
+
+const LENGTH = /^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s*(px|em)?\s*$/i;
+
+/** A length's number and unit (`undefined` for a bare number or a string without one), or `undefined` if it isn't a length. */
+export function parseLength(value: unknown): { value: number; unit: TegakiLengthUnit | undefined } | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? { value, unit: undefined } : undefined;
+  if (typeof value !== 'string') return undefined;
+  const m = LENGTH.exec(value);
+  if (!m) return undefined;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? { value: n, unit: m[2]?.toLowerCase() as TegakiLengthUnit | undefined } : undefined;
+}
+
+/**
+ * A length in px at `fontSize`: `'8px'` is 8, `'0.1em'` 0.1 × `fontSize`, and
+ * a bare number is in `unit` (default `'em'`, a length param's default). What
+ * isn't a length is 0.
+ *
+ * ```ts
+ * setup: ({ radius }) => ({ paint(s, next) { const r = lengthToPx(radius, s.fontSize); … } })
+ * ```
+ */
+export function lengthToPx(length: TegakiLength, fontSize: number, unit: TegakiLengthUnit = 'em'): number {
+  const parsed = parseLength(length);
+  if (!parsed) return 0;
+  return (parsed.unit ?? unit) === 'em' ? parsed.value * fontSize : parsed.value;
+}
+
+/** Whether two param values are the same: a colors list by its colors, anything else by value. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((v, i) => v === b[i]);
+  return a === b;
 }
 
 /** The values a select param can take. */
@@ -171,12 +255,22 @@ export function selectValues(param: TegakiSelectParam): string[] {
   return param.options.map((o) => (typeof o === 'string' ? o : o.value));
 }
 
-/** `value` as `param` takes it, or `undefined` if it can't: a number kept in range, a select value among the options. */
+/** `value` as `param` takes it, or `undefined` if it can't: a number kept in range, a length too (in its param's unit, written bare), a select value among the options. */
 export function resolveParam(param: TegakiPluginParam, value: unknown): TegakiPluginParam['default'] | undefined {
   switch (param.type) {
     case 'number':
       if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
       return Math.min(param.max ?? Infinity, Math.max(param.min ?? -Infinity, value));
+    case 'length': {
+      const parsed = parseLength(value);
+      if (!parsed) return undefined;
+      const unit = param.unit ?? 'em';
+      // In the param's unit (or zero, the same in any) it's kept in range and written bare; in the other, kept as given.
+      if ((parsed.unit ?? unit) === unit || parsed.value === 0)
+        return Math.min(param.max ?? Infinity, Math.max(param.min ?? -Infinity, parsed.value));
+      const n = (param.min ?? -Infinity) >= 0 ? Math.max(0, parsed.value) : parsed.value;
+      return `${n}${parsed.unit!}`;
+    }
     case 'boolean':
       return typeof value === 'boolean' ? value : undefined;
     case 'select':
@@ -185,6 +279,8 @@ export function resolveParam(param: TegakiPluginParam, value: unknown): TegakiPl
       return typeof value === 'string' && value.length > 0 ? value : undefined;
     case 'text':
       return typeof value === 'string' ? value : undefined;
+    case 'colors':
+      return Array.isArray(value) && value.every((c) => typeof c === 'string' && c.length > 0) ? [...value] : undefined;
   }
 }
 
@@ -194,7 +290,7 @@ export function resolvePluginOptions<P extends TegakiPluginParams>(params: P, in
   const out: Record<string, unknown> = {};
   for (const [key, param] of Object.entries(params)) {
     const value = Object.hasOwn(given, key) ? resolveParam(param, given[key]) : undefined;
-    out[key] = value ?? param.default;
+    out[key] = value ?? defaultOf(param);
   }
   return out as TegakiPluginOptions<P>;
 }
@@ -207,7 +303,7 @@ export function changedPluginOptions<P extends TegakiPluginParams>(
   const out: Record<string, unknown> = {};
   const resolved = resolvePluginOptions(params, options) as Record<string, unknown>;
   for (const [key, param] of Object.entries(params)) {
-    if (Object.hasOwn(options, key) && resolved[key] !== param.default) out[key] = resolved[key];
+    if (Object.hasOwn(options, key) && !sameValue(resolved[key], defaultOf(param))) out[key] = resolved[key];
   }
   return out as Partial<TegakiPluginOptions<P>>;
 }

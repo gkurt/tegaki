@@ -1,13 +1,7 @@
-import type { CSSLength, TegakiBundle, TegakiGlyphData } from '../types.ts';
+import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 
 const segmenter =
   typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function' ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
-
-/** Resolve a CSSLength to pixels. Plain numbers are px, `"Nem"` is N * fontSize. */
-export function resolveCSSLength(value: CSSLength, fontSize: number): number {
-  if (typeof value === 'number') return value;
-  return parseFloat(value) * fontSize;
-}
 
 export function graphemes(text: string): string[] {
   if (segmenter) return Array.from(segmenter.segment(text), (s) => s.segment);

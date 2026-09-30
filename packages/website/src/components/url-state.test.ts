@@ -35,6 +35,14 @@ describe('parseUrlState', () => {
   });
 });
 
+describe('fx', () => {
+  test('an effect given only in part keeps its defaults for the rest', () => {
+    const { effectsState } = parseUrlState(`?fx=${encodeURIComponent('{"glow":{"enabled":true,"color":"#f00"}}')}`);
+    expect(effectsState.glow).toEqual({ enabled: true, radius: 8, color: '#f00', offsetX: 0, offsetY: 0 });
+    expect(effectsState.taper.enabled).toBe(false);
+  });
+});
+
 describe('clip-to-text default follows the pipeline', () => {
   test('a bare URL opens on the geometry pipeline, clipped at ×1.2', () => {
     const state = parseUrlState('');

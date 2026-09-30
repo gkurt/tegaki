@@ -3,6 +3,12 @@ import { readFileSync } from 'node:fs';
 import caveat from '../../fonts/caveat/bundle.ts';
 import nanumPenScript from '../../fonts/nanum-pen-script/bundle.ts';
 import suezOne from '../../fonts/suez-one/bundle.ts';
+import { registerPlugin } from '../core/plugin-registry.ts';
+import type { TegakiPlugin } from '../core/types.ts';
+import { glowPlugin } from '../plugins/glow.ts';
+import { globalGradientPlugin, strokeGradientPlugin } from '../plugins/gradient.ts';
+import { taperPlugin } from '../plugins/taper.ts';
+import { wobblePlugin } from '../plugins/wobble.ts';
 import { createHarfbuzzShaper } from '../shaper-harfbuzz/index.ts';
 import type { TegakiBundle } from '../types.ts';
 import type { BundleShaper } from './shaper.ts';
@@ -207,5 +213,79 @@ describe('textToSvg with a harfbuzz shaper', () => {
     const plain = xs(textToSvg('AV', font, { mode: 'static', crop: false }));
     expect(Math.min(...shaped)).toBeCloseTo(Math.min(...plain), 0);
     expect(Math.max(...shaped)).toBeCloseTo(Math.max(...plain), -1);
+  });
+});
+
+describe('textToSvg plugins', () => {
+  beforeAll(() => registerPlugin(glowPlugin, taperPlugin));
+
+  test('a glow is a drop-shadow filter around the ink', () => {
+    const svg = textToSvg('Hi', font, { mode: 'static', plugins: [glowPlugin({ radius: '8px', color: '#f0f' })] });
+    expect(svg).toMatch(/<filter id="tk-glow-\d+" filterUnits="userSpaceOnUse" x="[-\d.]+" y="[-\d.]+"/);
+    expect(svg).toContain('<feDropShadow in="tint" dx="0" dy="0" stdDeviation="4" flood-color="#f0f"');
+    expect(svg).toMatch(/<g filter="url\(#tk-glow-\d+\)">/);
+  });
+
+  test("a glow's radius in em follows the font size", () => {
+    const blur = (fontSize: number) =>
+      Number(
+        /stdDeviation="([\d.]+)"/.exec(textToSvg('Hi', font, { mode: 'static', fontSize, plugins: [glowPlugin({ radius: 0.1 })] }))?.[1],
+      );
+    expect(blur(40)).toBeCloseTo(2, 6);
+    expect(blur(160)).toBeCloseTo(8, 6);
+  });
+
+  test('a glow widens the crop by its radius', () => {
+    const width = (svg: string) => Number(/viewBox="[-\d.]+ [-\d.]+ ([\d.]+)/.exec(svg)?.[1]);
+    const plain = textToSvg('Hi', font, { mode: 'static' });
+    const glowing = textToSvg('Hi', font, { mode: 'static', plugins: [glowPlugin({ radius: '30px' })] });
+    expect(width(glowing) - width(plain)).toBeGreaterThan(40);
+  });
+
+  test('taper draws each stroke a segment at a time, thinner at its ends', () => {
+    const svg = textToSvg('l', font, { mode: 'static', pressure: 0, plugins: [taperPlugin({ startLength: 0.5, endLength: 0.5 })] });
+    const widths = [...svg.matchAll(/<line [^>]*stroke-width="([\d.]+)"/g)].map((m) => Number(m[1]));
+    expect(widths.length).toBeGreaterThan(4);
+    expect(widths[0]!).toBeLessThan(Math.max(...widths));
+    expect(widths.at(-1)!).toBeLessThan(Math.max(...widths));
+  });
+
+  test('a stroke gradient colors each segment; a text gradient paints every stroke with one gradient', () => {
+    const stroke = textToSvg('l', font, { mode: 'static', plugins: [strokeGradientPlugin({ colors: ['#ff0000', '#0000ff'] })] });
+    expect(new Set([...stroke.matchAll(/<line [^>]*stroke="(rgb[^"]+)"/g)].map((m) => m[1])).size).toBeGreaterThan(3);
+    const text = textToSvg('Hi', font, { mode: 'static', plugins: [globalGradientPlugin({ colors: ['#f00', '#00f'] })] });
+    expect(text).toMatch(/<linearGradient id="tk-gg-\d+" gradientUnits="userSpaceOnUse"/);
+    expect(text).toMatch(/stroke="url\(#tk-gg-\d+\)"/);
+  });
+
+  test('wobble moves the clip outlines with the strokes', async () => {
+    const shaper = await shaperFor(font);
+    const plain = textToSvg('H', font, { mode: 'static', shaper, clipText: true });
+    const wobbly = textToSvg('H', font, { mode: 'static', shaper, clipText: true, plugins: [wobblePlugin({ amplitude: 8 })] });
+    const mask = (svg: string) => /<mask id="tk-clip"[^>]*>([\s\S]*?)<\/mask>/.exec(svg)?.[1];
+    expect(mask(wobbly)).not.toBe(mask(plain));
+    // Reshaped outlines are drawn in place, with no transform.
+    expect(mask(wobbly)).not.toContain('transform');
+  });
+
+  test('plugins can be named once registered, with options', () => {
+    const named = textToSvg('Hi', font, { mode: 'static', plugins: [['glow', { radius: '8px', color: '#f0f' }]] });
+    const direct = textToSvg('Hi', font, { mode: 'static', plugins: [glowPlugin({ radius: '8px', color: '#f0f' })] });
+    expect(named).toBe(direct);
+  });
+
+  test('a name no plugin is registered as throws', () => {
+    expect(() => textToSvg('Hi', font, { plugins: ['no-such-plugin'] })).toThrow('no-such-plugin');
+  });
+
+  test("a plugin's timing retimes the file", () => {
+    const dur = (svg: string) => Math.max(...[...svg.matchAll(/begin="([\d.]+)s"/g)].map((m) => Number(m[1])));
+    const later: TegakiPlugin = {
+      name: 'later',
+      timing: ({ strokes }) => ({ strokes: strokes.map((s) => ({ start: s.start + 2, duration: s.duration })) }),
+    };
+    expect(dur(textToSvg('Hi', font, { mode: 'once', plugins: [later] }))).toBeGreaterThan(
+      dur(textToSvg('Hi', font, { mode: 'once' })) + 1.9,
+    );
   });
 });

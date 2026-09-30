@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useRef } from 'react';
-import { TegakiRenderer } from 'tegaki';
+import { globalGradientPlugin, TegakiRenderer } from 'tegaki';
 import { INK, useFont, useInView, useTheme } from './shared.ts';
 
 /** "Now, write yours." */
@@ -9,12 +9,7 @@ export function Finale() {
   const font = useFont(seen ? 'Parisienne' : null);
   const theme = useTheme();
   const palette = INK[theme];
-  const effects = useMemo(
-    () => ({
-      globalGradient: { colors: [palette.ink, palette.ink, palette.seal], angle: 0 },
-    }),
-    [palette],
-  );
+  const plugins = useMemo(() => [globalGradientPlugin({ colors: [palette.ink, palette.ink, palette.seal], angle: 0 })], [palette]);
 
   return (
     <div ref={ref} className="finale-writing">
@@ -25,7 +20,7 @@ export function Finale() {
             <TegakiRenderer
               font={font}
               time={{ mode: 'uncontrolled', duration: 4, delay: 0.2 }}
-              effects={effects}
+              plugins={plugins}
               quality={{ smoothing: true, pixelRatio: 1.5 }}
             >
               Now, write yours.

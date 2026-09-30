@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { ResolvedEffect } from '../lib/effects.ts';
+import { subdivideStroke } from '../lib/strokeCache.ts';
+import { rawStrokePath } from '../lib/strokeTimeline.ts';
 import { placementsToSvg, type SvgExportConfig } from '../lib/svgExport.ts';
 import type { LineCap, TegakiGlyphData } from '../types.ts';
 import { drawGlyph } from './drawGlyph.ts';
@@ -23,7 +24,6 @@ const glyph: TegakiGlyphData = {
   ],
 };
 const pos = { x: 0, y: 0, fontSize: 100, unitsPerEm: 100, ascender: 0, descender: 0 };
-const pressure: ResolvedEffect[] = [{ effect: 'pressureWidth', order: 0, config: { strength: 1 } }];
 const linear = (t: number) => t;
 
 /** A 2D context stub that records the cap of each stroke() call and the centre of each arc(). */
@@ -48,7 +48,7 @@ function recordingContext() {
 
 const draw = (lineCap: LineCap, time = 1) => {
   const rec = recordingContext();
-  drawGlyph(rec.ctx, glyph, pos, time, lineCap, '#000', pressure, 0, undefined, linear);
+  drawGlyph(rec.ctx, glyph, pos, time, { lineCap, strokeEasing: linear });
   return rec;
 };
 
@@ -81,14 +81,14 @@ describe('placementsToSvg per-segment caps', () => {
     height: 100,
     lineCap: 'butt',
     color: '#123',
-    pressure: 1,
-    segmentLengthFU: Infinity,
-    smoothing: false,
     strokeScale: 1,
     animated: false,
     totalDuration: 1,
   };
-  const items = [{ glyph, ox: 0, oy: 0, scale: 1, ascender: 0, offset: 0 }];
+  // The ink at the bundle's own widths, as full pressure draws it.
+  const stroke = glyph.s[0]!;
+  const ink = { path: rawStrokePath(stroke, subdivideStroke(stroke, Infinity), { x: 0, y: 0, scale: 1, ascender: 0 })!, nibs: [] };
+  const items = [{ glyph, ox: 0, oy: 0, scale: 1, ascender: 0, offset: 0, inks: [ink] }];
 
   test('a flat cap goes on the end lines only, joined to the rest by discs', () => {
     const svg = placementsToSvg(items, cfg);
@@ -108,15 +108,18 @@ describe('paint sees every stroke', () => {
   const seen = (time: number) => {
     const states: string[] = [];
     const rec = recordingContext();
-    drawGlyph(rec.ctx, glyph, pos, time, 'round', '#000', [], 0, undefined, linear, 1, undefined, undefined, 1, [
-      {
-        name: 'probe',
-        paint: (s, next) => {
-          states.push(`${s.stroke.state}/${s.frame.strokes.length}`);
-          next(s);
+    drawGlyph(rec.ctx, glyph, pos, time, {
+      strokeEasing: linear,
+      plugins: [
+        {
+          name: 'probe',
+          paint: (s, next) => {
+            states.push(`${s.stroke.state}/${s.frame.strokes.length}`);
+            next(s);
+          },
         },
-      },
-    ]);
+      ],
+    });
     return { states, caps: rec.caps };
   };
 
@@ -131,9 +134,10 @@ describe('paint sees every stroke', () => {
 
   test('a pending stroke passed on as drawn shows', () => {
     const rec = recordingContext();
-    drawGlyph(rec.ctx, glyph, pos, -1, 'round', '#000', [], 0, undefined, linear, 1, undefined, undefined, 1, [
-      { name: 'stamp', paint: (s, next) => next({ ...s, stroke: { ...s.stroke, state: 'done', progress: 1 } }) },
-    ]);
+    drawGlyph(rec.ctx, glyph, pos, -1, {
+      strokeEasing: linear,
+      plugins: [{ name: 'stamp', paint: (s, next) => next({ ...s, stroke: { ...s.stroke, state: 'done', progress: 1 } }) }],
+    });
     expect(rec.caps.length).toBeGreaterThan(0);
   });
 });
@@ -150,7 +154,7 @@ describe('timing', () => {
       },
     };
     for (const time of [0.5, 1.5, 2.5]) {
-      drawGlyph(recordingContext().ctx, glyph, pos, time, 'round', '#000', [], 0, undefined, linear, 1, undefined, undefined, 1, [later]);
+      drawGlyph(recordingContext().ctx, glyph, pos, time, { strokeEasing: linear, plugins: [later] });
     }
     expect(states).toEqual(['pending', 'drawing', 'done']);
   });

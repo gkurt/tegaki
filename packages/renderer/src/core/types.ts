@@ -2,7 +2,7 @@ import type { StrokePaint } from '../lib/paintStroke.ts';
 import type { Box, StrokePath } from '../lib/strokePath.ts';
 import type { GlyphPlacement, PlacedStroke, StrokeGeometryContext, StrokeTime, TegakiFrame } from '../lib/strokeTimeline.ts';
 import type { Timeline, TimelineConfig } from '../lib/timeline.ts';
-import type { TegakiBundle, TegakiEffects } from '../types.ts';
+import type { TegakiBundle } from '../types.ts';
 
 // ---------------------------------------------------------------------------
 // Time control types (shared with adapters)
@@ -102,7 +102,7 @@ export type ReducedMotionProp = 'user' | 'always' | 'never';
 
 /**
  * Render-quality knobs. These trade CPU/GPU cost for visual fidelity.
- * They do not change the style of the rendered text — see `effects` for that.
+ * They do not change the style of the rendered text — see `plugins` for that.
  */
 export interface TegakiQuality {
   /**
@@ -114,12 +114,12 @@ export interface TegakiQuality {
    */
   pixelRatio?: number;
   /**
-   * Maximum drawn segment length in CSS pixels when stroke-varying effects
-   * (`pressureWidth`, `taper`, `wobble`, `strokeGradient`) are active. Smaller values
+   * Maximum drawn segment length in CSS pixels when the ink varies along a
+   * stroke (`pressure`, or any plugin that reshapes or paints it). Smaller values
    * produce smoother transitions at the cost of more draw calls per stroke.
    * Because this is measured in pixels, subdivision count scales with rendered
    * size: a glyph drawn at 10px is cheaper to render than the same glyph at
-   * 100px. Defaults to `2` when such effects are on, otherwise segments are not
+   * 100px. Defaults to `2` when the ink varies, otherwise segments are not
    * subdivided.
    */
   segmentSize?: number;
@@ -156,6 +156,12 @@ interface TegakiPluginContext {
   fontSize: number;
   /** The text's color (its CSS color). */
   color: string;
+  /**
+   * Whether clip-to-text is on (`quality.clipText`): the ink is cut to the
+   * letters once it's painted, so what a plugin paints past them should go
+   * on `unclipped`, or be done to the clipped ink in `ink`.
+   */
+  clipped: boolean;
   /**
    * A random number generator (0–1) seeded by the renderer and key: the
    * same key yields the same numbers every frame, so painting doesn't flicker.
@@ -327,6 +333,13 @@ export interface TegakiSvgContext {
   fontSize: number;
   /** The text's color. */
   color: string;
+  /** The box the text's lines fill, in the file's px (a gradient across the text spans it). */
+  textBox: Box;
+  /**
+   * Attributes sizing a filter, mask or clip region to the whole file:
+   * `<filter id="…" filterUnits="userSpaceOnUse" ${svg.region}>`.
+   */
+  region: string;
   /** `'static'`: the finished artwork; `'once'`: SMIL, played once; `'loop'`: CSS keyframes, drawn, held, faded and repeated. */
   mode: 'static' | 'once' | 'loop';
   /** See {@link TegakiPluginContext.random}. */
@@ -341,8 +354,12 @@ export interface TegakiSvgContext {
   overlay(markup: string): void;
   /** Wrap the ink (after clip-to-text) in `<g {attrs}>` — e.g. `filter="url(#…)"`. The first call is innermost. */
   ink(attrs: string): void;
-  /** Restyle one stroke: its paint (in place of the text's and a stroke gradient's) and attributes for a `<g>` around it. */
-  style(stroke: PlacedStroke, style: { color?: string; attrs?: string }): void;
+  /**
+   * Restyle one stroke: its paint in place of the text's — a color, a
+   * `url(#…)` paint, or a color per draw progress along the stroke — and
+   * attributes for a `<g>` around it. A later call's color wins.
+   */
+  style(stroke: PlacedStroke, style: { color?: string | ((t: number) => string); attrs?: string }): void;
   /** What shows an element from timeline second `t` on, in any mode: `attrs` go in its tag, `inner` inside it. */
   appear(t: number): { attrs: string; inner: string };
   /** Seconds in the file for timeline second `t` (the export's speed), for SMIL of your own. */
@@ -351,8 +368,8 @@ export interface TegakiSvgContext {
 
 /**
  * Paints alongside the handwriting, reshapes it, or reacts to it. Every hook
- * is optional. The built-in effects are plugins too, run before these, so a
- * plugin sees the ink they make. Painting is a function of the frame alone:
+ * is optional, and plugins run in the order they're listed, so a plugin sees
+ * the ink the ones before it made. Painting is a function of the frame alone:
  * the renderer can draw any time, in any order (controlled time, scrubbing,
  * CSS time).
  */
@@ -450,6 +467,16 @@ export interface TegakiPlugin {
   steps?: TegakiPluginSteps;
 }
 
+/**
+ * An entry of `plugins`: a plugin, or one named by the factory registered
+ * under that name (see {@link TegakiEngine.registerPlugin}) — `'glow'`, or
+ * `['glow', { radius: 0.15 }]` with options, read through the factory's params
+ * (numbers kept in range, unknown keys dropped). Named entries are plain
+ * data, so they work where functions can't go: an HTML attribute, props an
+ * Astro page sends to the browser, a CLI flag.
+ */
+export type TegakiPluginSpec = TegakiPlugin | string | readonly [name: string, options?: Readonly<Record<string, unknown>>];
+
 // ---------------------------------------------------------------------------
 // Engine options
 // ---------------------------------------------------------------------------
@@ -461,20 +488,26 @@ export interface TegakiEngineOptions {
   time?: TimeControlProp;
   /** Whether uncontrolled playback honours reduced motion. Default: `'never'`. See {@link ReducedMotionProp}. */
   reducedMotion?: ReducedMotionProp;
-  effects?: TegakiEffects<Record<string, any>>;
+  /**
+   * How much the ink's width follows the pen pressure the bundle records, 0–1:
+   * `1` (default) draws each point as wide as the bundle says, `0` draws each
+   * stroke at one width, its mean.
+   */
+  pressure?: number;
   timing?: TimelineConfig;
   /** Render-quality knobs (supersampling, segment subdivision). */
   quality?: TegakiQuality;
   /**
-   * Plugins that reshape or paint the ink, paint under or over it, or react
-   * to the frames drawn (see {@link TegakiPlugin}). Run in order, after the
-   * built-in effects. Not part of `toSVG`.
+   * Plugins that reshape, retime or paint the ink, paint under or over it, or
+   * react to the frames drawn (see {@link TegakiPlugin}), run in order:
+   * plugin objects, or plugins named by their registered factory (see
+   * {@link TegakiPluginSpec}). A name registered later is picked up then.
    */
-  plugins?: readonly TegakiPlugin[];
+  plugins?: readonly TegakiPluginSpec[];
   /**
-   * The number the renderer's random choices come from: the wobble's phase,
-   * a gradient's hue, what plugins draw with `random(key)` or reshape by a
-   * glyph's `seed`. The same seed draws the same every time — on every load,
+   * The number the renderer's random choices come from: what plugins draw
+   * with `random(key)` or shape by a glyph's `seed` (a wobble's phase, where
+   * a gradient starts). The same seed draws the same every time — on every load,
    * in every tab or process rendering a video. Each character adds its index
    * to it, so repeated letters still differ. `'random'` picks one when the
    * engine is created, for text that looks a little different every time;

@@ -1,9 +1,9 @@
 ---
 title: Rendering Animations
-description: 'Display handwriting animations with Tegaki: styling, the controlled, uncontrolled and CSS time modes, effects and streaming text.'
+description: 'Display handwriting animations with Tegaki: styling, the controlled, uncontrolled and CSS time modes, pressure, plugins and streaming text.'
 head:
   - tag: title
-    content: 'Rendering Handwriting Animations: Timing and Effects | Tegaki'
+    content: 'Rendering Handwriting Animations: Timing and Plugins | Tegaki'
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -129,21 +129,42 @@ time: 'css'
 time: { mode: 'css' }
 ```
 
-## Effects
+## Pressure
 
-All frameworks accept the same effects configuration:
+The bundles record how wide the pen draws at each point. `pressure` (`0` to `1`, default `1`) sets how much of that the ink follows: `0` draws each stroke at one even width.
 
 ```ts
-effects: {
-  glow: { radius: 8, color: '#00ccff' },
-  wobble: { amplitude: 1.5, frequency: 8 },
-  pressureWidth: { strength: 1 },
-  taper: { startLength: 0.15, endLength: 0.15 },
-  strokeGradient: { colors: 'rainbow' },
-}
+pressure: 0.5
 ```
 
-Effects can also be set to `true` for defaults: `{ pressureWidth: true }`.
+## Plugins
+
+Glows, tapered ends, wobble and gradients are plugins, and all frameworks take them the same way, as a `plugins` list. They run in the order listed.
+
+```ts
+import { glowPlugin, strokeGradientPlugin, taperPlugin, wobblePlugin } from 'tegaki/core';
+
+plugins: [
+  taperPlugin({ startLength: 0.15, endLength: 0.15 }),
+  wobblePlugin({ amplitude: 1.5, frequency: 8 }),
+  strokeGradientPlugin(), // a rainbow along each stroke
+  glowPlugin({ radius: 0.1, color: '#00ccff' }),
+]
+```
+
+Each factory takes its options (or none, for the defaults). Where a plugin object can't go (an HTML attribute, an Astro prop, a CLI flag), register the factories and name them instead:
+
+```ts
+import { glowPlugin, TegakiEngine, taperPlugin } from 'tegaki/core';
+
+TegakiEngine.registerPlugin(glowPlugin, taperPlugin);
+
+plugins: ['taper', ['glow', { radius: 0.1, color: '#00ccff' }]]
+```
+
+See [Style plugins](/api/renderer/#style-plugins) for every option, [Naming plugins](/api/renderer/#naming-plugins) for the registry, and [Plugins](/api/renderer/#plugins) for writing your own. The Studio's Plugins tab tries them out live.
+
+These used to be the `effects` option, which is gone: see [Migrating from `effects`](/api/renderer/#migrating-from-effects).
 
 ## Streaming text
 

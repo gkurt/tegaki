@@ -5,7 +5,7 @@ import { createShowcasePlugins } from '../plugins/index.ts';
 import { parseUrlState } from '../url-state.ts';
 import { loadFontFamily } from './stroke-fonts.ts';
 import { TegakiTextPreview } from './TegakiTextPreview.tsx';
-import { buildEffects, buildTimingConfig } from './utils.ts';
+import { buildInkStyle, buildTimingConfig } from './utils.ts';
 
 /**
  * Read `w`/`h` URL params (in px). Falls back to `null` so the container stretches
@@ -67,7 +67,7 @@ export function StandaloneTextPreview() {
     };
   }, [state]);
 
-  const effects = useMemo(() => buildEffects(state.effectsState, state.customEffects), [state.effectsState, state.customEffects]);
+  const inkStyle = useMemo(() => buildInkStyle(state.effectsState, state.customEffects), [state.effectsState, state.customEffects]);
   const plugins = useMemo(() => createShowcasePlugins(state.plugins, state.pluginOptions), [state.plugins, state.pluginOptions]);
 
   const { strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration } = state;
@@ -126,7 +126,7 @@ export function StandaloneTextPreview() {
         pipeline={state.pipeline}
         geometryOptions={state.geometryOptions}
         time={timeProp}
-        effects={effects}
+        inkStyle={inkStyle}
         timing={timingConfig}
         quality={state.quality}
         plugins={plugins}

@@ -20,7 +20,7 @@ import { fontCacheId } from '../preview/font-cache-id.ts';
 import { GeometryStageRenderer, geometryStageFrame, rasterStageFrame, type StageFrame, StageRenderer } from '../preview/stage-views.tsx';
 import { referenceSetKey, referencesKey, strokeOrderProviders } from '../preview/stroke-order-providers.ts';
 import { TegakiTextPreview } from '../preview/TegakiTextPreview.tsx';
-import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
+import { buildInkStyle, buildTimingConfig } from '../preview/utils.ts';
 import type { UrlState } from '../url-state.ts';
 import type { CharsetInfo } from './charsets.ts';
 import {
@@ -598,7 +598,7 @@ function FinalStage({
   onDuration: (d: number) => void;
 }) {
   const { effectsState, customEffects, strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration } = settings;
-  const effects = useMemo(() => buildEffects(effectsState, customEffects), [effectsState, customEffects]);
+  const inkStyle = useMemo(() => buildInkStyle(effectsState, customEffects), [effectsState, customEffects]);
   const timing = useMemo(
     () => buildTimingConfig({ strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration }),
     [strokeEasing, glyphEasing, deferDots, staggerEnabled, staggerAdvance, staggerDuration],
@@ -740,7 +740,7 @@ function FinalStage({
             pipeline={settings.pipeline}
             geometryOptions={settings.geometryOptions}
             time={time}
-            effects={effects}
+            inkStyle={inkStyle}
             timing={timing}
             quality={settings.quality}
             seed={settings.seed}

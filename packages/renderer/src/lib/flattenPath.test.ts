@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { resolveEffects } from './effects.ts';
-import { flattenPath, strokeEffects, wobbledOutline } from './strokeEffects.ts';
+import { flattenPath } from './flattenPath.ts';
 
 describe('flattenPath', () => {
   test('a closed square is one contour without its repeated closing vertex', () => {
@@ -21,24 +20,5 @@ describe('flattenPath', () => {
     expect(contours).toHaveLength(2);
     expect(contours[0]!.slice(-2)).toEqual([100, 0]);
     expect(contours[1]!.slice(-2)).toEqual([300, 0]);
-  });
-});
-
-describe('wobbledOutline', () => {
-  const square = 'M0 0L100 0L100 100L0 100Z';
-
-  test('without a wobble the outline keeps its shape', () => {
-    const fx = strokeEffects([], 0, '#000');
-    expect(wobbledOutline(square, fx, Infinity)).toBe('M0 0L100 0L100 100L0 100Z');
-  });
-
-  test('each vertex moves by the wobble its glyph seed gives the strokes', () => {
-    const effects = resolveEffects({ wobble: { amplitude: 4 } });
-    const a = wobbledOutline(square, strokeEffects(effects, 1, '#000'), 50);
-    const b = wobbledOutline(square, strokeEffects(effects, 2, '#000'), 50);
-    expect(a).not.toBe(b);
-    const coords = a.match(/-?[\d.]+/g)!.map(Number);
-    const [flat] = flattenPath(square, 50);
-    for (let i = 0; i < coords.length; i++) expect(Math.abs(coords[i]! - flat![i]!)).toBeLessThanOrEqual(4);
   });
 });

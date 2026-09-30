@@ -11,12 +11,38 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { parsePluginSpecs, registerPlugin } from './core/plugin-registry.ts';
+import type { TegakiPluginSpec } from './core/types.ts';
 import { EASINGS, type EasingName } from './lib/easings.ts';
 import type { BundleShaper } from './lib/shaper.ts';
 import { type TextToSvgMode, textToSvg } from './lib/textToSvg.ts';
 import { computeTimeline, type TimelineConfig } from './lib/timeline.ts';
+import { annotatePlugin } from './plugins/annotate.ts';
+import { boilPlugin } from './plugins/boil.ts';
+import { captionPlugin } from './plugins/caption.ts';
+import { glowPlugin } from './plugins/glow.ts';
+import { globalGradientPlugin, strokeGradientPlugin } from './plugins/gradient.ts';
+import { taperPlugin } from './plugins/taper.ts';
+import { textPathPlugin } from './plugins/textPath.ts';
+import { variationPlugin } from './plugins/variation.ts';
+import { wobblePlugin } from './plugins/wobble.ts';
 import { createHarfbuzzShaper } from './shaper-harfbuzz/index.ts';
 import type { TegakiBundle } from './types.ts';
+
+/** Every plugin `tegaki/core` ships, by name, for `--plugins`. */
+const PLUGINS = [
+  glowPlugin,
+  taperPlugin,
+  wobblePlugin,
+  strokeGradientPlugin,
+  globalGradientPlugin,
+  variationPlugin,
+  boilPlugin,
+  annotatePlugin,
+  textPathPlugin,
+  captionPlugin,
+];
+registerPlugin(...PLUGINS);
 
 /** Bundled fonts the CLI can load, keyed by `--font` name. */
 const FONTS: Record<string, string> = {
@@ -64,7 +90,7 @@ interface CliOptions {
   clip: number | false;
   strokeEasing?: EasingName;
   glyphEasing?: EasingName;
-  effects?: Record<string, unknown>;
+  plugins?: TegakiPluginSpec[];
   seed?: number;
 }
 
@@ -95,9 +121,10 @@ Options:
       --pressure <0-1>      Variable stroke width (default: 1)
       --clip <scale>        Clip strokes to the letter outlines, scaling their width by
                               <scale> first (default: ${DEFAULT_CLIP}); --no-clip draws bare strokes
-      --effects <json>      Renderer effects, e.g. '{"glow":{"radius":8,"color":"#0cf"}}'
-                              (glow, wobble, taper, strokeGradient, globalGradient)
-      --seed <n>            Seed for wobble / gradient variation (default: 0)
+      --plugins <list>      Plugins, by name: "taper glow", or JSON with options,
+                              e.g. '["taper", ["glow", {"radius": 0.12, "color": "#0cf"}]]'
+                              (${PLUGINS.map((p) => p.name).join(', ')})
+      --seed <n>            Seed plugins draw with — a wobble's phase, variation (default: 0)
       --no-shaping          Place glyphs one per character by advance width (no ligatures,
                               joining or bidi)
       --smoothing           Smooth strokes onto a spline
@@ -111,7 +138,7 @@ Examples:
   tegaki "Hello World" --font tangerine --mode once -o hello.svg
   tegaki "ABC" --stagger 80% --size 140 --color "#222"
   tegaki "مرحبا بالعالم" --font amiri --mode once
-  tegaki "Glow" --effects '{"glow":{"radius":10,"color":"#f0a"}}'
+  tegaki "Glow" --plugins '[["glow", {"radius": 0.12, "color": "#f0a"}]]'
 `;
 
 function fail(message: string): never {
@@ -240,15 +267,21 @@ function parseArgs(argv: string[]): CliOptions {
       case '--no-clip':
         opts.clip = false;
         break;
-      case '--effects': {
+      case '--plugins': {
         const raw = expectValue(flag, inline, idx);
+        let list: unknown;
         try {
-          const parsed: unknown = JSON.parse(raw);
-          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
-          opts.effects = parsed as Record<string, unknown>;
-        } catch {
-          fail(`option --effects expects a JSON object, got ${JSON.stringify(raw)}`);
+          list = raw.trim().startsWith('[') ? JSON.parse(raw) : parsePluginSpecs(raw);
+        } catch {}
+        if (!Array.isArray(list)) fail(`option --plugins expects plugin names or a JSON array, got ${JSON.stringify(raw)}`);
+        const known = new Set(PLUGINS.map((p) => p.name));
+        for (const spec of list) {
+          const name = typeof spec === 'string' ? spec : Array.isArray(spec) ? spec[0] : undefined;
+          if (typeof name !== 'string' || !known.has(name)) {
+            fail(`unknown plugin ${JSON.stringify(spec)} in --plugins (expected: ${[...known].join(', ')})`);
+          }
         }
+        opts.plugins = list as TegakiPluginSpec[];
         break;
       }
       case '--seed':
@@ -399,7 +432,7 @@ async function main(): Promise<void> {
     loopHold: opts.loopHold,
     shaper,
     clipText: opts.clip,
-    effects: opts.effects,
+    plugins: opts.plugins,
     seed: opts.seed,
   });
 

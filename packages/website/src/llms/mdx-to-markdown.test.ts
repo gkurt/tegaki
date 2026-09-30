@@ -16,7 +16,7 @@ describe('mdxToMarkdown', () => {
 
   test('drops live demos, including ones spanning several lines', () => {
     expect(md('A\n\n<LiveDemo client:load text="Hi" />\n\nB')).toBe('A\n\nB');
-    expect(md('A\n\n<LiveDemo\n  client:only="vue"\n  effects={{ glow: true }}\n/>\n\nB')).toBe('A\n\nB');
+    expect(md(`A\n\n<LiveDemo\n  client:only="vue"\n  plugins={['strokeGradient', ['glow', { radius: 0.1 }]]}\n/>\n\nB`)).toBe('A\n\nB');
     expect(md('A\n\n<LiveDemoControlled client:load />\n\nB')).toBe('A\n\nB');
   });
 

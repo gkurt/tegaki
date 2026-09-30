@@ -1,14 +1,26 @@
 <script setup lang="ts">
 import { onMounted, ref, shallowRef } from 'vue';
 import { TegakiRenderer } from 'tegaki/vue';
-import type { TegakiBundle } from 'tegaki/core';
+import {
+  globalGradientPlugin,
+  glowPlugin,
+  registerPlugin,
+  strokeGradientPlugin,
+  type TegakiBundle,
+  type TegakiPluginSpec,
+  taperPlugin,
+  wobblePlugin,
+} from 'tegaki/core';
+
+// The docs name the style plugins in MDX props (plain data), so register them here.
+registerPlugin(glowPlugin, taperPlugin, wobblePlugin, strokeGradientPlugin, globalGradientPlugin);
 
 const props = withDefaults(
   defineProps<{
     text?: string;
     fontSize?: number;
     time?: any;
-    effects?: Record<string, any>;
+    plugins?: readonly TegakiPluginSpec[];
     caption?: string;
   }>(),
   {
@@ -35,7 +47,7 @@ onMounted(() => {
         :font="bundle"
         :text="props.text"
         :time="props.time"
-        :effects="props.effects"
+        :plugins="props.plugins"
         :style="{ fontSize: props.fontSize + 'px' }"
       />
       <div v-else class="live-demo-loading">Loading...</div>

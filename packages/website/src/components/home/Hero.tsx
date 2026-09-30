@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
-import { type TegakiBundle, TegakiRenderer } from 'tegaki';
+import { globalGradientPlugin, type TegakiBundle, TegakiRenderer } from 'tegaki';
 import { brushPlugin } from '../plugins/brush.ts';
 import { type FontName, INK, loadFont, markHeadlineWritten, useFont, useHeadlineWritten, useInView, useTheme } from './shared.ts';
 
@@ -131,8 +131,8 @@ export function Hero() {
   const palette = INK[useTheme()];
   const brush = useMemo(() => [brushPlugin(brushPlugin.presets.Scroll)], []);
 
-  const headlineEffects = useMemo(
-    () => ({ globalGradient: { colors: [palette.ink, palette.ink, palette.ink, palette.seal], angle: 12 } }),
+  const headlinePlugins = useMemo(
+    () => [globalGradientPlugin({ colors: [palette.ink, palette.ink, palette.ink, palette.seal], angle: 12 })],
     [palette],
   );
 
@@ -164,7 +164,7 @@ export function Hero() {
               font={font}
               time={{ mode: 'uncontrolled', duration: 4.6, delay: 0.3 }}
               timing={{ glyphGap: 0.02, wordGap: 0.12, lineGap: 0.25 }}
-              effects={headlineEffects}
+              plugins={headlinePlugins}
               quality={{ smoothing: true, pixelRatio: 1.5 }}
               onComplete={markHeadlineWritten}
             >

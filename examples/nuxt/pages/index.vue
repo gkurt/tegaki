@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { glowPlugin, strokeGradientPlugin } from 'tegaki/core';
 import bundle from 'tegaki/fonts/caveat';
+
+const plugins = [strokeGradientPlugin(), glowPlugin({ radius: 0.1, color: '#00ccff' })];
 
 const time = ref(0);
 </script>
@@ -32,12 +35,12 @@ const time = ref(0);
     </section>
 
     <section>
-      <h2>With effects</h2>
+      <h2>With plugins</h2>
       <TegakiRenderer
         :font="bundle"
         text="Fancy!"
         :time="{ mode: 'uncontrolled', speed: 1, loop: true, loopGap: 1 }"
-        :effects="{ glow: { radius: 8, color: '#00ccff' }, pressureWidth: true, strokeGradient: { colors: 'rainbow' } }"
+        :plugins="plugins"
         :style="{ fontSize: '56px' }"
       />
     </section>

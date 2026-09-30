@@ -4,7 +4,7 @@ import type { PipelineResult } from 'tegaki-generator';
 import { createShowcasePlugins } from '../plugins/index.ts';
 import { TEXT_PRESETS } from '../preview/constants.ts';
 import { TegakiTextPreview, type TegakiTextPreviewReadyInfo } from '../preview/TegakiTextPreview.tsx';
-import { buildEffects, buildTimingConfig } from '../preview/utils.ts';
+import { buildInkStyle, buildTimingConfig } from '../preview/utils.ts';
 import type { UrlState } from '../url-state.ts';
 import { fontHasChar } from './charsets.ts';
 import { formKey, formsOfChar, formTag, useGsubGraphs } from './GlyphForms.tsx';
@@ -110,8 +110,8 @@ export function TextWorkspace({
     () => createShowcasePlugins(settings.plugins, settings.pluginOptions),
     [settings.plugins, settings.pluginOptions],
   );
-  const effects = useMemo(
-    () => buildEffects(settings.effectsState, settings.customEffects),
+  const inkStyle = useMemo(
+    () => buildInkStyle(settings.effectsState, settings.customEffects),
     [settings.effectsState, settings.customEffects],
   );
 
@@ -303,7 +303,7 @@ export function TextWorkspace({
                     pipeline={settings.pipeline}
                     geometryOptions={settings.geometryOptions}
                     time={timeProp}
-                    effects={effects}
+                    inkStyle={inkStyle}
                     timing={timingConfig}
                     quality={settings.quality}
                     plugins={plugins}

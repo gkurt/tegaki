@@ -1,4 +1,5 @@
 ---
+import type { ComponentProps } from 'astro/types';
 import TegakiRenderer from 'tegaki/astro';
 import bundle from 'tegaki/fonts/caveat';
 
@@ -6,11 +7,12 @@ interface Props {
   text?: string;
   fontSize?: number;
   time?: any;
-  effects?: Record<string, any>;
+  /** Plugins by name: the script below registers the style plugins. */
+  plugins?: ComponentProps<typeof TegakiRenderer>['plugins'];
   caption?: string;
 }
 
-const { text = 'Hello World', fontSize = 48, time = { mode: 'uncontrolled', speed: 1, loop: true }, effects, caption } = Astro.props;
+const { text = 'Hello World', fontSize = 48, time = { mode: 'uncontrolled', speed: 1, loop: true }, plugins, caption } = Astro.props;
 ---
 
 <div class="not-content live-demo">
@@ -20,9 +22,15 @@ const { text = 'Hello World', fontSize = 48, time = { mode: 'uncontrolled', spee
       font={bundle.fullFamily ?? bundle.family}
       {text}
       {time}
-      {effects}
+      {plugins}
       style={`font-size: ${fontSize}px`}
     />
   </div>
   {caption && <div class="live-demo-caption">{caption}</div>}
 </div>
+
+<script>
+  import { globalGradientPlugin, glowPlugin, strokeGradientPlugin, TegakiEngine, taperPlugin, wobblePlugin } from 'tegaki/core';
+
+  TegakiEngine.registerPlugin(glowPlugin, taperPlugin, wobblePlugin, strokeGradientPlugin, globalGradientPlugin);
+</script>

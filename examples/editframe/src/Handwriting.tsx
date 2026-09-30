@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useRef } from 'react';
-import { type TegakiBundle, TegakiEngine, type TegakiEngineOptions } from 'tegaki/react';
+import { type TegakiBundle, TegakiEngine, type TegakiEngineOptions, type TegakiPlugin } from 'tegaki/react';
 
 export interface InkProps {
   font: TegakiBundle;
@@ -15,7 +15,8 @@ export interface InkProps {
   onEngine?: (engine: TegakiEngine | null) => void;
   className?: string;
   style?: CSSProperties;
-  effects?: Record<string, unknown>;
+  /** Plugins to draw with — pass the same array every render, so the engine keeps its layout. */
+  plugins?: readonly TegakiPlugin[];
   direction?: 'ltr' | 'rtl';
   quality?: Record<string, unknown>;
 }
@@ -28,7 +29,7 @@ export interface InkProps {
  * keeps time-driving out of React's render cycle, which is what makes it
  * deterministic under editframe's frame-by-frame export. See `onEngine`.
  */
-export const Ink = ({ font, text, onEngine, className, style, effects, direction, quality }: InkProps) => {
+export const Ink = ({ font, text, onEngine, className, style, plugins, direction, quality }: InkProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<TegakiEngine | null>(null);
   const onEngineRef = useRef(onEngine);
@@ -42,7 +43,7 @@ export const Ink = ({ font, text, onEngine, className, style, effects, direction
     const options: TegakiEngineOptions = {
       text,
       font,
-      effects: effects as TegakiEngineOptions['effects'],
+      plugins,
       direction,
       quality: quality as TegakiEngineOptions['quality'],
       time: { mode: 'controlled', value: 0, unit: 'progress' },
@@ -57,17 +58,17 @@ export const Ink = ({ font, text, onEngine, className, style, effects, direction
     };
   }, []);
 
-  // Reflect prop changes (text / font / effects / …) into the engine. Time is
+  // Reflect prop changes (text / font / plugins / …) into the engine. Time is
   // owned by the scene's frame task, so it is intentionally not set here.
   useEffect(() => {
     engineRef.current?.update({
       text,
       font,
-      effects: effects as TegakiEngineOptions['effects'],
+      plugins,
       direction,
       quality: quality as TegakiEngineOptions['quality'],
     });
-  }, [text, font, effects, direction, quality]);
+  }, [text, font, plugins, direction, quality]);
 
   return <div ref={containerRef} className={className} style={style} />;
 };

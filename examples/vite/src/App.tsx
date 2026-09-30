@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { TegakiEngine } from 'tegaki/core';
+import { glowPlugin, strokeGradientPlugin, TegakiEngine } from 'tegaki/core';
 import amiriBundle from 'tegaki/fonts/amiri';
 import bundle from 'tegaki/fonts/caveat';
 import { TegakiRenderer } from 'tegaki/react';
@@ -10,6 +10,9 @@ registerTegakiElement();
 TegakiEngine.registerShaper(harfbuzzShaper);
 
 import './app.css';
+
+// A module-level list, so every render passes the same plugins.
+const FANCY = [strokeGradientPlugin(), glowPlugin({ radius: 0.1, color: '#00ccff' })];
 
 export function App() {
   const [time, setTime] = useState(0);
@@ -52,15 +55,11 @@ export function App() {
       </section>
 
       <section>
-        <h2>With effects</h2>
+        <h2>With plugins</h2>
         <TegakiRenderer
           font={bundle}
           time={{ mode: 'uncontrolled', speed: 1, loop: true, loopGap: 1 }}
-          effects={{
-            glow: { radius: 8, color: '#00ccff' },
-            pressureWidth: true,
-            strokeGradient: { colors: 'rainbow' },
-          }}
+          plugins={FANCY}
           style={{ fontSize: '56px' }}
         >
           Fancy!

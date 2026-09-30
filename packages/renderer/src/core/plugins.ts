@@ -1,6 +1,8 @@
 import { paintStroke } from '../lib/paintStroke.ts';
 import type { StrokePath } from '../lib/strokePath.ts';
 import type { PlacedStroke, StrokeGeometryContext } from '../lib/strokeTimeline.ts';
+import { SVG_REGION, type SvgClock, type SvgDecoration } from '../lib/svgExport.ts';
+import type { TegakiPluginFactory } from './createPlugin.ts';
 import type {
   TegakiAttachContext,
   TegakiGeometryContext,
@@ -8,6 +10,7 @@ import type {
   TegakiPlugin,
   TegakiPluginSteps,
   TegakiStrokePaintContext,
+  TegakiSvgContext,
   TegakiTimingContext,
 } from './types.ts';
 
@@ -16,6 +19,29 @@ import type {
 // is reported and skipped, so one broken plugin can't stop the render.
 
 export type PluginErrorHandler = (plugin: TegakiPlugin, hook: keyof TegakiPlugin, error: unknown) => void;
+
+/** Plugins whose `paint` only restyles what the pen has drawn (see {@link paintsDrawnOnly}). */
+const drawnOnly = new WeakSet<TegakiPlugin>();
+
+/**
+ * `factory`, making plugins whose `paint` shows nothing of a stroke the pen
+ * hasn't reached — a color, a glow. The engine then skips pending strokes
+ * for them, and needs no layer past clip-to-text on their account: work a
+ * plugin painting ahead of the pen (a guide, a typewriter) can't be spared.
+ */
+export function paintsDrawnOnly<F extends TegakiPluginFactory>(factory: F): F {
+  const make = (options?: Parameters<F>[0]) => {
+    const plugin = factory(options);
+    drawnOnly.add(plugin);
+    return plugin;
+  };
+  return Object.defineProperties(make, Object.getOwnPropertyDescriptors(factory)) as unknown as F;
+}
+
+/** Whether a plugin's `paint` may show a stroke before the pen gets to it. */
+export function paintsAhead(plugin: TegakiPlugin): boolean {
+  return !!plugin.paint && !drawnOnly.has(plugin);
+}
 
 /** A plugin an engine has attached: what its `attach` returned to release it, and whether it's still attached (what its `redraw` asks). */
 export interface Attachment {
@@ -224,6 +250,59 @@ export function outlineWith(
     }
     return out;
   };
+}
+
+/** What an SVG file's `svg` hooks are told besides the strokes and the clock. */
+export type SvgHookBase = Pick<TegakiSvgContext, 'duration' | 'fontSize' | 'color' | 'textBox' | 'random'>;
+
+/**
+ * What the plugins' `svg` hooks add to a file (see {@link TegakiSvgContext}),
+ * and the boxes of those with `bounds` too, for the crop. `strokes` are in
+ * the file's px, as the hooks get them.
+ */
+export function svgDecoration(
+  plugins: readonly TegakiPlugin[],
+  strokes: readonly PlacedStroke[],
+  clock: SvgClock,
+  base: SvgHookBase,
+  onError: PluginErrorHandler,
+): SvgDecoration {
+  const deco: SvgDecoration = { defs: [], underlay: [], overlay: [], ink: [], strokes: new Map(), boxes: [] };
+  let ids = 0;
+  const svg: TegakiSvgContext = {
+    ...base,
+    strokes,
+    region: SVG_REGION,
+    mode: clock.mode,
+    id: (name) => `${name}-${ids++}`,
+    defs: (markup) => deco.defs.push(markup),
+    underlay: (markup) => deco.underlay.push(markup),
+    overlay: (markup) => deco.overlay.push(markup),
+    ink: (attrs) => deco.ink.push(attrs),
+    style: (stroke, style) => {
+      const prev = deco.strokes.get(stroke.id);
+      const attrs = [prev?.attrs, style.attrs].filter(Boolean).join(' ');
+      deco.strokes.set(stroke.id, { color: style.color ?? prev?.color, attrs: attrs || undefined });
+    },
+    appear: (t) => clock.appear(t),
+    seconds: (t) => clock.seconds(t),
+  };
+  for (const plugin of plugins) {
+    if (!plugin.svg) continue;
+    try {
+      plugin.svg(svg);
+    } catch (error) {
+      onError(plugin, 'svg', error);
+    }
+    if (!plugin.bounds) continue;
+    try {
+      const box = plugin.bounds({ strokes, fontSize: base.fontSize });
+      if (box) deco.boxes.push(box);
+    } catch (error) {
+      onError(plugin, 'bounds', error);
+    }
+  }
+  return deco;
 }
 
 /** A stroke to paint, before the chain tells each plugin its drawing (`step`). */

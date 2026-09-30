@@ -5,7 +5,7 @@ import { type PreviewParams, previewUrl, waitForReady } from './preview.ts';
 // projects in playwright.config.ts). Pixel snapshots differ per engine, and
 // the committed ones are Chromium's, so this spec asserts structure instead:
 // the ink is there, where the DOM text is, grows as time moves forward, runs
-// the way the script writes, and carries the effects' colors.
+// the way the script writes, and carries the gradient plugin's colors.
 
 /** Rect in client CSS px. */
 interface Box {
