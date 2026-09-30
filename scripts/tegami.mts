@@ -1,5 +1,6 @@
 import { tegami } from 'tegami';
 import { createCli } from 'tegami/cli';
+import { simpleGenerator } from 'tegami/generators/simple';
 import { github } from 'tegami/plugins/github';
 
 // Tegami versioning + publishing config.
@@ -11,7 +12,22 @@ import { github } from 'tegami/plugins/github';
 //   are aligned today, so syncBump keeps them aligned going forward.
 // - Bun is the registry client (Tegami runs prepack via `bun run` and packs
 //   with `bun pm pack`, then publishes the tarball with `npm publish`).
+// The built-in generator lists a release's entries in the order it reads
+// them. List them by bump instead, breaking changes first, so a major
+// release's notes open with what it breaks (the 1.0 entry, not a bug fix).
+const BUMP_RANK: Record<string, number> = { major: 0, minor: 1, patch: 2 };
+const simple = simpleGenerator();
+const byBump: typeof simple = {
+  generate(opts) {
+    const rank = (entry: NonNullable<typeof opts.packageDraft.changelogs>[number]) =>
+      BUMP_RANK[entry.packages.get(opts.pkg.name)?.type ?? ''] ?? 3;
+    const changelogs = [...(opts.packageDraft.changelogs ?? [])].sort((a, b) => rank(a) - rank(b));
+    return simple.generate.call(this, { ...opts, packageDraft: { ...opts.packageDraft, changelogs } });
+  },
+};
+
 const paper = tegami({
+  generator: byBump,
   groups: {
     tegaki: {
       syncBump: true,
