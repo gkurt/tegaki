@@ -4,7 +4,7 @@ import fullFontUrl from './tangerine.ttf' with { type: 'url' };
 import glyphData from './glyphData.json' with { type: 'json' };
 
 const bundle = {
-  version: 0,
+  version: 1,
   family: 'Tangerine Tegaki 3dc76002',
   fullFamily: 'Tangerine',
   lineCap: 'round',

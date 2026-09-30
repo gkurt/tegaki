@@ -3,7 +3,7 @@ import fontUrl from './hershey-script-1-stroke.otf' with { type: 'url' };
 import glyphData from './glyphData.json' with { type: 'json' };
 
 const bundle = {
-  version: 0,
+  version: 1,
   family: 'Hershey Script 1-stroke Tegaki vp8jn0',
   lineCap: 'round',
   fontUrl,

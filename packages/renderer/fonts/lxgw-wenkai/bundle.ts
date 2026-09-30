@@ -4,7 +4,7 @@ import glyphData from './glyphData.json' with { type: 'json' };
 import glyphDataById from './glyphDataById.json' with { type: 'json' };
 
 const bundle = {
-  version: 0,
+  version: 1,
   family: 'LXGW WenKai Tegaki fbeec9e6',
   lineCap: 'round',
   fontUrl,

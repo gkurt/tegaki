@@ -4,7 +4,7 @@ import fullFontUrl from './nanum-pen-script.ttf' with { type: 'url' };
 import glyphData from './glyphData.json' with { type: 'json' };
 
 const bundle = {
-  version: 0,
+  version: 1,
   family: 'Nanum Pen Script Tegaki 38efadb5',
   fullFamily: 'Nanum Pen Script',
   lineCap: 'round',

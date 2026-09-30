@@ -3,7 +3,7 @@ import fontUrl from './ems-allure.otf' with { type: 'url' };
 import glyphData from './glyphData.json' with { type: 'json' };
 
 const bundle = {
-  version: 0,
+  version: 1,
   family: 'EMS Allure Tegaki 14aaaz',
   lineCap: 'round',
   fontUrl,

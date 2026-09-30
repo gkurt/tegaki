@@ -1,15 +1,17 @@
 /**
- * Current bundle format version. Incremented when the bundle format changes
- * in a way that older engines cannot consume.
+ * Current bundle format version: 1 since tegaki 1.0, which fixed the format.
+ * Incremented only when the format changes in a way that older engines cannot
+ * consume; new optional fields don't change it.
  */
-export const BUNDLE_VERSION = 0;
+export const BUNDLE_VERSION = 1;
 
 /**
  * Set of bundle versions that this engine can consume. The engine logs a
  * console warning (once per bundle) when it encounters a version outside
- * this set.
+ * this set. Version 0, the pre-1.0 bundles, is the same format, so it's read
+ * as it is.
  */
-export const COMPATIBLE_BUNDLE_VERSIONS: ReadonlySet<number> = new Set([BUNDLE_VERSION]);
+export const COMPATIBLE_BUNDLE_VERSIONS: ReadonlySet<number> = new Set([0, BUNDLE_VERSION]);
 
 export type LineCap = 'round' | 'butt' | 'square';
 

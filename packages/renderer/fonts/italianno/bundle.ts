@@ -5,7 +5,7 @@ import glyphData from './glyphData.json' with { type: 'json' };
 import glyphDataById from './glyphDataById.json' with { type: 'json' };
 
 const bundle = {
-  version: 0,
+  version: 1,
   family: 'Italianno Tegaki 3dc76002',
   fullFamily: 'Italianno',
   lineCap: 'round',

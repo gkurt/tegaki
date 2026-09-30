@@ -5,7 +5,7 @@ import glyphData from './glyphData.json' with { type: 'json' };
 import glyphDataById from './glyphDataById.json' with { type: 'json' };
 
 const bundle = {
-  version: 0,
+  version: 1,
   family: 'Suez One Tegaki ac7f1d1c',
   fullFamily: 'Suez One',
   lineCap: 'round',
