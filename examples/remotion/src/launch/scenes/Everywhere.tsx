@@ -10,7 +10,7 @@ import { Write } from '../Write.tsx';
 
 const FRAMEWORKS = ['React', 'Vue', 'Svelte', 'Solid', 'Astro', 'Next.js', 'Nuxt', 'Web Components', 'Remotion', 'Vanilla JS'];
 const LEARN = [strokeNumbers()];
-const CARD = [foil({ speed: 0.5 })];
+const CARD = [foil({ speed: 0.25, sheen: 3 })];
 const CHAT = [taperPlugin({ startLength: 0.1, endLength: 0.15 })];
 const HQ = { pixelRatio: 1.5 };
 
