@@ -1,9 +1,18 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import { EXAMPLE_FONTS, type ParsedFontInfo } from 'tegaki-generator';
+import { useDrawnDatasets } from '../preview/drawn-datasets.ts';
+import { DRAWN_FONT_PREFIX, STROKE_FONTS } from '../preview/stroke-fonts.ts';
 import { CheckIcon, ChevronDownIcon, SearchIcon, UploadIcon } from './icons.tsx';
 import { cx, Popover, Spinner } from './ui.tsx';
 
 type FontListEntry = { family: string; category: string };
+
+/** The unsearched list's sections. */
+const GROUP_HEADINGS: Record<string, string> = {
+  featured: 'Featured handwriting fonts',
+  'single-line': 'Single-line fonts — Hershey, EMS, Relief',
+  drawn: 'Drawn by hand (Glyphs › Reference)',
+};
 
 /** Lazily fetched Google Fonts catalog (via Fontsource) for the search box. */
 function useFontCatalog() {
@@ -44,13 +53,24 @@ export function FontPicker({
   const { fonts, ensure } = useFontCatalog();
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Single-line fonts (and the stroke-order datasets drawn in this browser) draw their own strokes, no pipeline.
+  const { entries: drawn } = useDrawnDatasets();
+  const strokeFonts = useMemo<FontListEntry[]>(
+    () => [
+      ...STROKE_FONTS.map((f) => ({ family: f.name, category: 'single-line' })),
+      ...drawn.map((e) => ({ family: `${DRAWN_FONT_PREFIX}${e.dataset.name}`, category: 'drawn' })),
+    ],
+    [drawn],
+  );
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return EXAMPLE_FONTS.map((f) => ({ family: f, category: 'featured' }));
+    if (!q) return [...EXAMPLE_FONTS.map((f) => ({ family: f, category: 'featured' })), ...strokeFonts];
+    const single = strokeFonts.filter((f) => f.family.toLowerCase().includes(q));
     const fromCatalog = fonts.filter((f) => f.family.toLowerCase().includes(q)).slice(0, 30);
-    if (fromCatalog.length > 0) return fromCatalog;
+    if (fromCatalog.length > 0 || single.length > 0) return [...single, ...fromCatalog];
     return EXAMPLE_FONTS.filter((f) => f.toLowerCase().includes(q)).map((f) => ({ family: f, category: 'featured' }));
-  }, [query, fonts]);
+  }, [query, fonts, strokeFonts]);
 
   const pick = (f: string, featured: boolean) => {
     onPickFamily(f, featured);
@@ -119,25 +139,27 @@ export function FontPicker({
         />
       </div>
       <div className="max-h-[min(22rem,55vh)] overflow-y-auto p-1">
-        {!query.trim() && <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium text-zinc-400">Featured handwriting fonts</div>}
         {results.map((f, i) => {
           const selected = f.family === currentName;
+          const heading = !query.trim() && f.category !== results[i - 1]?.category ? GROUP_HEADINGS[f.category] : undefined;
           return (
-            <button
-              type="button"
-              key={f.family}
-              onMouseEnter={() => setActive(i)}
-              onClick={() => pick(f.family, f.category === 'featured')}
-              className={cx(
-                'flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px]',
-                i === active ? 'bg-zinc-100 dark:bg-zinc-800' : '',
-                'text-zinc-700 dark:text-zinc-300',
-              )}
-            >
-              <span className="min-w-0 flex-1 truncate">{f.family}</span>
-              {query.trim() && <span className="text-[11px] text-zinc-400">{f.category}</span>}
-              {selected && <CheckIcon size={14} className="text-zinc-900 dark:text-zinc-100" />}
-            </button>
+            <Fragment key={f.family}>
+              {heading && <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium text-zinc-400">{heading}</div>}
+              <button
+                type="button"
+                onMouseEnter={() => setActive(i)}
+                onClick={() => pick(f.family, f.category === 'featured')}
+                className={cx(
+                  'flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px]',
+                  i === active ? 'bg-zinc-100 dark:bg-zinc-800' : '',
+                  'text-zinc-700 dark:text-zinc-300',
+                )}
+              >
+                <span className="min-w-0 flex-1 truncate">{f.family}</span>
+                {query.trim() && <span className="text-[11px] text-zinc-400">{f.category}</span>}
+                {selected && <CheckIcon size={14} className="text-zinc-900 dark:text-zinc-100" />}
+              </button>
+            </Fragment>
           );
         })}
         {results.length === 0 && query.trim() && (
@@ -157,12 +179,13 @@ export function FontPicker({
           className="flex h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
         >
           <UploadIcon size={14} />
-          Upload .ttf / .otf
+          Upload font
         </button>
         <input
           ref={fileRef}
           type="file"
-          accept=".ttf,.otf,.woff"
+          title="A font (.ttf, .otf, .woff), or a stroke font: a single-line SVG font, a Hershey .jhf file or a drawn dataset (.strokes.json)"
+          accept=".ttf,.otf,.woff,.svg,.jhf,.json"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -175,6 +198,7 @@ export function FontPicker({
         />
         {fontInfo && (
           <span className="ml-auto truncate text-[11px] text-zinc-400" title={`${fontInfo.family} ${fontInfo.style}`}>
+            {fontInfo.stroke ? 'Stroke font · ' : ''}
             {fontInfo.unitsPerEm} UPM · {fontInfo.lineCap} caps
           </span>
         )}

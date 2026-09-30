@@ -4,6 +4,7 @@ import {
   DEFAULT_CHARS,
   DEFAULT_GEOMETRY_OPTIONS,
   DEFAULT_OPTIONS,
+  DEFAULT_STROKE_FONT_OPTIONS,
   type GeometryOptions,
   isReferenceDatasetId,
   type PipelineOptions,
@@ -79,6 +80,8 @@ export interface UrlState {
   letterSpacingPx: number;
   /** Width of the text frame in px (null = fill the available space). `/preview` reads the same `w` as its container width. */
   frameWidth: number | null;
+  /** A stroke font's pen width, as a fraction of the em (`pen`). */
+  penWidth: number;
   /** The character set is every glyph the font maps (`cs=all`) — expanded into `chars` once the font loads. */
   allChars: boolean;
   showOverlay: boolean;
@@ -142,6 +145,7 @@ export const URL_DEFAULTS: UrlState = {
   lineHeightRatio: null,
   letterSpacingPx: 0,
   frameWidth: null,
+  penWidth: DEFAULT_STROKE_FONT_OPTIONS.penWidth,
   allChars: false,
   showOverlay: false,
   timeMode: 'controlled',
@@ -349,6 +353,10 @@ export function parseUrlState(search: string | URLSearchParams = window.location
     state.lineHeightRatio = Number.isFinite(lh) && lh > 0 ? lh : null;
   }
   if (p.has('ls')) state.letterSpacingPx = Number(p.get('ls'));
+  if (p.has('pen')) {
+    const pw = Number(p.get('pen'));
+    if (Number.isFinite(pw) && pw > 0 && pw < 1) state.penWidth = pw;
+  }
   if (p.has('w')) {
     const w = Number(p.get('w'));
     state.frameWidth = Number.isFinite(w) && w > 0 ? Math.round(w) : null;
@@ -476,6 +484,7 @@ export function buildUrlParams(state: UrlState): URLSearchParams {
   if (state.lineHeightRatio !== null) p.set('lh', String(state.lineHeightRatio));
   if (state.letterSpacingPx !== URL_DEFAULTS.letterSpacingPx) p.set('ls', String(state.letterSpacingPx));
   if (state.frameWidth !== null) p.set('w', String(state.frameWidth));
+  if (state.penWidth !== URL_DEFAULTS.penWidth) p.set('pen', String(state.penWidth));
   if (state.showOverlay !== URL_DEFAULTS.showOverlay) p.set('ol', '1');
   if (state.timeMode !== URL_DEFAULTS.timeMode) p.set('tm', state.timeMode);
   if (state.currentTime !== URL_DEFAULTS.currentTime) p.set('ct', String(state.currentTime));

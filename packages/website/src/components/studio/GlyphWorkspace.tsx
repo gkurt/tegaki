@@ -45,6 +45,8 @@ const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 const NO_WARNINGS: string[] = [];
 const NO_REFS: ReferenceGlyph[] = [];
 const NO_REFS_BY_CHAR: Record<string, ReferenceGlyph[]> = {};
+/** A stroke font's one stage. */
+const FINAL_STAGE_ONLY = [{ key: 'final', label: 'Final' }] as const;
 
 /** Font size of the Final stage's live render — ZoomStage scales it to fit anyway. */
 const FINAL_FONT_SIZE = 320;
@@ -90,6 +92,9 @@ export function GlyphWorkspace({
 }) {
   const fontInfo = font?.info ?? null;
   const { pipeline, selectedChar, selectedForm, options, geometryOptions, activeStage, geometryStage } = settings;
+  // A stroke font's glyphs are its strokes, drawn as they are: no pipeline
+  // stage to inspect, only the Final one.
+  const strokeFont = !!fontInfo?.stroke;
   const glyphFamily = useFontFaceFamily(font);
 
   // Pipeline results tagged with the inputs they were computed from (`key`).
@@ -152,7 +157,7 @@ export function GlyphWorkspace({
 
   // Raster pipeline
   const rasterKey =
-    pipeline === 'raster' && fontInfo && selectedChar
+    pipeline === 'raster' && fontInfo && !strokeFont && selectedChar
       ? formGid
         ? `#${formSubset}:${formGid}:${isRtlChar(selectedChar) ? 'r' : 'l'}:${fontCacheId(fontInfo)}:${JSON.stringify(options)}`
         : `${selectedChar}:${fontCacheId(fontInfo)}:${JSON.stringify(options)}`
@@ -188,7 +193,8 @@ export function GlyphWorkspace({
   const refChar = form ? (form.kind === 'alternate' ? (form.text ?? '') : '') : selectedChar;
   const ligatureComponents = form?.kind === 'ligature' ? form.components : undefined;
   const refChars = refChar ? [refChar] : [...new Set(ligatureComponents?.flatMap((c) => (c.letter ? [c.letter] : [])))];
-  const refsKey = pipeline === 'geometry' && refChars.length > 0 ? `${refChars.join('|')}\u0000${setKey}:${drawnRevision}` : '';
+  const refsKey =
+    pipeline === 'geometry' && !strokeFont && refChars.length > 0 ? `${refChars.join('|')}\u0000${setKey}:${drawnRevision}` : '';
   useEffect(() => {
     if (!refsKey) return;
     let cancelled = false;
@@ -210,7 +216,7 @@ export function GlyphWorkspace({
   // Geometry pipeline — waits for the current char's references, so a single
   // pipeline run sees them (and never runs with the previous char's).
   const geoKey =
-    pipeline === 'geometry' && fontInfo && selectedChar && refGlyphs
+    pipeline === 'geometry' && fontInfo && !strokeFont && selectedChar && refGlyphs
       ? `${fontCacheId(fontInfo)}:${selectedChar}:${formSubset}:${formGid}:${options.bezierTolerance}:${JSON.stringify(geometryOptions)}:${referencesKey(
           [...refGlyphs, ...(letterRefs ?? []).flatMap((c) => ('reference' in c ? (c.reference ?? []) : []))],
         )}`
@@ -257,10 +263,13 @@ export function GlyphWorkspace({
 
   // The last result of the active pipeline (possibly for other inputs), and
   // whether the one for the current inputs is still being computed.
-  const result = pipeline === 'raster' ? (rasterRun?.result ?? null) : null;
-  const geoResult = pipeline === 'geometry' ? (geoRun?.result ?? null) : null;
+  const result = pipeline === 'raster' && !strokeFont ? (rasterRun?.result ?? null) : null;
+  const geoResult = pipeline === 'geometry' && !strokeFont ? (geoRun?.result ?? null) : null;
   const processing =
-    !!fontInfo && !!selectedChar && (pipeline === 'raster' ? rasterRun?.key !== rasterKey : !geoKey || geoRun?.key !== geoKey);
+    !!fontInfo &&
+    !strokeFont &&
+    !!selectedChar &&
+    (pipeline === 'raster' ? rasterRun?.key !== rasterKey : !geoKey || geoRun?.key !== geoKey);
   const stageError = pipeline === 'geometry' && !processing ? (geoRun?.error ?? '') : '';
 
   // ── Stroke animation ──
@@ -287,7 +296,7 @@ export function GlyphWorkspace({
 
   // The Final stage is the real renderer drawing the glyph, so its timeline
   // (with the Motion easings and stagger) comes from the renderer itself.
-  const stageValue = pipeline === 'raster' ? activeStage : geometryStage;
+  const stageValue = strokeFont ? 'final' : pipeline === 'raster' ? activeStage : geometryStage;
   const finalActive = stageValue === 'final';
   const [renderedDuration, setRenderedDuration] = useState(0);
   const totalDuration = finalActive && renderedDuration > 0 ? renderedDuration : strokeDuration;
@@ -354,7 +363,7 @@ export function GlyphWorkspace({
       set('selectedForm', picked.kind === 'default' ? null : formKey(formSubset, picked.gid));
       return true;
     }
-    if (key === '[' || key === ']') {
+    if ((key === '[' || key === ']') && !strokeFont) {
       const list = pipeline === 'raster' ? STAGES : GEOMETRY_STAGES;
       const next = list[list.findIndex((st) => st.key === stageValue) + (key === ']' ? 1 : -1)];
       if (!next) return false;
@@ -365,9 +374,9 @@ export function GlyphWorkspace({
     return false;
   });
 
-  const stages = pipeline === 'raster' ? STAGES : GEOMETRY_STAGES;
+  const stages = strokeFont ? FINAL_STAGE_ONLY : pipeline === 'raster' ? STAGES : GEOMETRY_STAGES;
   // The pen in the Reference stage (see ReferenceDraw.tsx).
-  const referenceStage = pipeline === 'geometry' && geometryStage === 'reference';
+  const referenceStage = pipeline === 'geometry' && !strokeFont && geometryStage === 'reference';
   const [drawing, setDrawing] = useState(false);
   // Geometry-pipeline warnings for the selected glyph; the panel stays open while browsing glyphs.
   const warnings = pipeline === 'geometry' && geoResult && !processing ? geoResult.warnings : NO_WARNINGS;
@@ -431,9 +440,11 @@ export function GlyphWorkspace({
                 role="tab"
                 aria-selected={s.key === stageValue}
                 onClick={() =>
-                  pipeline === 'raster'
-                    ? set('activeStage', s.key as UrlState['activeStage'])
-                    : set('geometryStage', s.key as UrlState['geometryStage'])
+                  strokeFont
+                    ? undefined
+                    : pipeline === 'raster'
+                      ? set('activeStage', s.key as UrlState['activeStage'])
+                      : set('geometryStage', s.key as UrlState['geometryStage'])
                 }
                 className={cx(
                   'h-7 shrink-0 rounded-md px-2.5 text-xs font-medium whitespace-nowrap transition-colors',
@@ -473,7 +484,7 @@ export function GlyphWorkspace({
                 processing={processing && !(referenceStage && drawing && !!activeResult)}
                 error={pipeline === 'geometry' ? stageError : ''}
                 fontLoaded={!!fontInfo}
-                hasResult={!!activeResult}
+                hasResult={!!activeResult || strokeFont}
                 char={selectedChar}
               />
             )
@@ -483,7 +494,7 @@ export function GlyphWorkspace({
             // Stays mounted across glyph switches: the renderer keeps the last
             // glyph it drew until the next one is built.
             font &&
-            activeResult &&
+            (activeResult || strokeFont) &&
             finalText !== null && (
               <div className={cx('transition-opacity', processing && 'opacity-40')}>
                 <FinalStage
@@ -734,7 +745,8 @@ function FinalStage({
             quality={settings.quality}
             seed={settings.seed}
             fontSizePx={FINAL_FONT_SIZE}
-            lineHeightRatio={1.15}
+            // A stroke font's line is as tall as its ink (see strokeFontMetrics): its own spacing holds the glyph.
+            lineHeightRatio={font.info.stroke ? null : 1.15}
             resultsCache={resultsCache}
             onReady={onReady}
             useShaper={settings.useShaper}

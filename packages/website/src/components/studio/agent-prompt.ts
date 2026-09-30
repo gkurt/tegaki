@@ -1,7 +1,7 @@
 import { DEFAULT_GEOMETRY_OPTIONS, DEFAULT_OPTIONS, type GeometryOptions, type PipelineOptions } from 'tegaki-generator';
 import { BUNDLED_FONTS } from '../../site.ts';
 import { SHOWCASE_PLUGINS } from '../plugins/index.ts';
-import { buildUrlParams, type UrlState } from '../url-state.ts';
+import { buildUrlParams, URL_DEFAULTS, type UrlState } from '../url-state.ts';
 
 export type AgentGoal = 'generate' | 'optimize' | 'fix' | 'plugin';
 
@@ -55,6 +55,8 @@ export interface AgentPromptInput {
     features: string[];
     /** Set when the font came from a local file rather than Google Fonts. */
     fileName?: string;
+    /** Set for a stroke font (single-line, no outlines): where its file comes from, when it's one the studio lists. */
+    stroke?: { url?: string };
   } | null;
   charset: {
     /** Preset name, or null for a hand-edited set. */
@@ -116,15 +118,24 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
   const note = input.note.trim();
   const out: string[] = [];
 
+  const stroke = font?.stroke;
   out.push(
-    `I'm using Tegaki (${REPO}) to turn the font **${family}** into a handwriting animation. Tegaki extracts pen strokes from a font's outlines into a bundle that its renderer draws stroke by stroke.`,
+    stroke
+      ? `I'm using Tegaki (${REPO}) to animate the stroke font **${family}**: a single-line font made of pen strokes, not outlines, so nothing is extracted — its strokes go into the bundle as they are (\`--stroke-font\`), and Tegaki makes a font file from them for the text layout.`
+      : `I'm using Tegaki (${REPO}) to turn the font **${family}** into a handwriting animation. Tegaki extracts pen strokes from a font's outlines into a bundle that its renderer draws stroke by stroke.`,
   );
 
   out.push('', '## Goal', '', GOAL_TEXT[goal]);
   if (note) out.push('', `In my words: ${note}`);
 
   out.push('', '## Font', '');
-  out.push(font?.fileName ? `- ${family}: a local file (\`${font.fileName}\`), not from Google Fonts` : `- ${family} (Google Fonts)`);
+  out.push(
+    stroke
+      ? `- ${family}: a stroke font, ${stroke.url ? `from ${stroke.url}` : font?.fileName ? `the local file \`${font.fileName}\`` : 'drawn by hand in the studio (Export its dataset from Pipeline › References)'}`
+      : font?.fileName
+        ? `- ${family}: a local file (\`${font.fileName}\`), not from Google Fonts`
+        : `- ${family} (Google Fonts)`,
+  );
   if (font) {
     out.push(`- ${font.style} · ${font.unitsPerEm} units per em · ${font.lineCap} line caps`);
     out.push(`- OpenType features: ${font.features.length ? font.features.join(', ') : 'none'}`);
@@ -188,7 +199,10 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
         ? ` -c "${settings.chars.replaceAll('"', '\\"')}"`
         : ' -c "<chars>"';
   const source = font?.fileName ? ` --font-file ${font.fileName}` : '';
-  const cmd = `bun start generate "${family}"${source}${chars} -p ${settings.pipeline}${flags.length ? ` ${flags.join(' ')}` : ''} -o <output-dir>`;
+  const pen = settings.penWidth !== URL_DEFAULTS.penWidth ? ` --pen-width ${settings.penWidth}` : '';
+  const cmd = stroke
+    ? `bun start generate --stroke-font ${font?.fileName ?? '<font.svg>'}${chars}${pen} -o <output-dir>`
+    : `bun start generate "${family}"${source}${chars} -p ${settings.pipeline}${flags.length ? ` ${flags.join(' ')}` : ''} -o <output-dir>`;
   out.push(
     `- To build the bundle, use Export → Download bundle in the studio, or clone the repo and run \`${cmd}\`. Every studio pipeline setting is a CLI flag.${
       charset.preset && charset.preset !== 'Latin'

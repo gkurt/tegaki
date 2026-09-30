@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TegakiBundle, TegakiRendererHandle, TimeControlProp } from 'tegaki';
-import { type ParsedFontInfo, parseFont } from 'tegaki-generator';
+import type { ParsedFontInfo } from 'tegaki-generator';
 import { createShowcasePlugins } from '../plugins/index.ts';
 import { parseUrlState } from '../url-state.ts';
-import { fetchFontFromCDN } from './font-cdn.ts';
+import { loadFontFamily } from './stroke-fonts.ts';
 import { TegakiTextPreview } from './TegakiTextPreview.tsx';
 import { buildEffects, buildTimingConfig } from './utils.ts';
 
@@ -49,13 +49,15 @@ export function StandaloneTextPreview() {
     let cancelled = false;
     (async () => {
       try {
-        const { primary, extra } = await fetchFontFromCDN(state.fontFamily);
+        const { info, buffer, extraBuffers } = await loadFontFamily(state.fontFamily, {
+          penWidth: state.penWidth,
+          drawingSpeed: state.options.drawingSpeed,
+          strokePause: state.options.strokePause,
+        });
         if (cancelled) return;
-        // Fontsource's subsets carry no name table, so the family is passed in.
-        const info = await parseFont(primary, extra.length > 0 ? extra : undefined, state.fontFamily);
         setFontInfo(info);
-        setFontBuffer(primary);
-        setExtraFontBuffers(extra.length > 0 ? extra : undefined);
+        setFontBuffer(buffer);
+        setExtraFontBuffers(extraBuffers);
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
       }
@@ -63,7 +65,7 @@ export function StandaloneTextPreview() {
     return () => {
       cancelled = true;
     };
-  }, [state.fontFamily]);
+  }, [state]);
 
   const effects = useMemo(() => buildEffects(state.effectsState, state.customEffects), [state.effectsState, state.customEffects]);
   const plugins = useMemo(() => createShowcasePlugins(state.plugins, state.pluginOptions), [state.plugins, state.pluginOptions]);

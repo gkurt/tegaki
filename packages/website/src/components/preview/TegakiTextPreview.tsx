@@ -233,7 +233,9 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   // references for 'auto'/'dataset' ordering, the straight-skeleton wasm),
   // so its char-keyed glyphs are built in an effect. `geoKey` covers every
   // input besides the glyph itself, the font included (see fontCacheId).
-  const geometry = pipeline === 'geometry';
+  // A stroke font's glyphs are its strokes as they are: no pipeline, no shaper.
+  const stroke = fontInfo.stroke;
+  const geometry = pipeline === 'geometry' && !stroke;
   const geoCache = useMemo(() => new Map<string, GeometryPipelineResult>(), []);
   const geoKey = useMemo(
     () => JSON.stringify([fontCacheId(fontInfo), geometryOptions, options.bezierTolerance]),
@@ -295,7 +297,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
   const [variantData, setVariantData] = useState<{ key: string; data: Record<string, TegakiGlyphData> } | null>(null);
   const variantShaper = useMemo(
     () =>
-      useShaper
+      useShaper && !stroke
         ? harfbuzzShaper({
             fontUrl,
             ...(extraFontUrls.length > 0 ? { extraFontUrls } : {}),
@@ -303,7 +305,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
             glyphDataById: {},
           } as unknown as TegakiBundle)
         : null,
-    [useShaper, fontUrl, extraFontUrls, enabledFeatures],
+    [useShaper, stroke, fontUrl, extraFontUrls, enabledFeatures],
   );
 
   // Spaced text is shaped without ligatures or contextual alternates, as the
@@ -441,7 +443,9 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     const optionsKey = `${fontCacheId(fontInfo)}:${JSON.stringify(options)}`;
 
     const seen = new Set<string>();
-    if (geometry) Object.assign(glyphData, geoGlyphs?.data);
+    if (stroke) {
+      for (const char of normalizedText) if (Object.hasOwn(stroke.glyphData, char)) glyphData[char] = stroke.glyphData[char]!;
+    } else if (geometry) Object.assign(glyphData, geoGlyphs?.data);
     else {
       for (const char of normalizedText) {
         if (seen.has(char) || char === ' ' || char === '\n') continue;
@@ -459,12 +463,15 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     }
 
     const hasVariants = Object.keys(variants).length > 0;
+    // A stroke font drawn with another pen is another font file: a family of
+    // its own keeps the browser from drawing the text layer with the last one.
+    const family = stroke ? `${fontInfo.family} ${fontCacheId(fontInfo)}` : fontInfo.family;
     return {
       version: BUNDLE_VERSION,
-      family: fontInfo.family,
-      lineCap: options.lineCap === 'auto' ? fontInfo.lineCap : options.lineCap,
+      family,
+      lineCap: stroke ? 'round' : options.lineCap === 'auto' ? fontInfo.lineCap : options.lineCap,
       fontUrl,
-      fontFaceCSS: `@font-face { font-family: '${fontInfo.family}'; src: url(${fontUrl}); }`,
+      fontFaceCSS: `@font-face { font-family: '${family}'; src: url(${fontUrl}); }`,
       unitsPerEm: fontInfo.unitsPerEm,
       ascender: fontInfo.ascender,
       descender: fontInfo.descender,
@@ -475,6 +482,7 @@ export const TegakiTextPreview = forwardRef<TegakiRendererHandle, TegakiTextPrev
     } satisfies TegakiBundle;
   }, [
     fontInfo,
+    stroke,
     fontUrl,
     extraFontUrls,
     extraFontRanges,

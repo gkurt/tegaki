@@ -176,6 +176,8 @@ const CASES: CrossBrowserCase[] = [
   { name: 'arabic-amiri-rtl', params: { f: 'Amiri', t: 'مرحبا بالعالم', fs: 96, w: 700, h: 240 }, direction: 'rtl' },
   { name: 'devanagari-tillana', params: { f: 'Tillana', t: 'नमस्ते हिन्दी', fs: 96, w: 800, h: 220 }, direction: 'ltr' },
   { name: 'japanese-klee-one', params: { f: 'Klee One', t: 'ひらがな山川', fs: 96, w: 700, h: 200 }, direction: 'ltr' },
+  // A stroke font: no outlines, laid out in the font synthesized from its strokes.
+  { name: 'stroke-font-hershey-sans', params: { f: 'Hershey Sans 1-stroke', t: 'Hello World', fs: 96, w: 800, h: 220 }, direction: 'ltr' },
   {
     // Glow is a blurred pass under the stroke; a rainbow gradient colors each stroke.
     name: 'effects-glow-rainbow',

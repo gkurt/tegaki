@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CHARSET_PRESETS } from 'tegaki-generator';
+import { STROKE_FONTS } from '../preview/stroke-fonts.ts';
 import type { UrlState } from '../url-state.ts';
 import { AGENT_GOALS, type AgentGoal, buildAgentPrompt } from './agent-prompt.ts';
 import { type CharsetInfo, fontHasChar } from './charsets.ts';
@@ -72,6 +73,7 @@ export function AgentPromptMenu({
             lineCap: info.lineCap,
             features: info.features,
             fileName: font?.fileName,
+            ...(info.stroke ? { stroke: { url: STROKE_FONTS.find((f) => f.name === info.family)?.url } } : {}),
           }
         : null,
       charset: {

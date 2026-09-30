@@ -9,9 +9,16 @@
 /** One glyph: pen strokes as [x, y] pairs, y-down, in pen order. */
 export type JhfStrokes = [number, number][][];
 
-/** Every glyph of a JHF file, in file order. */
-export function parseJhf(text: string): JhfStrokes[] {
-  const glyphs: JhfStrokes[] = [];
+/** One JHF glyph: its strokes and its left and right bearings (the advance is `right − left`). */
+export interface JhfGlyph {
+  left: number;
+  right: number;
+  strokes: JhfStrokes;
+}
+
+/** Every glyph of a JHF file with its bearings, in file order. */
+export function parseJhfGlyphs(text: string): JhfGlyph[] {
+  const glyphs: JhfGlyph[] = [];
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     const head = lines[i]!;
@@ -33,9 +40,14 @@ export function parseJhf(text: string): JhfStrokes[] {
       stroke.push([pair.charCodeAt(0) - 82, pair.charCodeAt(1) - 82]);
     }
     if (stroke.length > 0) strokes.push(stroke);
-    glyphs.push(strokes);
+    glyphs.push({ left: body.charCodeAt(0) - 82, right: body.charCodeAt(1) - 82, strokes });
   }
   return glyphs;
+}
+
+/** Every glyph of a JHF file, in file order. */
+export function parseJhf(text: string): JhfStrokes[] {
+  return parseJhfGlyphs(text).map((g) => g.strokes);
 }
 
 /** A JHF font's glyphs by the ASCII character each one draws (from the space, in order). */

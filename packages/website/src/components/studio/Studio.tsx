@@ -1,7 +1,7 @@
 import { zipSync } from 'fflate';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TegakiRendererHandle } from 'tegaki';
-import { CHARSET_PRESETS, enumerateFontChars, extractTegakiBundle, type PipelineResult } from 'tegaki-generator';
+import { CHARSET_PRESETS, enumerateFontChars, extractTegakiBundle, type PipelineResult, strokeFontBundle } from 'tegaki-generator';
 import { DEFAULT_EXAMPLE_FONT_TEXT, EXAMPLE_FONT_TEXTS, type Pipeline } from '../preview/constants.ts';
 import { strokeOrderProviders } from '../preview/stroke-order-providers.ts';
 import { defaultClipText } from '../url-state.ts';
@@ -48,7 +48,7 @@ export function Studio() {
   // the current set was edited by hand. Fonts restored from the URL keep the
   // URL's charset.
   const adoptRecommendedCharset = useRef(false);
-  const { font, loading, error, loadFamily, loadFile } = useFontLoader((loaded) => {
+  const { font, loading, error, loadFamily, loadFile, restroke } = useFontLoader((loaded) => {
     resultsCache.current.clear();
     set('fontFamily', loaded.info.family);
     // "All in font" follows the font: expand it to the new font's glyphs.
@@ -74,10 +74,24 @@ export function Studio() {
     if (isAll !== settings.allChars) set('allChars', isAll);
   }, [fontAllChars, settings.chars, settings.allChars, set]);
 
+  // How a stroke font is drawn: the pen, and the pipeline's pace.
+  const { penWidth } = settings;
+  const { drawingSpeed, strokePause } = settings.options;
+  const strokeOptions = useMemo(() => ({ penWidth, drawingSpeed, strokePause }), [penWidth, drawingSpeed, strokePause]);
+  const strokeOptionsRef = useRef(strokeOptions);
+  strokeOptionsRef.current = strokeOptions;
+  // A stroke font drawn with other options is built again.
+  useEffect(() => {
+    const drawn = font?.info.stroke?.options;
+    if (!drawn || (['penWidth', 'drawingSpeed', 'strokePause'] as const).every((k) => drawn[k] === strokeOptions[k])) return;
+    const id = setTimeout(() => restroke(strokeOptions), 150);
+    return () => clearTimeout(id);
+  }, [font, strokeOptions, restroke]);
+
   // Load the URL's font once on mount.
   const initialFamily = useRef(settings.fontFamily);
   useEffect(() => {
-    loadFamily(initialFamily.current);
+    loadFamily(initialFamily.current, strokeOptionsRef.current);
   }, [loadFamily]);
 
   // Switching pipelines carries Clip to text over to the new pipeline's default,
@@ -101,18 +115,22 @@ export function Studio() {
     if (!font) return;
     setBundleBusy(true);
     try {
-      const slug = font.info.family.toLowerCase().replace(/\s+/g, '-');
-      const bundle = await extractTegakiBundle({
-        fontBuffer: font.buffer,
-        fontFileName: `${slug}.ttf`,
-        chars: settings.chars,
-        options: settings.options,
-        extraFontBuffers: font.extraBuffers,
-        subset: false,
-        pipeline: settings.pipeline,
-        geometryOptions: settings.geometryOptions,
-        strokeOrderProviders: strokeOrderProviders(settings.geometryOptions),
-      });
+      const slug = font.info.family.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-');
+      const stroke = font.info.stroke;
+      // A stroke font's strokes go in as they are, beside the font made from them.
+      const bundle = stroke
+        ? strokeFontBundle(stroke.font, stroke.options, settings.chars)
+        : await extractTegakiBundle({
+            fontBuffer: font.buffer,
+            fontFileName: `${slug}.ttf`,
+            chars: settings.chars,
+            options: settings.options,
+            extraFontBuffers: font.extraBuffers,
+            subset: false,
+            pipeline: settings.pipeline,
+            geometryOptions: settings.geometryOptions,
+            strokeOrderProviders: strokeOrderProviders(settings.geometryOptions),
+          });
       const encoder = new TextEncoder();
       const zipFiles: Record<string, Uint8Array> = {};
       for (const file of bundle.files) {
@@ -180,12 +198,12 @@ export function Studio() {
               error={error}
               onPickFamily={(family, featured) => {
                 adoptRecommendedCharset.current = true;
-                loadFamily(family);
+                loadFamily(family, strokeOptions);
                 if (featured) set('previewText', EXAMPLE_FONT_TEXTS[family] ?? DEFAULT_EXAMPLE_FONT_TEXT);
               }}
               onPickFile={(file) => {
                 adoptRecommendedCharset.current = true;
-                loadFile(file);
+                loadFile(file, strokeOptions);
               }}
             />
           </div>

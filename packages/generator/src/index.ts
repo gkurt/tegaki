@@ -104,6 +104,17 @@ export { glyphToAnimatedSVG } from './processing/animated-svg.ts';
 export { isRtlChar, isRtlCodepoint } from './processing/rtl.ts';
 export { renderStage, STROKE_COLORS, type VisualizationStage } from './processing/visualize.ts';
 export {
+  DEFAULT_STROKE_FONT_OPTIONS,
+  parseStrokeFont,
+  type StrokeFontInfo,
+  strokeFontBundle,
+  strokeFontChars,
+  strokeFontGlyphData,
+  synthesizeStrokeFontFile,
+} from './stroke-font/bundle.ts';
+export { drawnStrokeFont, parseJhfFont, parseStrokeFontFile, parseSvgFont } from './stroke-font/parse.ts';
+export type { StrokeFont, StrokeFontGlyph, StrokeFontOptions } from './stroke-font/types.ts';
+export {
   DEFAULT_REFERENCE_DATASETS,
   isReferenceDatasetId,
   REFERENCE_DATASET_IDS,

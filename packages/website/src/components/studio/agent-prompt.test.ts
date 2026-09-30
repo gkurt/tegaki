@@ -97,6 +97,20 @@ describe('buildAgentPrompt', () => {
     expect(prompt).toContain('a local file');
   });
 
+  test('a stroke font is generated from its file with --stroke-font, its pen width a flag', () => {
+    const url = 'https://example.com/EMSAllure.svg';
+    const prompt = buildAgentPrompt(
+      input(
+        { font: { family: 'EMS Allure', style: 'Regular', unitsPerEm: 1000, lineCap: 'round', features: [], stroke: { url } } },
+        { penWidth: 0.1 },
+      ),
+    );
+    expect(prompt).toContain('the stroke font **EMS Allure**');
+    expect(prompt).toContain(`- EMS Allure: a stroke font, from ${url}`);
+    expect(prompt).toContain('bun start generate --stroke-font <font.svg> --pen-width 0.1 -o <output-dir>');
+    expect(prompt).not.toContain('-p geometry');
+  });
+
   test('changed pipeline settings appear as CLI flags', () => {
     const prompt = buildAgentPrompt(input({}, { pipeline: 'raster', options: { ...DEFAULT_OPTIONS, resolution: 600 } }));
     expect(prompt).toContain('-p raster --resolution 600');

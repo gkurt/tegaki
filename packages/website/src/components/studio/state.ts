@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { type ParsedFontInfo, parseFont } from 'tegaki-generator';
-import { fetchFontFromCDN } from '../preview/font-cdn.ts';
+import { type ParsedFontInfo, parseFont, parseStrokeFontFile, type StrokeFontOptions } from 'tegaki-generator';
+import { isStrokeFontFile, loadFontFamily, loadStrokeFont } from '../preview/stroke-fonts.ts';
 import { parseUrlState, syncUrlState, type UrlState } from '../url-state.ts';
 
 export type SetSetting = <K extends keyof UrlState>(key: K, value: UrlState[K] | ((prev: UrlState[K]) => UrlState[K])) => void;
@@ -64,20 +64,19 @@ export function useFontLoader(onLoaded: (font: LoadedFont) => void) {
     }
   }, []);
 
+  // A Google font, or a stroke font drawn as `strokeOptions` say (see stroke-fonts.ts).
   const loadFamily = useCallback(
-    (family: string) =>
-      run(async () => {
-        const { primary, extra } = await fetchFontFromCDN(family);
-        // Google Fonts' subsets carry no name table, so the family is passed in.
-        const info = await parseFont(primary, extra.length > 0 ? extra : undefined, family);
-        return { info, buffer: primary, extraBuffers: extra.length > 0 ? extra : undefined };
-      }),
+    (family: string, strokeOptions: Partial<StrokeFontOptions>) => run(() => loadFontFamily(family, strokeOptions)),
     [run],
   );
 
+  // A font file, or a stroke font's (an SVG font, a JHF file, a drawn dataset).
   const loadFile = useCallback(
-    (file: File) =>
+    (file: File, strokeOptions: Partial<StrokeFontOptions>) =>
       run(async () => {
+        if (isStrokeFontFile(file.name)) {
+          return { ...(await loadStrokeFont(parseStrokeFontFile(await file.text(), file.name), strokeOptions)), fileName: file.name };
+        }
         const buffer = await file.arrayBuffer();
         const info = await parseFont(buffer);
         return { info, buffer, extraBuffers: undefined, fileName: file.name };
@@ -85,7 +84,23 @@ export function useFontLoader(onLoaded: (font: LoadedFont) => void) {
     [run],
   );
 
-  return { font, loading, error, loadFamily, loadFile };
+  // The loaded stroke font again, drawn with other options (a new pen width).
+  const restroke = useCallback(
+    (strokeOptions: Partial<StrokeFontOptions>) => {
+      const current = fontRef.current;
+      const stroke = current?.info.stroke;
+      if (!current || !stroke) return;
+      run(async () => ({
+        ...(await loadStrokeFont(stroke.font, strokeOptions)),
+        ...(current.fileName ? { fileName: current.fileName } : {}),
+      }));
+    },
+    [run],
+  );
+  const fontRef = useRef(font);
+  fontRef.current = font;
+
+  return { font, loading, error, loadFamily, loadFile, restroke };
 }
 
 type Theme = 'light' | 'dark';

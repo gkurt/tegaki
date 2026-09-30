@@ -82,360 +82,412 @@ export function PipelinePanel({
 
   return (
     <>
-      <Section
-        title="Pipeline"
-        defaultOpen={false}
-        modified={pipeline !== URL_DEFAULTS.pipeline || differs(options, SHARED_KEYS)}
-        onReset={() => {
-          if (pipeline !== URL_DEFAULTS.pipeline) onPipelineChange(URL_DEFAULTS.pipeline);
-          set('options', (o) => resetKeys(o, SHARED_KEYS));
-        }}
-      >
-        <Segmented
-          value={pipeline}
-          onChange={onPipelineChange}
-          className="w-full [&>button]:flex-1"
-          options={[
-            { value: 'geometry', label: 'Geometry' },
-            { value: 'raster', label: 'Raster' },
-          ]}
-        />
-        <Hint>{PIPELINE_HINTS[pipeline]}</Hint>
-        <DialScope className="mt-1 flex flex-col gap-1.5">
-          <SelectControl
-            label="Line cap"
-            value={options.lineCap}
-            options={[
-              { value: 'auto', label: 'Auto' },
-              { value: 'round', label: 'Round' },
-              { value: 'butt', label: 'Butt' },
-              { value: 'square', label: 'Square' },
-            ]}
-            onChange={(v) => opt('lineCap', v as LineCap | 'auto')}
-          />
-          <Slider
-            label="Bezier tolerance"
-            value={options.bezierTolerance}
-            min={0.1}
-            max={5}
-            step={0.1}
-            onChange={(v) => opt('bezierTolerance', v)}
-          />
-        </DialScope>
-      </Section>
-
-      {pipeline === 'geometry' ? (
+      {fontInfo?.stroke && (
         <Section
-          title="Geometry"
-          defaultOpen={false}
-          modified={geoModified}
-          onReset={() => set('geometryOptions', (g) => ({ ...DEFAULT_GEOMETRY_OPTIONS, referenceDatasets: g.referenceDatasets }))}
+          title="Stroke font"
+          modified={
+            settings.penWidth !== URL_DEFAULTS.penWidth ||
+            options.drawingSpeed !== DEFAULT_OPTIONS.drawingSpeed ||
+            options.strokePause !== DEFAULT_OPTIONS.strokePause
+          }
+          onReset={() => {
+            set('penWidth', URL_DEFAULTS.penWidth);
+            set('options', (o) => resetKeys(o, ['drawingSpeed', 'strokePause']));
+          }}
         >
           <DialScope className="flex flex-col gap-1.5">
-            <SelectControl
-              label="Extraction"
-              value={geo.extraction}
-              options={[
-                { value: 'ink-graph', label: 'Ink graph' },
-                { value: 'partition', label: 'Partition' },
-              ]}
-              onChange={(v) => geoOpt('extraction', v as GeometryOptions['extraction'])}
-            />
-            {geo.extraction === 'partition' && (
-              <SelectControl
-                label="Medial axis"
-                value={geo.medialMethod}
-                options={[
-                  { value: 'chain', label: 'Chain' },
-                  { value: 'voronoi', label: 'Voronoi' },
-                  { value: 'straight-skeleton', label: 'Straight skeleton' },
-                ]}
-                onChange={(v) => geoOpt('medialMethod', v as GeometryOptions['medialMethod'])}
-              />
-            )}
-            <SelectControl
-              label="Stroke order"
-              value={geo.strokeOrder}
-              options={[
-                { value: 'auto', label: 'Auto' },
-                { value: 'dataset', label: 'Dataset' },
-                { value: 'heuristic', label: 'Heuristic' },
-              ]}
-              onChange={(v) => geoOpt('strokeOrder', v as GeometryOptions['strokeOrder'])}
-            />
-            <SelectControl
-              label="Han order"
-              value={geo.hanLocale}
-              options={[
-                { value: 'ja', label: 'Japanese (KanjiVG)' },
-                { value: 'zh', label: 'Chinese (Make Me a Hanzi)' },
-              ]}
-              onChange={(v) => geoOpt('hanLocale', v as GeometryOptions['hanLocale'])}
-            />
-            {geo.extraction === 'ink-graph' ? (
-              <>
-                <Slider
-                  label="Ink sample step"
-                  value={geo.inkSampleRatio}
-                  min={0.002}
-                  max={0.02}
-                  step={0.001}
-                  unit="em"
-                  onChange={(v) => geoOpt('inkSampleRatio', v)}
-                />
-                <Slider
-                  label="Spur tolerance"
-                  value={geo.inkSpurTolerance}
-                  min={0}
-                  max={1.5}
-                  step={0.05}
-                  unit="r"
-                  onChange={(v) => geoOpt('inkSpurTolerance', v)}
-                />
-                <Slider
-                  label="Junction reach"
-                  value={geo.inkJunctionReach}
-                  min={0.3}
-                  max={2}
-                  step={0.1}
-                  unit="r"
-                  onChange={(v) => geoOpt('inkJunctionReach', v)}
-                />
-                <Toggle label="Absorb serifs" checked={geo.inkSerifs} onChange={(v) => geoOpt('inkSerifs', v)} />
-              </>
-            ) : (
-              <>
-                <Slider
-                  label="Corner angle"
-                  value={geo.cornerAngleThresholdDeg}
-                  min={10}
-                  max={90}
-                  step={1}
-                  unit="°"
-                  onChange={(v) => geoOpt('cornerAngleThresholdDeg', v)}
-                />
-                <Slider
-                  label="Corner window"
-                  value={geo.cornerWindowRatio}
-                  min={0.005}
-                  max={0.08}
-                  step={0.005}
-                  unit="em"
-                  onChange={(v) => geoOpt('cornerWindowRatio', v)}
-                />
-                <Slider
-                  label="Cut align tolerance"
-                  value={geo.cutAlignToleranceDeg}
-                  min={10}
-                  max={80}
-                  step={1}
-                  unit="°"
-                  onChange={(v) => geoOpt('cutAlignToleranceDeg', v)}
-                />
-                <Slider
-                  label="Max cut length"
-                  value={geo.maxCutLengthFactor}
-                  min={1}
-                  max={6}
-                  step={0.1}
-                  unit="w"
-                  onChange={(v) => geoOpt('maxCutLengthFactor', v)}
-                />
-                <Slider
-                  label="Lobe extent"
-                  value={geo.junctionCompactness}
-                  min={0.5}
-                  max={4}
-                  step={0.1}
-                  unit="×"
-                  onChange={(v) => geoOpt('junctionCompactness', v)}
-                />
-              </>
-            )}
             <Slider
-              label="Continuation bend"
-              value={geo.continuationMaxBendDeg}
-              min={20}
-              max={120}
-              step={5}
-              unit="°"
-              onChange={(v) => geoOpt('continuationMaxBendDeg', v)}
-            />
-            <Slider
-              label="Axis spacing"
-              value={geo.resampleSpacingRatio}
-              min={0.005}
-              max={0.06}
+              label="Pen width"
+              value={settings.penWidth}
+              min={0.01}
+              max={0.2}
               step={0.005}
               unit="em"
-              onChange={(v) => geoOpt('resampleSpacingRatio', v)}
+              onChange={(v) => set('penWidth', v)}
+            />
+            <Slider
+              label="Drawing speed"
+              value={options.drawingSpeed}
+              min={500}
+              max={10000}
+              step={100}
+              onChange={(v) => opt('drawingSpeed', v)}
+            />
+            <Slider
+              label="Stroke pause"
+              value={options.strokePause}
+              min={0}
+              max={1}
+              step={0.01}
+              unit="s"
+              onChange={(v) => opt('strokePause', v)}
             />
           </DialScope>
           <Hint>
-            Units: em = fraction of the em square, r = stroke radius, w = stroke width. The ink-graph extraction is the default; partition
-            is the earlier face-partition prototype.
+            {fontInfo.family} is made of pen strokes, so there's nothing to extract: its strokes are drawn as they are, in the font's own
+            order and direction, with this pen. The font the text is laid out in is made from them.
           </Hint>
-        </Section>
-      ) : (
-        <Section
-          title="Raster"
-          defaultOpen={false}
-          modified={differs(options, RASTER_KEYS)}
-          onReset={() => set('options', (o) => resetKeys(o, RASTER_KEYS))}
-        >
-          <DialScope className="flex flex-col gap-1.5">
-            <Slider
-              label="Resolution"
-              value={options.resolution}
-              min={50}
-              max={800}
-              step={10}
-              unit="px"
-              onChange={(v) => opt('resolution', v)}
-            />
-            <SelectControl
-              label="Skeleton"
-              value={options.skeletonMethod}
-              options={SKELETON_METHODS}
-              onChange={(v) => opt('skeletonMethod', v as SkeletonMethod)}
-            />
-            <SelectControl
-              label="Distance transform"
-              value={options.dtMethod}
-              options={[
-                { value: 'chamfer', label: 'Chamfer' },
-                { value: 'euclidean', label: 'Euclidean' },
-              ]}
-              onChange={(v) => opt('dtMethod', v as 'euclidean' | 'chamfer')}
-            />
-            <Folder title="Tracing" defaultOpen={false}>
-              <Slider
-                label="RDP tolerance"
-                value={options.rdpTolerance}
-                min={0.1}
-                max={10}
-                step={0.1}
-                onChange={(v) => opt('rdpTolerance', v)}
-              />
-              <Slider
-                label="Spur length"
-                value={options.spurLengthRatio}
-                min={0}
-                max={0.3}
-                step={0.01}
-                onChange={(v) => opt('spurLengthRatio', v)}
-              />
-              <Slider
-                label="Merge threshold"
-                value={options.mergeThresholdRatio}
-                min={0}
-                max={0.3}
-                step={0.01}
-                onChange={(v) => opt('mergeThresholdRatio', v)}
-              />
-              <Slider
-                label="Trace lookback"
-                value={options.traceLookback}
-                min={1}
-                max={30}
-                step={1}
-                onChange={(v) => opt('traceLookback', v)}
-              />
-              <Slider
-                label="Curvature bias"
-                value={options.curvatureBias}
-                min={0}
-                max={2}
-                step={0.1}
-                onChange={(v) => opt('curvatureBias', v)}
-              />
-              <Slider
-                label="Junction cleanup"
-                value={options.junctionCleanupIterations}
-                min={0}
-                max={20}
-                step={1}
-                onChange={(v) => opt('junctionCleanupIterations', v)}
-              />
-              {options.skeletonMethod === 'thin' && (
-                <Slider
-                  label="Thin iterations"
-                  value={options.thinMaxIterations}
-                  min={1}
-                  max={100}
-                  step={1}
-                  onChange={(v) => opt('thinMaxIterations', v)}
-                />
-              )}
-              {options.skeletonMethod === 'voronoi' && (
-                <Slider
-                  label="Voronoi sampling"
-                  value={options.voronoiSamplingInterval}
-                  min={1}
-                  max={10}
-                  step={0.5}
-                  onChange={(v) => opt('voronoiSamplingInterval', v)}
-                />
-              )}
-            </Folder>
-            <Folder title="Timing" defaultOpen={false}>
-              <Slider
-                label="Drawing speed"
-                value={options.drawingSpeed}
-                min={500}
-                max={10000}
-                step={100}
-                onChange={(v) => opt('drawingSpeed', v)}
-              />
-              <Slider
-                label="Stroke pause"
-                value={options.strokePause}
-                min={0}
-                max={1}
-                step={0.01}
-                unit="s"
-                onChange={(v) => opt('strokePause', v)}
-              />
-            </Folder>
-          </DialScope>
         </Section>
       )}
 
-      {pipeline === 'geometry' && (
-        <Section
-          title="References"
-          defaultOpen={false}
-          modified={datasetsModified}
-          onReset={() => geoOpt('referenceDatasets', [...DEFAULT_GEOMETRY_OPTIONS.referenceDatasets])}
-        >
-          <div className="flex flex-wrap gap-1">
-            {REFERENCE_DATASETS.map((d) => {
-              const on = geo.referenceDatasets.includes(d.id);
-              return (
-                <Chip
-                  key={d.id}
-                  selected={on}
-                  title={`${d.description} · ${d.license}`}
-                  onClick={() =>
-                    geoOpt(
-                      'referenceDatasets',
-                      REFERENCE_DATASET_IDS.filter((id) => (id === d.id ? !on : geo.referenceDatasets.includes(id))),
-                    )
-                  }
-                >
-                  {d.name}
-                </Chip>
-              );
-            })}
-          </div>
-          <DrawnDatasets />
-          <Hint>
-            The stroke-order datasets consulted. Each one that has a character offers its strokes as a variant, and the one that fits the
-            font's ink best orders it; switch a hand off to keep it from winning. Draw your own in Glyphs › Reference: a drawing orders its
-            character ahead of the built-in datasets. Drawn datasets are kept in this browser — Download one to keep it, or to use it with{' '}
-            <code>tegaki generate --reference-file</code>.
-          </Hint>
-        </Section>
+      {!fontInfo?.stroke && (
+        <>
+          <Section
+            title="Pipeline"
+            defaultOpen={false}
+            modified={pipeline !== URL_DEFAULTS.pipeline || differs(options, SHARED_KEYS)}
+            onReset={() => {
+              if (pipeline !== URL_DEFAULTS.pipeline) onPipelineChange(URL_DEFAULTS.pipeline);
+              set('options', (o) => resetKeys(o, SHARED_KEYS));
+            }}
+          >
+            <Segmented
+              value={pipeline}
+              onChange={onPipelineChange}
+              className="w-full [&>button]:flex-1"
+              options={[
+                { value: 'geometry', label: 'Geometry' },
+                { value: 'raster', label: 'Raster' },
+              ]}
+            />
+            <Hint>{PIPELINE_HINTS[pipeline]}</Hint>
+            <DialScope className="mt-1 flex flex-col gap-1.5">
+              <SelectControl
+                label="Line cap"
+                value={options.lineCap}
+                options={[
+                  { value: 'auto', label: 'Auto' },
+                  { value: 'round', label: 'Round' },
+                  { value: 'butt', label: 'Butt' },
+                  { value: 'square', label: 'Square' },
+                ]}
+                onChange={(v) => opt('lineCap', v as LineCap | 'auto')}
+              />
+              <Slider
+                label="Bezier tolerance"
+                value={options.bezierTolerance}
+                min={0.1}
+                max={5}
+                step={0.1}
+                onChange={(v) => opt('bezierTolerance', v)}
+              />
+            </DialScope>
+          </Section>
+
+          {pipeline === 'geometry' ? (
+            <Section
+              title="Geometry"
+              defaultOpen={false}
+              modified={geoModified}
+              onReset={() => set('geometryOptions', (g) => ({ ...DEFAULT_GEOMETRY_OPTIONS, referenceDatasets: g.referenceDatasets }))}
+            >
+              <DialScope className="flex flex-col gap-1.5">
+                <SelectControl
+                  label="Extraction"
+                  value={geo.extraction}
+                  options={[
+                    { value: 'ink-graph', label: 'Ink graph' },
+                    { value: 'partition', label: 'Partition' },
+                  ]}
+                  onChange={(v) => geoOpt('extraction', v as GeometryOptions['extraction'])}
+                />
+                {geo.extraction === 'partition' && (
+                  <SelectControl
+                    label="Medial axis"
+                    value={geo.medialMethod}
+                    options={[
+                      { value: 'chain', label: 'Chain' },
+                      { value: 'voronoi', label: 'Voronoi' },
+                      { value: 'straight-skeleton', label: 'Straight skeleton' },
+                    ]}
+                    onChange={(v) => geoOpt('medialMethod', v as GeometryOptions['medialMethod'])}
+                  />
+                )}
+                <SelectControl
+                  label="Stroke order"
+                  value={geo.strokeOrder}
+                  options={[
+                    { value: 'auto', label: 'Auto' },
+                    { value: 'dataset', label: 'Dataset' },
+                    { value: 'heuristic', label: 'Heuristic' },
+                  ]}
+                  onChange={(v) => geoOpt('strokeOrder', v as GeometryOptions['strokeOrder'])}
+                />
+                <SelectControl
+                  label="Han order"
+                  value={geo.hanLocale}
+                  options={[
+                    { value: 'ja', label: 'Japanese (KanjiVG)' },
+                    { value: 'zh', label: 'Chinese (Make Me a Hanzi)' },
+                  ]}
+                  onChange={(v) => geoOpt('hanLocale', v as GeometryOptions['hanLocale'])}
+                />
+                {geo.extraction === 'ink-graph' ? (
+                  <>
+                    <Slider
+                      label="Ink sample step"
+                      value={geo.inkSampleRatio}
+                      min={0.002}
+                      max={0.02}
+                      step={0.001}
+                      unit="em"
+                      onChange={(v) => geoOpt('inkSampleRatio', v)}
+                    />
+                    <Slider
+                      label="Spur tolerance"
+                      value={geo.inkSpurTolerance}
+                      min={0}
+                      max={1.5}
+                      step={0.05}
+                      unit="r"
+                      onChange={(v) => geoOpt('inkSpurTolerance', v)}
+                    />
+                    <Slider
+                      label="Junction reach"
+                      value={geo.inkJunctionReach}
+                      min={0.3}
+                      max={2}
+                      step={0.1}
+                      unit="r"
+                      onChange={(v) => geoOpt('inkJunctionReach', v)}
+                    />
+                    <Toggle label="Absorb serifs" checked={geo.inkSerifs} onChange={(v) => geoOpt('inkSerifs', v)} />
+                  </>
+                ) : (
+                  <>
+                    <Slider
+                      label="Corner angle"
+                      value={geo.cornerAngleThresholdDeg}
+                      min={10}
+                      max={90}
+                      step={1}
+                      unit="°"
+                      onChange={(v) => geoOpt('cornerAngleThresholdDeg', v)}
+                    />
+                    <Slider
+                      label="Corner window"
+                      value={geo.cornerWindowRatio}
+                      min={0.005}
+                      max={0.08}
+                      step={0.005}
+                      unit="em"
+                      onChange={(v) => geoOpt('cornerWindowRatio', v)}
+                    />
+                    <Slider
+                      label="Cut align tolerance"
+                      value={geo.cutAlignToleranceDeg}
+                      min={10}
+                      max={80}
+                      step={1}
+                      unit="°"
+                      onChange={(v) => geoOpt('cutAlignToleranceDeg', v)}
+                    />
+                    <Slider
+                      label="Max cut length"
+                      value={geo.maxCutLengthFactor}
+                      min={1}
+                      max={6}
+                      step={0.1}
+                      unit="w"
+                      onChange={(v) => geoOpt('maxCutLengthFactor', v)}
+                    />
+                    <Slider
+                      label="Lobe extent"
+                      value={geo.junctionCompactness}
+                      min={0.5}
+                      max={4}
+                      step={0.1}
+                      unit="×"
+                      onChange={(v) => geoOpt('junctionCompactness', v)}
+                    />
+                  </>
+                )}
+                <Slider
+                  label="Continuation bend"
+                  value={geo.continuationMaxBendDeg}
+                  min={20}
+                  max={120}
+                  step={5}
+                  unit="°"
+                  onChange={(v) => geoOpt('continuationMaxBendDeg', v)}
+                />
+                <Slider
+                  label="Axis spacing"
+                  value={geo.resampleSpacingRatio}
+                  min={0.005}
+                  max={0.06}
+                  step={0.005}
+                  unit="em"
+                  onChange={(v) => geoOpt('resampleSpacingRatio', v)}
+                />
+              </DialScope>
+              <Hint>
+                Units: em = fraction of the em square, r = stroke radius, w = stroke width. The ink-graph extraction is the default;
+                partition is the earlier face-partition prototype.
+              </Hint>
+            </Section>
+          ) : (
+            <Section
+              title="Raster"
+              defaultOpen={false}
+              modified={differs(options, RASTER_KEYS)}
+              onReset={() => set('options', (o) => resetKeys(o, RASTER_KEYS))}
+            >
+              <DialScope className="flex flex-col gap-1.5">
+                <Slider
+                  label="Resolution"
+                  value={options.resolution}
+                  min={50}
+                  max={800}
+                  step={10}
+                  unit="px"
+                  onChange={(v) => opt('resolution', v)}
+                />
+                <SelectControl
+                  label="Skeleton"
+                  value={options.skeletonMethod}
+                  options={SKELETON_METHODS}
+                  onChange={(v) => opt('skeletonMethod', v as SkeletonMethod)}
+                />
+                <SelectControl
+                  label="Distance transform"
+                  value={options.dtMethod}
+                  options={[
+                    { value: 'chamfer', label: 'Chamfer' },
+                    { value: 'euclidean', label: 'Euclidean' },
+                  ]}
+                  onChange={(v) => opt('dtMethod', v as 'euclidean' | 'chamfer')}
+                />
+                <Folder title="Tracing" defaultOpen={false}>
+                  <Slider
+                    label="RDP tolerance"
+                    value={options.rdpTolerance}
+                    min={0.1}
+                    max={10}
+                    step={0.1}
+                    onChange={(v) => opt('rdpTolerance', v)}
+                  />
+                  <Slider
+                    label="Spur length"
+                    value={options.spurLengthRatio}
+                    min={0}
+                    max={0.3}
+                    step={0.01}
+                    onChange={(v) => opt('spurLengthRatio', v)}
+                  />
+                  <Slider
+                    label="Merge threshold"
+                    value={options.mergeThresholdRatio}
+                    min={0}
+                    max={0.3}
+                    step={0.01}
+                    onChange={(v) => opt('mergeThresholdRatio', v)}
+                  />
+                  <Slider
+                    label="Trace lookback"
+                    value={options.traceLookback}
+                    min={1}
+                    max={30}
+                    step={1}
+                    onChange={(v) => opt('traceLookback', v)}
+                  />
+                  <Slider
+                    label="Curvature bias"
+                    value={options.curvatureBias}
+                    min={0}
+                    max={2}
+                    step={0.1}
+                    onChange={(v) => opt('curvatureBias', v)}
+                  />
+                  <Slider
+                    label="Junction cleanup"
+                    value={options.junctionCleanupIterations}
+                    min={0}
+                    max={20}
+                    step={1}
+                    onChange={(v) => opt('junctionCleanupIterations', v)}
+                  />
+                  {options.skeletonMethod === 'thin' && (
+                    <Slider
+                      label="Thin iterations"
+                      value={options.thinMaxIterations}
+                      min={1}
+                      max={100}
+                      step={1}
+                      onChange={(v) => opt('thinMaxIterations', v)}
+                    />
+                  )}
+                  {options.skeletonMethod === 'voronoi' && (
+                    <Slider
+                      label="Voronoi sampling"
+                      value={options.voronoiSamplingInterval}
+                      min={1}
+                      max={10}
+                      step={0.5}
+                      onChange={(v) => opt('voronoiSamplingInterval', v)}
+                    />
+                  )}
+                </Folder>
+                <Folder title="Timing" defaultOpen={false}>
+                  <Slider
+                    label="Drawing speed"
+                    value={options.drawingSpeed}
+                    min={500}
+                    max={10000}
+                    step={100}
+                    onChange={(v) => opt('drawingSpeed', v)}
+                  />
+                  <Slider
+                    label="Stroke pause"
+                    value={options.strokePause}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    unit="s"
+                    onChange={(v) => opt('strokePause', v)}
+                  />
+                </Folder>
+              </DialScope>
+            </Section>
+          )}
+
+          {pipeline === 'geometry' && (
+            <Section
+              title="References"
+              defaultOpen={false}
+              modified={datasetsModified}
+              onReset={() => geoOpt('referenceDatasets', [...DEFAULT_GEOMETRY_OPTIONS.referenceDatasets])}
+            >
+              <div className="flex flex-wrap gap-1">
+                {REFERENCE_DATASETS.map((d) => {
+                  const on = geo.referenceDatasets.includes(d.id);
+                  return (
+                    <Chip
+                      key={d.id}
+                      selected={on}
+                      title={`${d.description} · ${d.license}`}
+                      onClick={() =>
+                        geoOpt(
+                          'referenceDatasets',
+                          REFERENCE_DATASET_IDS.filter((id) => (id === d.id ? !on : geo.referenceDatasets.includes(id))),
+                        )
+                      }
+                    >
+                      {d.name}
+                    </Chip>
+                  );
+                })}
+              </div>
+              <DrawnDatasets />
+              <Hint>
+                The stroke-order datasets consulted. Each one that has a character offers its strokes as a variant, and the one that fits
+                the font's ink best orders it; switch a hand off to keep it from winning. Draw your own in Glyphs › Reference: a drawing
+                orders its character ahead of the built-in datasets. Drawn datasets are kept in this browser — Download one to keep it, or
+                to use it with <code>tegaki generate --reference-file</code>.
+              </Hint>
+            </Section>
+          )}
+        </>
       )}
 
       <Section title="Characters" modified={settings.chars !== URL_DEFAULTS.chars} onReset={() => set('chars', URL_DEFAULTS.chars)}>

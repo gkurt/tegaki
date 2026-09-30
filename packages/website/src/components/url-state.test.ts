@@ -255,3 +255,13 @@ describe('demo plugins', () => {
     expect(buildUrlParams({ ...state, plugins: [] }).has('po')).toBe(false);
   });
 });
+
+describe('stroke font pen width', () => {
+  test('a pen width round-trips as pen; the default stays out of the URL; nonsense is ignored', () => {
+    const params = buildUrlParams({ ...URL_DEFAULTS, penWidth: 0.1 });
+    expect(params.get('pen')).toBe('0.1');
+    expect(parseUrlState(params).penWidth).toBe(0.1);
+    expect(buildUrlParams(URL_DEFAULTS).has('pen')).toBe(false);
+    expect(parseUrlState('?pen=5').penWidth).toBe(URL_DEFAULTS.penWidth);
+  });
+});

@@ -29,6 +29,8 @@ import { enumerateFontChars } from '../font/parse.ts';
 import { initStraightSkeleton } from '../geometry/face-straight-skeleton.ts';
 import type { GeometryOptions } from '../geometry/types.ts';
 import { DEFAULT_GEOMETRY_OPTIONS } from '../geometry/types.ts';
+import { DEFAULT_STROKE_FONT_OPTIONS, strokeFontBundle } from '../stroke-font/bundle.ts';
+import { parseStrokeFontFile } from '../stroke-font/parse.ts';
 import { createDrawnDatasetProvider, parseDrawnDataset } from '../stroke-order/drawn.ts';
 import { createKanjiVGProvider } from '../stroke-order/kanjivg.ts';
 import { createKanjiVGFileLoader } from '../stroke-order/kanjivg-fetch.ts';
@@ -120,10 +122,56 @@ export const tegakiProgram = createPadrone('tegaki')
         description:
           'Downloads a font (or reads --font-file), extracts glyph outlines, computes skeletons and stroke order, then writes a JSON file.',
       })
-      .arguments(generateArgsSchema.extend({ referenceFile: referenceFileArg }), { positional: ['family'] })
+      .arguments(
+        generateArgsSchema.extend({
+          referenceFile: referenceFileArg,
+          strokeFont: z
+            .string()
+            .optional()
+            .describe(
+              'Make the bundle from a stroke font instead — a single-line SVG font, a Hershey JHF file or a drawn stroke-order dataset (.strokes.json): its strokes as they are, no pipeline',
+            ),
+          penWidth: z
+            .number()
+            .default(DEFAULT_STROKE_FONT_OPTIONS.penWidth)
+            .describe('Stroke font: the pen width, as a fraction of the em'),
+        }),
+        { positional: ['family'] },
+      )
       .action(async (args, ctx) => {
         const progress = ctx.context.progress;
-        const { family: familyArg, fontFile, fullFont, output, force, debug, chars, pipeline, referenceFile, ...pipelineOptions } = args;
+        const {
+          family: familyArg,
+          fontFile,
+          fullFont,
+          output,
+          force,
+          debug,
+          chars,
+          pipeline,
+          referenceFile,
+          strokeFont,
+          penWidth,
+          ...pipelineOptions
+        } = args;
+
+        if (strokeFont) {
+          progress?.update(`Reading stroke font "${strokeFont}"...`);
+          const font = parseStrokeFontFile(await Bun.file(strokeFont).text(), strokeFont);
+          const { files, glyphCount } = strokeFontBundle(
+            font,
+            { penWidth, drawingSpeed: pipelineOptions.drawingSpeed, strokePause: pipelineOptions.strokePause },
+            typeof chars === 'string' ? chars : undefined,
+          );
+          const outputDir = output ?? `output/${font.family.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-')}`;
+          for (const file of files) {
+            const filePath = join(outputDir, file.path);
+            mkdirSync(dirname(filePath), { recursive: true });
+            await Bun.write(filePath, file.content);
+          }
+          progress?.succeed(`Wrote ${glyphCount} glyphs of the stroke font ${font.family}. Output: ${outputDir}`);
+          return { outputDir, processed: glyphCount, skipped: 0, variants: 0 };
+        }
 
         // chars: true → all glyphs in the font (skip &text= subsetting)
         // chars: false → DEFAULT_CHARS

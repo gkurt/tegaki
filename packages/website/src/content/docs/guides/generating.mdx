@@ -33,6 +33,18 @@ Rasterizes the glyph and thins it to a skeleton:
 4. **Width**: a distance transform computes stroke width at each skeleton point
 5. **Stroke order**: groups polylines into connected components, sorts top-to-bottom/left-to-right
 
+### Stroke fonts (no pipeline)
+
+Some fonts are already pen strokes: [Hershey's plotter fonts](https://github.com/kamalmostafa/hershey-fonts), the single-line SVG fonts made for pen plotters and engravers ([Evil Mad Scientist's](https://gitlab.com/oskay/svg-fonts) Hershey and EMS faces, [Relief SingleLine](https://github.com/isdat-type/Relief-SingleLine)), or a stroke-order dataset you drew in the studio. Nothing is extracted from them: their strokes go into the bundle as they are, in the font's own order and direction, drawn with a round pen of the width you pick. Tegaki then makes a font file from the strokes (each glyph's outline is its strokes as the pen draws them, at the font's advance widths), so the renderer lays out, wraps and clips the text as it does for any bundle — every effect and plugin works on them.
+
+In the studio, pick one from **Single-line fonts** in the font picker (or upload an `.svg` font, a `.jhf` file or a `.strokes.json` dataset) and set the pen in **Pipeline → Stroke font**. From the CLI:
+
+```bash
+bun start generate --stroke-font EMSAllure.svg --pen-width 0.06 -o output/ems-allure
+```
+
+`-c` narrows the characters (default: every glyph in the font), and `--drawing-speed` / `--stroke-pause` time the strokes as for the pipelines. The font's credits and license, which single-line fonts carry in their metadata, are written beside the bundle as `LICENSE.txt`.
+
 ## Options
 
 | Option | Default | Description |

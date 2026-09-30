@@ -34,6 +34,7 @@ import { isRtlChar } from '../processing/rtl.ts';
 import { skeletonize } from '../processing/skeletonize/index.ts';
 import { orderStrokes } from '../processing/stroke-order.ts';
 import { computeInverseDistanceTransform } from '../processing/width.ts';
+import type { StrokeFontInfo } from '../stroke-font/bundle.ts';
 import { REFERENCE_DATASET_IDS, type ReferenceDatasetId } from '../stroke-order/datasets.ts';
 import { collectReferences } from '../stroke-order/providers.ts';
 import type { ReferenceGlyph, StrokeOrderProvider } from '../stroke-order/types.ts';
@@ -248,6 +249,11 @@ export interface ParsedFontInfo {
    * never has to re-run detection.
    */
   features: string[];
+  /**
+   * Set for a stroke font (stroke-font/): `font` is then the font synthesized
+   * from its strokes, and these are the strokes to draw — no pipeline runs.
+   */
+  stroke?: StrokeFontInfo;
 }
 
 // ── Bundle types ──────────────────────────────────────────────────────────
