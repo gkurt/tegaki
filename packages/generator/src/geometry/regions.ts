@@ -29,7 +29,7 @@
 // With no overlaps this yields exactly one region = all contours, so union
 // glyphs are unaffected.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { dist, pointInPolygon, signedArea } from './primitives.ts';
 import type { Contour } from './types.ts';
 

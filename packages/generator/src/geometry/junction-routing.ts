@@ -12,7 +12,7 @@
 // segment faces use. The result follows the junction's actual geometry — an
 // arc junction yields an arc path.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { axisBetweenRuns, axisBetweenRunsAroundHole, clampWidthsToBoundary, extractRuns, type WalkRun } from './medial.ts';
 import { dist, midpoint, polylineLength, segmentIntersection } from './primitives.ts';
 import type { AxisPoint, Face, JunctionInfo, ResolvedGeometryOptions, SegmentInfo } from './types.ts';

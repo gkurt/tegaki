@@ -7,7 +7,7 @@
 // distance-ordered) followed by junction cleanup, component restoration and
 // `traceAndSimplify`.
 
-import type { BBox, Point } from 'tegaki';
+import type { BBox, Point } from 'tegaki/internal';
 import type { SkeletonMethod } from '../../constants.ts';
 import type { RasterResult } from '../rasterize.ts';
 import { traceAndSimplify } from '../trace.ts';

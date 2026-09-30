@@ -28,10 +28,10 @@ const id = `vanilla-demo-${Math.random().toString(36).slice(2, 8)}`;
 ></script>
 
 <script>
-  import { globalGradientPlugin, glowPlugin, strokeGradientPlugin, TegakiEngine, taperPlugin, wobblePlugin } from 'tegaki/core';
+  import { globalGradientPlugin, glowPlugin, strokeGradientPlugin, TegakiEngine, taperPlugin } from 'tegaki/core';
   import type { TegakiBundle } from 'tegaki/core';
 
-  TegakiEngine.registerPlugin(glowPlugin, taperPlugin, wobblePlugin, strokeGradientPlugin, globalGradientPlugin);
+  TegakiEngine.registerPlugin(glowPlugin, taperPlugin, strokeGradientPlugin, globalGradientPlugin);
 
   let bundlePromise: Promise<TegakiBundle> | null = null;
   function getBundle(): Promise<TegakiBundle> {

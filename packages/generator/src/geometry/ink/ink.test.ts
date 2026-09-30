@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { buildContours } from '../contours.ts';
 import { pointInRegion } from '../primitives.ts';
 import type { AxisPoint } from '../types.ts';

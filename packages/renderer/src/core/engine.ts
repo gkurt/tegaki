@@ -553,7 +553,7 @@ export class TegakiEngine {
    * state and draw progress, its `path` (the ink as the canvas draws it, in
    * CSS px from the top-left of the text box), and for a started stroke the
    * pen at the end of its ink, `path.pointAt(progress)`: position, direction
-   * and width, wobble and taper included. A pure function of time, so it
+   * and width, variation and taper included. A pure function of time, so it
    * holds under controlled, uncontrolled and CSS time alike. Paths are the
    * same objects from frame to frame until the layout changes, so work
    * derived from one can be cached against it. Strokes of glyphs the layout
@@ -1738,7 +1738,7 @@ export class TegakiEngine {
         ink.minY = Math.min(ink.minY, glyphY + (bounds.minY + font.ascender) * scale - reach);
         ink.maxY = Math.max(ink.maxY, glyphY + (bounds.maxY + font.ascender) * scale + reach);
       }
-      // The ink as the plugins reshape it (a wobble moves it), and what they
+      // The ink as the plugins reshape it (a variation moves it), and what they
       // paint outside it (+1px for antialiasing).
       const pluginBox = this._pluginBounds(fontSize);
       if (pluginBox) {

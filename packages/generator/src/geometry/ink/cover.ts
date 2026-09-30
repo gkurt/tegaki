@@ -45,7 +45,7 @@
 // rings. Every alive branch is walked exactly once, so no ink the graph
 // represents can be dropped.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { dist, dot, normalize, pointInRegion, polylineLength, sub } from '../primitives.ts';
 import type { AxisPoint, Contour, GeoStroke } from '../types.ts';
 import { type InkBranch, type InkGraph, withFlicks } from './graph.ts';

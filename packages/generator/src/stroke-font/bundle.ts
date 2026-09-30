@@ -8,7 +8,8 @@
 // on it unchanged.
 
 import * as opentype from 'opentype.js';
-import type { Point, TegakiGlyphData } from 'tegaki';
+import type { TegakiGlyphData } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { type BundleFile, generateGlyphsModule, type ParsedFontInfo, parseFont } from '../commands/generate.ts';
 import { DRAWING_SPEED, STROKE_PAUSE } from '../constants.ts';
 import type { StrokeFont, StrokeFontOptions } from './types.ts';

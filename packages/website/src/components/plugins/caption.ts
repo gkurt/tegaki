@@ -1,6 +1,4 @@
-import { createPlugin } from '../core/createPlugin.ts';
-import type { StrokeTime } from '../lib/strokeTimeline.ts';
-import { type GroupableStroke, groupStrokes } from './groups.ts';
+import { createPlugin, type GroupableStroke, groupStrokes, type StrokeTime } from 'tegaki/core';
 
 /** When one word is spoken: from `start`, to `end` if known (else until the next word), in seconds. */
 export interface CaptionCue {

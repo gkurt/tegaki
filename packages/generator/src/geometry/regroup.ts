@@ -49,7 +49,7 @@
 // baseline. Reference geometry itself never enters the output strokes
 // (consultation-only license boundary, see stroke-order/types.ts).
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { matchStrokes, resamplePolyline } from '../stroke-order/match.ts';
 import { dist } from './primitives.ts';
 import type { AxisPoint, GeoStroke } from './types.ts';

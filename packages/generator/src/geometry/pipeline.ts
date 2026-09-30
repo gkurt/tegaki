@@ -7,7 +7,7 @@
 //   classify → per-segment medial axes → junction nodes → continuation
 //   matching → stroke assembly → order + timing.
 
-import type { BBox, Point } from 'tegaki';
+import type { BBox, Point } from 'tegaki/internal';
 import { DRAWING_SPEED, STROKE_PAUSE } from '../constants.ts';
 import type { RawGlyphData } from '../font/parse.ts';
 import { computePathBBox, flattenPath } from '../processing/bezier.ts';

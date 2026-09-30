@@ -12,7 +12,7 @@ import type { TegakiBundle, TegakiGlyphData } from '../types.ts';
 import { glowPlugin } from './glow.ts';
 import { globalGradientPlugin, strokeGradientPlugin } from './gradient.ts';
 import { taperPlugin } from './taper.ts';
-import { wobblePlugin } from './wobble.ts';
+import { variationPlugin } from './variation.ts';
 
 type Pt = [number, number, number];
 const linear = (t: number) => t;
@@ -103,18 +103,19 @@ describe('taper', () => {
   });
 });
 
-describe('wobble', () => {
+describe('a geometry plugin (variation)', () => {
   test('moves the ink, and the head moves with it', () => {
-    const [s] = placed([wobblePlugin({ amplitude: 4 })], 1, { x: 30, y: 40, scale: 1.5, ascender: 0, seed: 7 });
+    const [s] = placed([variationPlugin({ amount: 2 })], 1, { x: 30, y: 40, scale: 1.5, ascender: 0, seed: 7 });
     expect(s!.path.points.some((p, i) => p.y !== s!.rawPath.points[i]!.y)).toBe(true);
     const head = sampleFrame([s!], 0.4, { strokeEasing: linear }).active[0]!.head;
     expect(head).toEqual(s!.path.pointAt(0.4));
   });
 
   test('the head is where the canvas ends the ink', () => {
-    const wobble = wobblePlugin({ amplitude: 4 });
-    const at = { x: 30, y: 40, scale: 1.5, ascender: 0, seed: 7 };
-    const head = sampleFrame(placed([wobble], 0, at), 0.4, { strokeEasing: linear }).active[0]!.head;
+    const vary = variationPlugin({ amount: 2 });
+    // Variation measures in em, so both sides lay the glyph out at the same font size (100px, `placed`'s).
+    const at = { x: 30, y: 40, scale: 1, ascender: 0, seed: 7 };
+    const head = sampleFrame(placed([vary], 0, at), 0.4, { strokeEasing: linear }).active[0]!.head;
 
     // A 2D context stub that keeps the last point the ink was drawn to.
     let last: [number, number] = [Number.NaN, Number.NaN];
@@ -128,8 +129,8 @@ describe('wobble', () => {
         return true;
       },
     }) as unknown as CanvasRenderingContext2D;
-    const pos = { x: at.x, y: at.y, fontSize: 150, unitsPerEm: 100, ascender: 0, descender: 0 };
-    drawGlyph(ctx, glyph, pos, 0.4, { pressure: 0, plugins: [wobble], seed: at.seed, strokeEasing: linear });
+    const pos = { x: at.x, y: at.y, fontSize: 100, unitsPerEm: 100, ascender: 0, descender: 0 };
+    drawGlyph(ctx, glyph, pos, 0.4, { pressure: 0, plugins: [vary], seed: at.seed, strokeEasing: linear });
     expect(head.x).toBeCloseTo(last[0], 6);
     expect(head.y).toBeCloseTo(last[1], 6);
   });
@@ -140,7 +141,7 @@ describe('wobble', () => {
       { x: 0, y: 0 },
       { x: 100, y: 0 },
     ];
-    const moved = wobblePlugin({ amplitude: 4 }).outline!(contour, {
+    const moved = variationPlugin({ amount: 2 }).outline!(contour, {
       place,
       seed: 3,
       fontSize: 100,
@@ -328,9 +329,9 @@ describe('paintWith', () => {
 });
 
 describe('point data through the plugins', () => {
-  test('data a geometry hook attaches reaches the frame — through wobble, taper and pressure — and the pen head', () => {
+  test('data a geometry hook attaches reaches the frame — through variation, taper and pressure — and the pen head', () => {
     const depth: TegakiPlugin = { name: 'depth', geometry: (path) => path.map((p) => ({ ...p, data: { z: p.t * 10 } })) };
-    const [stroke] = placed([depth, wobblePlugin(), taperPlugin()]);
+    const [stroke] = placed([depth, variationPlugin(), taperPlugin()]);
     expect(stroke!.path.points.map((p) => p.data?.z)).toEqual(stroke!.path.points.map((p) => p.t * 10));
     const [drawing] = sampleFrame([stroke!], 0.5).active;
     expect(drawing!.head.data?.z).toBeCloseTo(drawing!.progress * 10, 6);
@@ -427,7 +428,7 @@ describe('the plugin registry', () => {
   });
 
   test('a plugins attribute is names split by spaces or commas, or a JSON array', () => {
-    expect(parsePluginSpecs('taper  glow,wobble')).toEqual(['taper', 'glow', 'wobble']);
+    expect(parsePluginSpecs('taper  glow,boil')).toEqual(['taper', 'glow', 'boil']);
     expect(parsePluginSpecs('["taper", ["glow", {"radius": 0.15}]]')).toEqual(['taper', ['glow', { radius: 0.15 }]]);
     expect(parsePluginSpecs('  ')).toBeUndefined();
     expect(parsePluginSpecs(null)).toBeUndefined();

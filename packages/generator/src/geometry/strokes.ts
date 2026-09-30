@@ -30,7 +30,7 @@
 // gate rejected), and unambiguous junctions skip the trial entirely —
 // ranking decides nothing there.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { dist, dot, normalize, sub } from './primitives.ts';
 import type { AxisEnd, AxisPoint, GeoStroke, JunctionInfo, ResolvedGeometryOptions, SegmentInfo } from './types.ts';
 

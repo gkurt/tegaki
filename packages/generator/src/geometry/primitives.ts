@@ -2,7 +2,7 @@
 // Everything is pure algebra over {x, y} points — no assumptions about y-up vs
 // y-down beyond "positive signed area means region on the algebraic left".
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 
 export const sub = (a: Point, b: Point): Point => ({ x: a.x - b.x, y: a.y - b.y });
 export const add = (a: Point, b: Point): Point => ({ x: a.x + b.x, y: a.y + b.y });

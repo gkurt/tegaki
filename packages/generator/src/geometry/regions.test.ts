@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { buildContours, findContourOverlaps } from './contours.ts';
 import { partitionRegions, splitComponents } from './regions.ts';
 

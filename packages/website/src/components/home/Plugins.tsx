@@ -1,6 +1,6 @@
 import { type CSSProperties, Fragment, type ReactNode, useMemo, useRef } from 'react';
 import { TegakiRenderer } from 'tegaki';
-import { annotatePlugin, type TegakiPlugin, type TegakiQuality, textPathPlugin, variationPlugin } from 'tegaki/core';
+import { annotatePlugin, type TegakiPlugin, type TegakiQuality, variationPlugin } from 'tegaki/core';
 import { REPO_URL } from '../../site.ts';
 import { burnPlugin } from '../plugins/burn.ts';
 import { colorsPlugin } from '../plugins/colors.ts';
@@ -12,6 +12,7 @@ import { penPlugin } from '../plugins/pen.ts';
 import { sprayPlugin } from '../plugins/spray.ts';
 import { stitchPlugin } from '../plugins/stitch.ts';
 import { strokeOrderPlugin } from '../plugins/stroke-order.ts';
+import { textPathPlugin } from '../plugins/text-path.ts';
 import { wetPlugin } from '../plugins/wet.ts';
 import { rainbow } from './rainbow.ts';
 import { type FontName, useFont, useInView } from './shared.ts';
@@ -154,7 +155,7 @@ const SHOWPIECES: Showpiece[] = [
   {
     id: 'path',
     title: 'Text on a path',
-    uses: [core('textPath')],
+    uses: [demo('textPath', 'text-path')],
     font: 'Caveat',
     text: 'WRITTEN BY HAND - IN ANY FONT - STROKE BY STROKE - ',
     size: 'clamp(22px, 2vw, 27px)',

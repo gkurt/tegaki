@@ -25,7 +25,7 @@
 // - 0 ports:     the tree diameter; other leaves become branch segments.
 
 import { Delaunay } from 'd3-delaunay';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { buildEnds, extractRuns } from './medial.ts';
 import { cross, dist, distToSegment, dot, midpoint, normalize, pointInPolygon, polylineLength, sub } from './primitives.ts';
 import type { AxisPoint, Face, ResolvedGeometryOptions, SegmentInfo } from './types.ts';

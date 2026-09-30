@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { matchContinuations, rdpSimplify, simplifyStroke, type TrialJoinScorer } from './strokes.ts';
 import { type AxisPoint, DEFAULT_GEOMETRY_OPTIONS, type JunctionInfo, resolveGeometryOptions, type SegmentInfo } from './types.ts';
 

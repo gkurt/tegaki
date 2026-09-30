@@ -1,5 +1,6 @@
 import type * as opentype from 'opentype.js';
-import type { BBox, LineCap, PathCommand } from 'tegaki';
+import type { LineCap } from 'tegaki';
+import type { BBox, PathCommand } from 'tegaki/internal';
 
 export interface ParsedFont {
   family: string;

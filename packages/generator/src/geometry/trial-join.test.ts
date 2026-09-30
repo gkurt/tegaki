@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { initStraightSkeleton, straightSkeletonJoinAlignment } from './face-straight-skeleton.ts';
 import { signedArea } from './primitives.ts';
 import { trialJoinAlignment } from './trial-join.ts';

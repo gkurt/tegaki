@@ -2,7 +2,7 @@
 // coordinates (y-down), matching the raster pipeline's SVG stages so the Studio
 // can display either interchangeably.
 
-import type { Nib, Point } from 'tegaki';
+import type { Nib, Point } from 'tegaki/internal';
 import { STROKE_COLORS } from '../processing/visualize.ts';
 import { add, scale } from './primitives.ts';
 import type { GeometryPipelineResult } from './types.ts';

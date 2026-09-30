@@ -3,7 +3,7 @@
 // with the nonzero winding rule. Returns the bitmap plus the bitmap↔font-unit
 // transform so downstream stages can map coordinates back.
 
-import type { BBox, Point } from 'tegaki';
+import type { BBox, Point } from 'tegaki/internal';
 import { BITMAP_PADDING, DEFAULT_RESOLUTION } from '../constants.ts';
 
 export interface RasterResult {

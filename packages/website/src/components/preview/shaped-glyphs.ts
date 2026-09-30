@@ -1,4 +1,5 @@
-import { type BundleShaper, paragraphDirection, type ShapeOptions } from 'tegaki/core';
+import type { BundleShaper, ShapeOptions } from 'tegaki/core';
+import { paragraphDirection } from 'tegaki/internal';
 
 /** A glyph the renderer's shaper draws, with what the pipeline needs to build its strokes. */
 export interface ShapedGlyphRef {

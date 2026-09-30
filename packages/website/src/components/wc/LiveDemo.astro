@@ -27,11 +27,10 @@ const id = `wc-demo-${Math.random().toString(36).slice(2, 8)}`;
     TegakiElement,
     TegakiEngine,
     taperPlugin,
-    wobblePlugin,
   } from 'tegaki/wc';
   import type { TegakiBundle } from 'tegaki/wc';
 
-  TegakiEngine.registerPlugin(glowPlugin, taperPlugin, wobblePlugin, strokeGradientPlugin, globalGradientPlugin);
+  TegakiEngine.registerPlugin(glowPlugin, taperPlugin, strokeGradientPlugin, globalGradientPlugin);
   registerTegakiElement();
 
   let bundlePromise: Promise<TegakiBundle> | null = null;

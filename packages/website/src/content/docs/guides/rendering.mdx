@@ -139,14 +139,14 @@ pressure: 0.5
 
 ## Plugins
 
-Glows, tapered ends, wobble and gradients are plugins, and all frameworks take them the same way, as a `plugins` list. They run in the order listed.
+Glows, tapered ends, gradients and a hand that varies each letter are plugins, and all frameworks take them the same way, as a `plugins` list. They run in the order listed.
 
 ```ts
-import { glowPlugin, strokeGradientPlugin, taperPlugin, wobblePlugin } from 'tegaki/core';
+import { glowPlugin, strokeGradientPlugin, taperPlugin, variationPlugin } from 'tegaki/core';
 
 plugins: [
   taperPlugin({ startLength: 0.15, endLength: 0.15 }),
-  wobblePlugin({ amplitude: 1.5, frequency: 8 }),
+  variationPlugin(), // each glyph a little different
   strokeGradientPlugin(), // a rainbow along each stroke
   glowPlugin({ radius: 0.1, color: '#00ccff' }),
 ]
@@ -162,7 +162,7 @@ TegakiEngine.registerPlugin(glowPlugin, taperPlugin);
 plugins: ['taper', ['glow', { radius: 0.1, color: '#00ccff' }]]
 ```
 
-See [Style plugins](/api/renderer/#style-plugins) for every option, [Naming plugins](/api/renderer/#naming-plugins) for the registry, and [Plugins](/api/renderer/#plugins) for writing your own. The Studio's Plugins tab tries them out live.
+See [Style plugins](/api/renderer/#style-plugins) for every option, [Naming plugins](/api/renderer/#naming-plugins) for the registry, and [Plugins](/api/renderer/#plugins) for writing your own. The Studio's Plugins tab tries them out live, along with demo plugins whose source you can copy into your project.
 
 These used to be the `effects` option, which is gone: see [Migrating from `effects`](/api/renderer/#migrating-from-effects).
 

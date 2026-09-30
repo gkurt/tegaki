@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { foldExtras, regroupStrokesByReference } from './regroup.ts';
 import type { AxisPoint, GeoStroke } from './types.ts';
 

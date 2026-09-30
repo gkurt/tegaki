@@ -5,7 +5,7 @@ packages:
 
 ## Plugins: reshape, retime and paint the handwriting
 
-**Breaking:** the `effects` option is gone. Glow, taper, wobble and the gradients are now plugins, and pressure width is the new `pressure` option. See [Migrating from `effects`](#migrating-from-effects) below.
+**Breaking:** the `effects` option is gone. Glow, taper and the gradients are now plugins, and pressure width is the new `pressure` option. See [Migrating from `effects`](#migrating-from-effects) below.
 
 The new `plugins` option takes plugins that change how the handwriting is drawn. Every adapter accepts it as a prop, and `<tegaki-renderer>` as a property. A plugin is an object of optional hooks:
 
@@ -29,7 +29,6 @@ These plugins ship in `tegaki/core`:
 
 - `glowPlugin` puts a soft light around the ink, sized in em so it grows with the text (`radius: 0.1`, or `'8px'` for a fixed size). With clip-to-text it lights the clipped letters as a whole. List it twice for two glows.
 - `taperPlugin` thins each stroke toward its ends.
-- `wobblePlugin` moves the ink by a wave or smooth noise, each glyph in its own phase. The clip-to-text outlines wobble with it.
 - `strokeGradientPlugin` colors each stroke along its length: a rainbow, or a run through your colors.
 - `globalGradientPlugin` lays one linear gradient across the whole text.
 - `variationPlugin` makes every glyph a little different in size, slant, rotation, position, bend and ink width, so repeated letters don't look stamped. Clip-to-text follows it. It has Subtle, Loose and Signature presets.
@@ -65,7 +64,7 @@ TegakiEngine.registerPlugin(glowPlugin, taperPlugin);
 | --- | --- |
 | `effects: { glow: { radius: 8, color: '#0cf' } }` | `plugins: [glowPlugin({ radius: '8px', color: '#0cf' })]`, or `radius: 0.1` (em) to grow with the text |
 | `effects: { glow: { radius: '0.1em' } }` | `plugins: [glowPlugin({ radius: 0.1 })]` |
-| `effects: { wobble: { amplitude: 2 } }` | `plugins: [wobblePlugin({ amplitude: 2 })]` |
+| `effects: { wobble: { … } }` | no longer built in: `variationPlugin()` bends each glyph (`warp`), and `boilPlugin()` keeps the line moving; or copy the studio's wobble demo |
 | `effects: { taper: true }` | `plugins: [taperPlugin()]` |
 | `effects: { strokeGradient: { colors: 'rainbow' } }` | `plugins: [strokeGradientPlugin()]` (no colors is the rainbow) |
 | `effects: { globalGradient: { colors, angle } }` | `plugins: [globalGradientPlugin({ colors, angle })]` |
@@ -75,18 +74,17 @@ TegakiEngine.registerPlugin(glowPlugin, taperPlugin);
 | CLI `--effects '{"glow":{"radius":8}}'` | CLI `--plugins '[["glow", {"radius": "8px"}]]'` |
 | `textToSvg(text, font, { effects })` | `textToSvg(text, font, { plugins })` |
 
-The options and their units are unchanged, with two exceptions. A glow's sizes are lengths in em: `radius: 0.1` is a tenth of the font size, so the glow grows with the text, and `'8px'` keeps it at 8px. Its offsets, which were font units, are em too. And a stroke gradient's rainbow is an empty `colors` list instead of `'rainbow'`. The effects used to run in a fixed order; plugins run in the order you list them, and for paint the later plugin wins, so list a stroke gradient after a text gradient to have it show. Characters drawn from the fallback font are now plain text in the text's color. The canvas no longer glows, wobbles or tints them, except for a glow with clip-to-text, which lights the finished ink with them in it.
+The options and their units are unchanged, with two exceptions. A glow's sizes are lengths in em: `radius: 0.1` is a tenth of the font size, so the glow grows with the text, and `'8px'` keeps it at 8px. Its offsets, which were font units, are em too. And a stroke gradient's rainbow is an empty `colors` list instead of `'rainbow'`. The effects used to run in a fixed order; plugins run in the order you list them, and for paint the later plugin wins, so list a stroke gradient after a text gradient to have it show. Characters drawn from the fallback font are now plain text in the text's color. The canvas no longer glows or tints them, except for a glow with clip-to-text, which lights the finished ink with them in it.
 
-`resolveEffects`, `findEffect`, `findEffects`, `effectPlugins`, `TegakiEffects`, `TegakiEffectConfigs`, the effect-name types and `CSSLength` are removed.
+`resolveEffects`, `findEffect`, `findEffects`, `getEffectDefinition`, `hasRenderHooks`, `EffectDefinition`, `ResolvedEffect`, `RenderStageContext`, `TegakiEffects`, `TegakiEffectConfigs`, the effect-name types and `CSSLength` are removed.
 
 `drawGlyph()` draws a single glyph through the same plugins, outside the engine. It now takes an options object (`drawGlyph(ctx, glyph, pos, time, { color, pressure, plugins, seed, … })`) in place of its fifteen positional arguments. For writing plugins, `tegaki/core` also exports:
 
 - `StrokePath`: `pointAt`, `slice`, `bounds`, `map`, and a per-point `data` field that a `geometry` hook can fill for the hooks after it.
 - The path helpers `offsetPath`, `inkEdge`, `clearance`, `unionBoxes` and `expandBox`.
 - `paintStroke`, the default painter.
-- `seededRandom`.
-- `strokeInstances` and `sampleFrame`, which read the stroke timeline.
+- `seededRandom`, and `groupStrokes`, which gathers strokes into the text, its lines or its words.
 
 ### Renders are the same on every load
 
-The new `seed` option (the `seed` attribute on `<tegaki-renderer>`) sets where the renderer's random choices come from: what plugins draw with `random(key)` or shape by a glyph's `seed`, such as a wobble's phase. Before this, every load picked a new random seed, so a Remotion render split across tabs could jump between frames. The default is now `0`, so the same text draws the same way everywhere, which matches `textToSvg`. Pass `seed: 'random'` for a new look on each mount, and read `engine.seed` to get the number back so you can keep a result you like.
+The new `seed` option (the `seed` attribute on `<tegaki-renderer>`) sets where the renderer's random choices come from: what plugins draw with `random(key)` or shape by a glyph's `seed`, such as how `variationPlugin` changes each glyph. Before this, every load picked a new random seed, so a Remotion render split across tabs could jump between frames. The default is now `0`, so the same text draws the same way everywhere, which matches `textToSvg`. Pass `seed: 'random'` for a new look on each mount, and read `engine.seed` to get the number back so you can keep a result you like.

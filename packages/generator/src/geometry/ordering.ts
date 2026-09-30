@@ -6,7 +6,7 @@
 // caps, dots last), pen direction per stroke,
 // and per-point time `t` plus per-stroke delay / duration from drawing speed.
 
-import type { Stroke, TimedPoint } from 'tegaki';
+import type { Stroke, TimedPoint } from 'tegaki/internal';
 import { ORIENT_X_WEIGHT } from '../constants.ts';
 import { rotateLoop } from '../stroke-order/match.ts';
 import { dist } from './primitives.ts';

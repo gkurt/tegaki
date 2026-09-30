@@ -22,7 +22,7 @@
 // midpoints and the triangulation rebuilt.
 
 import { Delaunay } from 'd3-delaunay';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { dist, pointInRegion } from '../primitives.ts';
 import type { Contour } from '../types.ts';
 

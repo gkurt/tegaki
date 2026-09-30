@@ -401,7 +401,7 @@ export interface TegakiPlugin {
   timing?(ctx: TegakiTimingContext): { strokes: readonly StrokeTime[]; duration?: number } | undefined;
   /**
    * Reshape a glyph outline contour (points in px) the way `geometry`
-   * reshapes the glyph's strokes, for clip-to-text: a wobble moves the
+   * reshapes the glyph's strokes, for clip-to-text: a variation moves the
    * letter's edges with its strokes. Called once per layout.
    */
   outline?(contour: readonly { x: number; y: number }[], ctx: TegakiOutlineContext): { x: number; y: number }[];
@@ -506,7 +506,7 @@ export interface TegakiEngineOptions {
   plugins?: readonly TegakiPluginSpec[];
   /**
    * The number the renderer's random choices come from: what plugins draw
-   * with `random(key)` or shape by a glyph's `seed` (a wobble's phase, where
+   * with `random(key)` or shape by a glyph's `seed` (a variation's field, where
    * a gradient starts). The same seed draws the same every time — on every load,
    * in every tab or process rendering a video. Each character adds its index
    * to it, so repeated letters still differ. `'random'` picks one when the

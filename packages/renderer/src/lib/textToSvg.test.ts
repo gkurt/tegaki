@@ -8,7 +8,7 @@ import type { TegakiPlugin } from '../core/types.ts';
 import { glowPlugin } from '../plugins/glow.ts';
 import { globalGradientPlugin, strokeGradientPlugin } from '../plugins/gradient.ts';
 import { taperPlugin } from '../plugins/taper.ts';
-import { wobblePlugin } from '../plugins/wobble.ts';
+import { variationPlugin } from '../plugins/variation.ts';
 import { createHarfbuzzShaper } from '../shaper-harfbuzz/index.ts';
 import type { TegakiBundle } from '../types.ts';
 import type { BundleShaper } from './shaper.ts';
@@ -258,10 +258,10 @@ describe('textToSvg plugins', () => {
     expect(text).toMatch(/stroke="url\(#tk-gg-\d+\)"/);
   });
 
-  test('wobble moves the clip outlines with the strokes', async () => {
+  test('a geometry plugin moves the clip outlines with the strokes', async () => {
     const shaper = await shaperFor(font);
     const plain = textToSvg('H', font, { mode: 'static', shaper, clipText: true });
-    const wobbly = textToSvg('H', font, { mode: 'static', shaper, clipText: true, plugins: [wobblePlugin({ amplitude: 8 })] });
+    const wobbly = textToSvg('H', font, { mode: 'static', shaper, clipText: true, plugins: [variationPlugin({ amount: 2 })] });
     const mask = (svg: string) => /<mask id="tk-clip"[^>]*>([\s\S]*?)<\/mask>/.exec(svg)?.[1];
     expect(mask(wobbly)).not.toBe(mask(plain));
     // Reshaped outlines are drawn in place, with no transform.

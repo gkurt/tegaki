@@ -3,7 +3,7 @@
 // resolves junctions by direction matching, and simplifies with Ramer-Douglas-Peucker.
 // Invoked from skeletonize.ts on the thinning path; the voronoi path bypasses this.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import {
   JUNCTION_ALIGNMENT_COS,
   JUNCTION_CROSSING_COS,

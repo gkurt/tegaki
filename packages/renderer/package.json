@@ -52,6 +52,12 @@
       "types": "./dist/core/index.d.mts",
       "import": "./dist/core/index.mjs"
     },
+    "./internal": {
+      "tegaki@dev": "./src/internal/index.ts",
+      "source": "./src/internal/index.ts",
+      "types": "./dist/internal/index.d.mts",
+      "import": "./dist/internal/index.mjs"
+    },
     "./react": {
       "tegaki@dev": "./src/react/index.ts",
       "source": "./src/react/index.ts",

@@ -19,7 +19,7 @@
 // Flicks whose ink the ellipse mostly paints are dropped; the rest (ears
 // too long or bent for one ellipse) stay as flicks.
 
-import type { Nib, Point } from 'tegaki';
+import type { Nib, Point } from 'tegaki/internal';
 import { dist } from '../primitives.ts';
 import type { AxisPoint } from '../types.ts';
 import type { InkGraph } from './graph.ts';

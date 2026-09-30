@@ -7,8 +7,8 @@ import {
   type TimelineConfig,
   type TimelineStaggerConfig,
   taperPlugin,
-  wobblePlugin,
 } from 'tegaki';
+import { wobblePlugin } from '../plugins/wobble.ts';
 import type { CustomEffect, EffectsState, UrlState } from '../url-state.ts';
 import { getEasingFn } from './constants.ts';
 

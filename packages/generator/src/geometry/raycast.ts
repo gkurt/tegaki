@@ -1,7 +1,7 @@
 // Ray casting against contour edges and cut segments — used for corner
 // local-width estimation and for projecting wall-continuation cuts.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { cross, sub } from './primitives.ts';
 import type { Contour } from './types.ts';
 

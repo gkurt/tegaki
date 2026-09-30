@@ -1,5 +1,4 @@
-import { createPlugin } from '../core/createPlugin.ts';
-import type { GlyphPlacement } from '../lib/strokeTimeline.ts';
+import { createPlugin, type GlyphPlacement } from 'tegaki/core';
 
 /** How the ink wobbles. */
 export interface WobbleOptions {

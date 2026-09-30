@@ -5,7 +5,7 @@
 // on the algebraic left of travel (outer contours: positive signed area, holes:
 // negative), with hole flags derived from containment nesting parity.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { dist, pointInPolygon, signedArea } from './primitives.ts';
 import type { Contour } from './types.ts';
 

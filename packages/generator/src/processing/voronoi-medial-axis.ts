@@ -4,7 +4,7 @@
 // in a single pass. Invoked from skeletonize.ts when `skeletonMethod=voronoi`.
 
 import { Delaunay } from 'd3-delaunay';
-import type { BBox, Point } from 'tegaki';
+import type { BBox, Point } from 'tegaki/internal';
 
 /**
  * Voronoi-based medial axis extraction.

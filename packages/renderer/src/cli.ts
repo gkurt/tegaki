@@ -19,29 +19,15 @@ import { type TextToSvgMode, textToSvg } from './lib/textToSvg.ts';
 import { computeTimeline, type TimelineConfig } from './lib/timeline.ts';
 import { annotatePlugin } from './plugins/annotate.ts';
 import { boilPlugin } from './plugins/boil.ts';
-import { captionPlugin } from './plugins/caption.ts';
 import { glowPlugin } from './plugins/glow.ts';
 import { globalGradientPlugin, strokeGradientPlugin } from './plugins/gradient.ts';
 import { taperPlugin } from './plugins/taper.ts';
-import { textPathPlugin } from './plugins/textPath.ts';
 import { variationPlugin } from './plugins/variation.ts';
-import { wobblePlugin } from './plugins/wobble.ts';
 import { createHarfbuzzShaper } from './shaper-harfbuzz/index.ts';
 import type { TegakiBundle } from './types.ts';
 
 /** Every plugin `tegaki/core` ships, by name, for `--plugins`. */
-const PLUGINS = [
-  glowPlugin,
-  taperPlugin,
-  wobblePlugin,
-  strokeGradientPlugin,
-  globalGradientPlugin,
-  variationPlugin,
-  boilPlugin,
-  annotatePlugin,
-  textPathPlugin,
-  captionPlugin,
-];
+const PLUGINS = [glowPlugin, taperPlugin, strokeGradientPlugin, globalGradientPlugin, variationPlugin, boilPlugin, annotatePlugin];
 registerPlugin(...PLUGINS);
 
 /** Bundled fonts the CLI can load, keyed by `--font` name. */
@@ -124,7 +110,7 @@ Options:
       --plugins <list>      Plugins, by name: "taper glow", or JSON with options,
                               e.g. '["taper", ["glow", {"radius": 0.12, "color": "#0cf"}]]'
                               (${PLUGINS.map((p) => p.name).join(', ')})
-      --seed <n>            Seed plugins draw with — a wobble's phase, variation (default: 0)
+      --seed <n>            Seed plugins draw with — variation, boil, a gradient's start (default: 0)
       --no-shaping          Place glyphs one per character by advance width (no ligatures,
                               joining or bidi)
       --smoothing           Smooth strokes onto a spline

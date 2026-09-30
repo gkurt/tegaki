@@ -12,7 +12,7 @@
 // is purely algebraic (positive signed area = region on the algebraic left),
 // so the y-down convention never needs special-casing.
 
-import type { BBox, Nib, Point, Stroke } from 'tegaki';
+import type { BBox, Nib, Point, Stroke } from 'tegaki/internal';
 import { DEFAULT_REFERENCE_DATASETS, type ReferenceDatasetId } from '../stroke-order/datasets.ts';
 import type { RegisteredReference } from '../stroke-order/types.ts';
 

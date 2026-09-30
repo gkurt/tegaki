@@ -8,7 +8,7 @@
 // are not supported — KanjiVG never uses them — and throw rather than silently
 // corrupt a stroke.
 
-import type { PathCommand } from 'tegaki';
+import type { PathCommand } from 'tegaki/internal';
 
 const NUMBER_RE = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/y;
 const WS_RE = /[\s,]*/y;

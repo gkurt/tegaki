@@ -116,6 +116,8 @@ export default defineConfig([
     entry: {
       index: 'src/index.ts',
       'core/index': 'src/core/index.ts',
+      // Outside semver: what the website and generator use besides the API (see src/internal/index.ts).
+      'internal/index': 'src/internal/index.ts',
       'react/index': 'src/react/index.ts',
       // Solid is shipped as source (compiled by the consumer's solid plugin via
       // the `solid` export condition) — tsdown/rolldown can't run babel-preset-solid,

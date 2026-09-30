@@ -1,4 +1,5 @@
-import type { LineCap, Point } from 'tegaki';
+import type { LineCap } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import type { PipelineResult } from '../commands/generate.ts';
 import { bitmapToPNG, rgbaToPNG } from './png.ts';
 

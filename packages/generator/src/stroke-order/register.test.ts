@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { referenceBBox, registerReference } from './register.ts';
 import type { ReferenceGlyph } from './types.ts';
 

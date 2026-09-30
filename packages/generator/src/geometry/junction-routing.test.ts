@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { extendUnpairedEnds, routeJunctionPaths, routeThroughNode } from './junction-routing.ts';
 import { axisBetweenRuns, type WalkRun } from './medial.ts';
 import { signedArea } from './primitives.ts';

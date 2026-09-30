@@ -8,11 +8,10 @@ import {
   type TegakiBundle,
   type TegakiPluginSpec,
   taperPlugin,
-  wobblePlugin,
 } from 'tegaki/core';
 
 // The docs name the style plugins in MDX props (plain data), so register them here.
-registerPlugin(glowPlugin, taperPlugin, wobblePlugin, strokeGradientPlugin, globalGradientPlugin);
+registerPlugin(glowPlugin, taperPlugin, strokeGradientPlugin, globalGradientPlugin);
 
 let {
   text = 'Hello World',

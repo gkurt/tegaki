@@ -13,7 +13,7 @@
 // it is scored from every vertex round it, and the pair says where the pen
 // enters it.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 
 /** Samples per stroke for cost evaluation. */
 const RESAMPLE_N = 24;

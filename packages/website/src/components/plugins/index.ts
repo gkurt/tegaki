@@ -6,12 +6,10 @@
 import {
   annotatePlugin,
   boilPlugin,
-  captionPlugin,
   type TegakiPlugin,
   type TegakiPluginFactory,
   type TegakiPluginOptions,
   type TegakiPluginParams,
-  textPathPlugin,
   variationPlugin,
 } from 'tegaki/core';
 import { REPO_URL } from '../../site.ts';
@@ -19,6 +17,7 @@ import { ballpointPlugin } from './ballpoint.ts';
 import { bleedPlugin } from './bleed.ts';
 import { brushPlugin } from './brush.ts';
 import { burnPlugin } from './burn.ts';
+import { captionPlugin } from './caption.ts';
 import { chalkPlugin } from './chalk.ts';
 import { colorsPlugin } from './colors.ts';
 import { crtPlugin } from './crt.ts';
@@ -50,6 +49,7 @@ import { sprayPlugin } from './spray.ts';
 import { stitchPlugin } from './stitch.ts';
 import { strokeOrderPlugin } from './stroke-order.ts';
 import { sweepPlugin } from './sweep.ts';
+import { textPathPlugin } from './text-path.ts';
 import { typewriterPlugin } from './typewriter.ts';
 import { wetPlugin } from './wet.ts';
 
@@ -93,11 +93,11 @@ export const SHOWCASE_PLUGINS: readonly ShowcasePlugin[] = [
   { id: 'boil', factory: boilPlugin, source: core('boil'), featured: true },
   { id: 'slant', factory: slantPlugin, source: demo('slant') },
   { id: 'shaky', factory: shakyPlugin, source: demo('shaky') },
-  { id: 'path', factory: textPathPlugin, source: core('textPath'), featured: true },
+  { id: 'path', factory: textPathPlugin, source: demo('text-path'), featured: true },
   { id: 'nib', factory: nibPlugin, source: demo('nib') },
   { id: 'rhythm', factory: rhythmPlugin, source: demo('rhythm') },
   { id: 'joins', factory: joinsPlugin, source: demo('joins') },
-  { id: 'caption', factory: captionPlugin, source: core('caption') },
+  { id: 'caption', factory: captionPlugin, source: demo('caption') },
   { id: 'sweep', factory: sweepPlugin, source: demo('sweep') },
   { id: 'paper', factory: paperPlugin, source: demo('paper'), featured: true },
   { id: 'order', factory: strokeOrderPlugin, source: demo('stroke-order'), featured: true },

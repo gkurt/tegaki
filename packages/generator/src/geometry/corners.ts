@@ -11,7 +11,7 @@
 // concentrates its turn within a couple of vertices, while a smooth curve of
 // radius ≫ window stays under the threshold.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { add, cross, dot, normalize, scale, sub } from './primitives.ts';
 import { castRay } from './raycast.ts';
 import type { Contour, Corner, ResolvedGeometryOptions } from './types.ts';

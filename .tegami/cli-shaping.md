@@ -15,7 +15,7 @@ Quality defaults now follow the studio:
 New flags:
 
 - `--stroke-easing` / `--glyph-easing`, which take the studio's easing names.
-- `--plugins` for glow, wobble, taper, stroke and text gradients, and every other `tegaki/core` plugin, by name (`--plugins "taper glow"`) or as JSON with options.
+- `--plugins` for glow, taper, stroke and text gradients, and every other `tegaki/core` plugin, by name (`--plugins "taper glow"`) or as JSON with options.
 - `--letter-spacing` and `--seed`.
 
 The CLI warns about characters the font has no strokes for, and `atma` (Bengali) is now available.

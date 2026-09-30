@@ -4,7 +4,7 @@
 // time `t` ∈ [0, 1] for animation. Stroke widths are looked up from the
 // inverse distance transform (or pre-supplied by the voronoi path).
 
-import type { Point, Stroke, TimedPoint } from 'tegaki';
+import type { Point, Stroke, TimedPoint } from 'tegaki/internal';
 import { ORIENT_X_WEIGHT } from '../constants.ts';
 import { getStrokeWidth } from './width.ts';
 

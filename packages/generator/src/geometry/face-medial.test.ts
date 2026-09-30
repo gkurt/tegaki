@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { anchoredAxisFromMedialGraph, chainEscapes, type MedialNode, medialFaceAxes, polylineInkDisks } from './face-medial.ts';
 import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { add, closestPointOnPolyline, dist, normalize, pointInPolygon, resamplePolyline, scale, signedArea, sub } from './primitives.ts';

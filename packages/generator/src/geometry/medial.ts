@@ -16,7 +16,7 @@
 // Width at each axis sample is the pairing distance — the true local stroke
 // diameter, measured from the outline rather than a rasterized approximation.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { medialFaceAxes, medialFaceAxesFullBoundary } from './face-medial.ts';
 import { straightSkeletonFaceAxes } from './face-straight-skeleton.ts';
 import {

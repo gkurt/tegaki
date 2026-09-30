@@ -10,7 +10,7 @@
 // is thin relative to the dataset frame therefore borrow the other axis's
 // scale and align centers instead of spans.
 
-import type { BBox } from 'tegaki';
+import type { BBox } from 'tegaki/internal';
 import type { ReferenceGlyph, ReferenceStroke, RegisteredReference } from './types.ts';
 
 /** Below this fraction of the dataset frame, an axis span is 'thin' — bbox fitting on it measures noise. */

@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { PathCommand, Point } from 'tegaki';
+import type { PathCommand, Point } from 'tegaki/internal';
 import { initStraightSkeleton } from './face-straight-skeleton.ts';
 import type { GeometryPipelineInput } from './pipeline.ts';
 import { orientByReference, runGeometryPipeline } from './pipeline.ts';

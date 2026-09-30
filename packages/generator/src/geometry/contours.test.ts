@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { buildContours, dropSpikes } from './contours.ts';
 
 const pts = (...xy: [number, number][]): Point[] => xy.map(([x, y]) => ({ x, y }));

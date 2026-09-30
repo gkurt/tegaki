@@ -111,7 +111,7 @@ export const FAQ: { q: string; a: string }[] = [
   },
   {
     q: 'Can Tegaki animate any font?',
-    a: 'Yes. Eleven fonts ship ready to import, and the free Tegaki Studio generates a bundle from any Google Font or your own .ttf/.otf file in the browser, with no server. Handwriting and script fonts look most natural, but any outline font works.',
+    a: 'Yes. Thirteen fonts ship ready to import (two of them single-line stroke fonts), and the free Tegaki Studio generates a bundle from any Google Font or your own .ttf/.otf file in the browser, with no server. Handwriting and script fonts look most natural, but any outline font works.',
   },
   {
     q: 'Which languages and writing systems are supported?',
@@ -119,7 +119,7 @@ export const FAQ: { q: string; a: string }[] = [
   },
   {
     q: 'How is Tegaki different from an SVG stroke-dashoffset animation?',
-    a: 'A stroke-dashoffset trick traces the outline of the letters, so the pen goes around each glyph twice. Tegaki animates the centerline of each stroke with its real width, in natural stroke order, and supports timeline control, streaming text, effects and every writing system above.',
+    a: 'A stroke-dashoffset trick traces the outline of the letters, so the pen goes around each glyph twice. Tegaki animates the centerline of each stroke with its real width, in natural stroke order, and supports timeline control, streaming text, plugins and every writing system above.',
   },
   {
     q: 'Can I control or scrub the animation?',

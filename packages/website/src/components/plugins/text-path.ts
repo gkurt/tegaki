@@ -1,6 +1,4 @@
-import { createPlugin } from '../core/createPlugin.ts';
-import type { Box } from '../lib/strokePath.ts';
-import type { GlyphPlacement } from '../lib/strokeTimeline.ts';
+import { type Box, createPlugin, type GlyphPlacement } from 'tegaki/core';
 
 /** The curve the text is laid on. */
 export type TextPathShape = 'arc' | 'wave';

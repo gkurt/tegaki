@@ -1,5 +1,6 @@
 import * as opentype from 'opentype.js';
-import { type BBox, BUNDLE_VERSION, type FontOutput, type LineCap, type Nib, type Point, type Stroke } from 'tegaki';
+import { BUNDLE_VERSION, type LineCap } from 'tegaki';
+import type { BBox, FontOutput, Nib, Point, Stroke } from 'tegaki/internal';
 import * as z from 'zod/v4';
 import {
   BEZIER_TOLERANCE,

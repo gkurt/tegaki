@@ -8,7 +8,7 @@
 // pairing decisions only, so dataset licenses (CC BY-SA, Arphic PL) do not
 // attach to generated bundles.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 
 /** One prescribed stroke: a centerline polyline ordered in pen direction. */
 export interface ReferenceStroke {

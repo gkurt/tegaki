@@ -2,7 +2,7 @@
 // Scientist's Hershey Text — the Hershey faces, the EMS fonts, Relief
 // SingleLine), Hershey's own JHF files, and hand-drawn stroke-order datasets.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { flattenPath } from '../processing/bezier.ts';
 import { type DrawnDataset, parseDrawnDataset } from '../stroke-order/drawn.ts';
 import { parseJhfGlyphs } from '../stroke-order/jhf.ts';

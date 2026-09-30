@@ -5,7 +5,7 @@
 // extension step — thousands of queries per glyph against hundreds of
 // boundary segments. A grid keyed by segment bbox keeps each query local.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { distToSegment } from '../primitives.ts';
 
 export class SegmentIndex {

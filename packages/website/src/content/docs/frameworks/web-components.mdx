@@ -210,7 +210,7 @@ Control uncontrolled playback via attributes:
 
 ## Plugins
 
-Glows, gradients, tapered ends, wobble and the rest are plugins. Register the factories you want once, next to the font bundle, and the element can name them in its `plugins` attribute:
+Glows, gradients, tapered ends and the rest are plugins. Register the factories you want once, next to the font bundle, and the element can name them in its `plugins` attribute:
 
 ```js
 import { glowPlugin, registerTegakiElement, strokeGradientPlugin, TegakiEngine, taperPlugin } from 'tegaki/wc';
@@ -239,7 +239,7 @@ List names split by spaces or commas for the defaults, or write a JSON array to 
   plugins='["strokeGradient", ["glow", {"radius": 0.1, "color": "#00ccff"}]]'
 />
 
-The built-in names are `glow`, `taper`, `wobble`, `strokeGradient`, `globalGradient`, `variation`, `boil`, `annotate`, `text-path` and `caption`, and none is registered until you register it. A plugin registered after the element is on the page is picked up then, so the order of your scripts doesn't matter. A name that's still unregistered once the page has loaded is warned about in the console. See [Style plugins](/api/renderer/#style-plugins) for their options.
+The built-in names are `glow`, `taper`, `strokeGradient`, `globalGradient`, `variation`, `boil` and `annotate`, and none is registered until you register it. A plugin registered after the element is on the page is picked up then, so the order of your scripts doesn't matter. A name that's still unregistered once the page has loaded is warned about in the console. See [Style plugins](/api/renderer/#style-plugins) for their options.
 
 Plugin objects, your own included, go on the `plugins` property. It takes names too, and when it's set it takes precedence over the attribute:
 
@@ -318,7 +318,7 @@ registerTegakiElement('my-handwriting');
 | `segment-size` | `number` | Max drawn segment length in CSS pixels (shortcut for `quality.segmentSize`). |
 | `pressure` | `number` | How much the ink's width follows the pen's pressure, `0` to `1` (default `1`; see [`pressure`](/api/renderer/#pressure)). |
 | `plugins` | `string` | Registered plugins by name: `"taper glow"`, or a JSON array with options, `'["taper", ["glow", {"radius": 0.15}]]'` (see [Plugins](#plugins)). The `plugins` property takes precedence. |
-| `seed` | `number \| "random"` | What plugins' random choices come from: a wobble's phase, where a gradient starts (default `0`; see [`seed`](/api/renderer/#seed)). The element's `engine.seed` is the number it drew with. |
+| `seed` | `number \| "random"` | What plugins' random choices come from: where a gradient starts, how `variation` changes each glyph (default `0`; see [`seed`](/api/renderer/#seed)). The element's `engine.seed` is the number it drew with. |
 | `show-overlay` | _boolean attribute_ | Show debug text overlay. |
 | `fallback-font` | `string` | CSS font-family list for characters the bundle has no stroke data for (see [`fallbackFont`](/api/renderer/#fallbackfont)). |
 

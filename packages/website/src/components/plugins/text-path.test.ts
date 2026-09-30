@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { TegakiGeometryContext, TegakiOutlineContext } from '../core/types.ts';
-import { StrokePath } from '../lib/strokePath.ts';
-import { curveAt, type TextPathOptions, textPathMove, textPathPlugin } from './textPath.ts';
+import { StrokePath, type TegakiGeometryContext, type TegakiOutlineContext } from 'tegaki/core';
+import { curveAt, type TextPathOptions, textPathMove, textPathPlugin } from './text-path.ts';
 
 const defaults: TextPathOptions = textPathPlugin.defaults;
 const box = { minX: 0, minY: 0, maxX: 400, maxY: 100 };

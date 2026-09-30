@@ -222,8 +222,6 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
 const CORE_PLUGINS: Record<string, string> = {
   vary: 'variationPlugin',
   boil: 'boilPlugin',
-  path: 'textPathPlugin',
-  caption: 'captionPlugin',
   annotate: 'annotatePlugin',
 };
 

@@ -19,7 +19,7 @@
 // on a hole boundary, subdivision mismatch on a shared cut) makes the caller
 // fall back to per-face axes: the merge must never guess.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { polygonCentroid, signedArea } from './primitives.ts';
 import type { Face } from './types.ts';
 

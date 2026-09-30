@@ -14,7 +14,7 @@
 // triangle not painted by the final strokes is counted and reported, never
 // silently dropped.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { dist, polygonCentroid } from '../primitives.ts';
 import { rdpSimplify } from '../strokes.ts';
 import type { AxisPoint, Contour, Face, GeoStroke, SegmentInfo } from '../types.ts';

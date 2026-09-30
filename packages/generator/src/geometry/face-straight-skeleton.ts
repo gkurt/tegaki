@@ -49,7 +49,7 @@
 // initStraightSkeleton() so nothing pays for the ~1.8 MB bundle until the
 // method is actually selected.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import {
   anchoredAxisFromMedialGraph,
   dijkstra,

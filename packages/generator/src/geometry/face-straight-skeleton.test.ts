@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { initStraightSkeleton, straightSkeletonFaceAxes, straightSkeletonStrokeAxis } from './face-straight-skeleton.ts';
 import { clampWidthsToBoundary, computeSegmentAxes } from './medial.ts';
 import { dist, signedArea } from './primitives.ts';

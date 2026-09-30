@@ -3,7 +3,7 @@
 // and computes per-stroke animation timing (length, duration, delay) from the
 // configured drawing speed and inter-stroke pause.
 
-import type { Stroke } from 'tegaki';
+import type { Stroke } from 'tegaki/internal';
 import type { RasterResult } from './rasterize.ts';
 
 export type TimedStroke = Stroke & {

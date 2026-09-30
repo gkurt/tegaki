@@ -79,7 +79,7 @@ Add `loadFont` to inject an `@font-face` rule so the browser starts downloading 
 
 ## Plugins
 
-Glows, gradients, tapered ends, wobble and the rest are plugins. The component renders on the server and sends its props to the browser as JSON, so it can't take plugin objects (they're functions). It takes plugins by name instead: register the factories in a client `<script>` on the page, and name them in `plugins`, as a name or `[name, options]`:
+Glows, gradients, tapered ends and the rest are plugins. The component renders on the server and sends its props to the browser as JSON, so it can't take plugin objects (they're functions). It takes plugins by name instead: register the factories in a client `<script>` on the page, and name them in `plugins`, as a name or `[name, options]`:
 
 ```astro
 ---

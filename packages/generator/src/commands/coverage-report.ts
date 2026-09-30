@@ -8,7 +8,7 @@
 // letters; a font-unit one judges them alike. Run it before and after
 // pipeline changes; the summary numbers are the metric.
 
-import type { Nib } from 'tegaki';
+import type { Nib } from 'tegaki/internal';
 import type { ParsedFontInfo, PipelineOptions, PipelineResult } from '../commands/generate.ts';
 import { DEFAULT_OPTIONS, processGlyph, processGlyphGeometry } from '../commands/generate.ts';
 import type { GeometryOptions, GeometryPipelineResult } from '../geometry/types.ts';

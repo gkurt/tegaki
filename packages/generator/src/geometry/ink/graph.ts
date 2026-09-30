@@ -16,7 +16,7 @@
 // center stays on the centerline, so the absorbed ink remains covered by
 // construction. Nothing is removed for any other reason.
 
-import type { Nib, Point } from 'tegaki';
+import type { Nib, Point } from 'tegaki/internal';
 import { dist } from '../primitives.ts';
 import type { AxisPoint } from '../types.ts';
 import { type InkMesh, sharedEdgeMidpoint, triangleKind, trianglePoints } from './mesh.ts';

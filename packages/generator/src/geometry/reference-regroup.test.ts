@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { parseFont, processGlyphGeometry, processGlyphGeometryById } from '../commands/generate.ts';
 import { enumerateVariantGlyphIds } from '../font/enumerate-variants.ts';
 import { createHangulProvider } from '../stroke-order/hangul.ts';

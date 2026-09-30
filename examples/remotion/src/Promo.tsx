@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { AbsoluteFill, Easing, interpolate, Series, useCurrentFrame } from 'remotion';
-import { glowPlugin, strokeGradientPlugin, TegakiRenderer, taperPlugin, wobblePlugin } from 'tegaki';
+import { boilPlugin, glowPlugin, strokeGradientPlugin, TegakiRenderer, taperPlugin } from 'tegaki';
 import caveat from 'tegaki/fonts/caveat';
 import italianno from 'tegaki/fonts/italianno';
 import parisienne from 'tegaki/fonts/parisienne';
@@ -157,7 +157,8 @@ const HERO_PLUGINS = [glowPlugin({ radius: 0.12, color: WARM_GLOW })];
 const OUTRO_PLUGINS = HERO_PLUGINS;
 const VIBRANT = [strokeGradientPlugin({ saturation: 90, lightness: 70 })];
 const LUMINOUS = [taperPlugin({ startLength: 0.05, endLength: 0.05 }), glowPlugin({ radius: 0.18, color: 'rgba(255, 196, 120, 0.7)' })];
-const ALIVE = [wobblePlugin({ amplitude: 0.6, frequency: 8, mode: 'sine' })];
+// Line boil: the drawing changes with the frame, so the word never sits still.
+const ALIVE = [boilPlugin()];
 
 /** Opening: brand mark writes itself, then a kanji subtitle whispers in. */
 const Hero: React.FC<{ duration: number }> = ({ duration }) => {

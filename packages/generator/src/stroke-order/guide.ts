@@ -10,7 +10,7 @@
 // along it — and the strokes are drawn in order of where they start in the
 // reference, each in the direction of the reference stroke it follows.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { resamplePolyline } from './match.ts';
 import type { ReferenceStroke } from './types.ts';
 

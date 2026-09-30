@@ -4,7 +4,7 @@
 // extraction: they ARE the centerlines, in pen order and direction, so a
 // stroke font goes straight to glyph data (see bundle.ts).
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 
 export interface StrokeFontGlyph {
   /** Advance width, in font units. */

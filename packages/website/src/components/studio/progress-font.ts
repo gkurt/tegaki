@@ -1,6 +1,7 @@
 import { zipSync } from 'fflate';
 import type { TegakiBundle, TegakiGlyphData } from 'tegaki';
-import { glyphLocalTime, LETTER_SPACED_OFF_FEATURES, type TimelineEntry, toCssFeatureSettings, UNSHAPED_OFF_FEATURES } from 'tegaki/core';
+import type { TimelineEntry } from 'tegaki/core';
+import { glyphLocalTime, LETTER_SPACED_OFF_FEATURES, toCssFeatureSettings, UNSHAPED_OFF_FEATURES } from 'tegaki/internal';
 import { buildProgressFont, type ParsedFontInfo, type ProgressFont, progressAt, readSourceFont } from 'tegaki-generator';
 
 /** One file of the self-writing font: a subset of the bundle's font, remade. */

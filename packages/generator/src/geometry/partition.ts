@@ -15,7 +15,7 @@
 // (nonzero winding of the original contours), which drops counters and exterior
 // pockets while keeping annuli (O) as single faces with hole boundaries.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { mergeSegmentFaces } from './face-merge.ts';
 import { add, dist, midpoint, pointInPolygon, pointInRegion, polygonCentroid, scale, signedArea, sub } from './primitives.ts';
 import type { Contour, Cut, Face } from './types.ts';

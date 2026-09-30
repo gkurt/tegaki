@@ -1,6 +1,6 @@
 ---
 title: TegakiRenderer
-description: 'API reference for TegakiRenderer and TegakiEngine: props, time control, plugins (glow, taper, wobble, gradients and your own), frames and helper functions for handwriting animation.'
+description: 'API reference for TegakiRenderer and TegakiEngine: props, time control, plugins (glow, taper, gradients, variation and your own), frames and helper functions for handwriting animation.'
 head:
   - tag: title
     content: 'TegakiRenderer API Reference | Tegaki'
@@ -89,7 +89,7 @@ In React, keep the array stable (define it outside the component or memoize it),
 
 **Type:** `number | 'random'` · **Default:** `0`
 
-The number the renderer's random choices come from: the wobble's phase, a gradient's hue, the [variation plugin](#variation-variationplugin), and whatever plugins draw with `random(key)`. Each character adds its place in the text to the seed, so repeated letters still differ from each other.
+The number the renderer's random choices come from: a gradient's hue, the [variation plugin](#variation-variationplugin), and whatever plugins draw with `random(key)`. Each character adds its place in the text to the seed, so repeated letters still differ from each other.
 
 The same seed draws the same text every time: on every page load, in every tab, and in every process that renders a video. That's why the default is a fixed number. Change it to get another version of the text, and keep a version you like by keeping its seed.
 
@@ -178,9 +178,9 @@ Every stroke at `time` (default: the current time). For each stroke you get:
 
 - `state`: `'pending'`, `'drawing'` or `'done'`.
 - `progress`: the eased draw progress, 0–1.
-- `path`: the whole stroke, a [`StrokePath`](#strokepath) in CSS px from the top-left of the text box, reshaped by every plugin's `geometry` (the [`pressure`](#pressure) option's widths first, then a wobble or taper if you list one), its widths the pen's own. With clip-to-text set to a factor (`clipText: 1.2`), the default painter draws it that much wider on the clipped canvas so the ink fills the letters; the path doesn't carry that. `rawPath` is the stroke as the bundle has it, before any plugin: unwobbled, with the bundle's own widths.
+- `path`: the whole stroke, a [`StrokePath`](#strokepath) in CSS px from the top-left of the text box, reshaped by every plugin's `geometry` (the [`pressure`](#pressure) option's widths first, then a taper or variation if you list one), its widths the pen's own. With clip-to-text set to a factor (`clipText: 1.2`), the default painter draws it that much wider on the clipped canvas so the ink fills the letters; the path doesn't carry that. `rawPath` is the stroke as the bundle has it, before any plugin: unmoved, with the bundle's own widths.
 - `nibs`: the stroke's nib stamps (blobs the pen leaves at some points), placed along `path`: `t`, an offset `dx`/`dy` in px, radii `rx`/`ry` as multiples of the ink width there, and an `angle`.
-- `seed`: a number fixed per glyph, which plugins vary each glyph by (a wobble's phase, where a gradient starts).
+- `seed`: a number fixed per glyph, which plugins vary each glyph by (where a gradient starts, how `variationPlugin` changes it).
 - `place`: where the stroke's glyph sits: `x` and `y` in px (the top of the glyph's ascender at its left edge), `scale` (px per font unit) and `ascender` (in font units), so the baseline is at `y + ascender * scale`. With `glyph.w * scale`, the glyph's advance, it's what a practice grid lays its squares out by.
 - `head`: once the stroke has started, the pen at the end of the ink, `path.pointAt(progress)`. It has `x` and `y`, `angle` (the direction of travel in radians, with y pointing down) and `width` (the ink width in px).
 
@@ -214,7 +214,7 @@ A plugin is an object with a `name` and any of these hooks:
 | `attach({ redraw })` | when a renderer starts running the plugin; what it returns, when it stops | setting up and releasing what the plugin needs: a WebGL context, a worker, a library to load (see [Setting up and releasing](#setting-up-and-releasing-attach)) |
 | `steps: { count, fps, idle?, paintOnly? }` | not a hook: a setting | redrawing the ink a few ways in turn, over time (see [Drawings over time](#drawings-over-time-steps)) |
 
-Plugins run in the order they're listed, each hook seeing what the ones before it made: a `geometry` listed after a taper gets the tapered path, and a `paint` listed after a gradient gets the gradient as its `style`. For paint, the later plugin wins: a `strokeGradientPlugin` listed after a `globalGradientPlugin` overrides it. The [`pressure`](#pressure) option runs ahead of them all. The glow, taper, wobble and gradients are plugins like any other (see [Style plugins](#style-plugins)).
+Plugins run in the order they're listed, each hook seeing what the ones before it made: a `geometry` listed after a taper gets the tapered path, and a `paint` listed after a gradient gets the gradient as its `style`. For paint, the later plugin wins: a `strokeGradientPlugin` listed after a `globalGradientPlugin` overrides it. The [`pressure`](#pressure) option runs ahead of them all. The glow, taper and gradients are plugins like any other (see [Style plugins](#style-plugins)).
 
 `ctx` is the canvas context, set up so one unit is one CSS px from the top-left of the text box. The engine saves and restores it around every hook. Underlays go on a layer of their own under the finished ink, so clip-to-text doesn't cut them. `color` is the text's color, and `step` is the plugin's current drawing if it has [`steps`](#drawings-over-time-steps) (`0` otherwise). `random(key)` returns a random number generator seeded by the renderer's [`seed`](#seed), so the same key gives the same numbers on every frame and, at the same seed, on every load. `prev` is the frame `onFrame` saw last, or `null` the first time.
 
@@ -554,7 +554,7 @@ new TegakiEngine(container, {
 - A name registered after the renderer is created is picked up when it's registered, so the script that registers a plugin can run after the one that renders. A name still unregistered once the page has loaded is warned about once in the console.
 - Nothing is registered for you, not even the plugins `tegaki/core` ships: register each factory you name.
 
-The built-in factories' names are `glow`, `taper`, `wobble`, `strokeGradient`, `globalGradient`, `variation`, `boil`, `annotate`, `text-path` and `caption`. Your own plugins register the same way, under the `name` you gave `createPlugin`.
+The built-in factories' names are `glow`, `taper`, `strokeGradient`, `globalGradient`, `variation`, `boil` and `annotate`. Your own plugins register the same way, under the `name` you gave `createPlugin`.
 
 Names are plain data, so they reach places a plugin object can't:
 
@@ -565,7 +565,7 @@ Names are plain data, so they reach places a plugin object can't:
 
 ### Style plugins
 
-These change how the ink looks: its glow, its width along the stroke, its wobble, its colors. Each is a factory from `tegaki/core` (re-exported from `tegaki` and every framework entry), registered under the name in its heading.
+These change how the ink looks: its glow, its width along the stroke, its colors. Each is a factory from `tegaki/core` (re-exported from `tegaki` and every framework entry), registered under the name in its heading.
 
 ```tsx
 import { glowPlugin, strokeGradientPlugin, taperPlugin } from 'tegaki';
@@ -597,16 +597,6 @@ Strokes that thin to a point toward their ends, the way a brush lifts off the pa
 | `startLength` | `0.15` | Share of the stroke, from its start, that thins toward it (0–1). |
 | `endLength` | `0.15` | Share of the stroke, from its end, that thins toward it (0–1). |
 
-#### Wobble: `wobblePlugin` (`wobble`)
-
-A hand that doesn't hold still: each point of the ink moved by a wave or by smooth noise, each glyph in its own phase (from its seed). With clip-to-text on, the letters' edges wobble with it.
-
-| Option | Default | What it changes |
-|--------|---------|-----------------|
-| `amplitude` | `1.5` | How far a point moves, in font units. |
-| `frequency` | `8` | How many waves run through a glyph (`'sine'` only). |
-| `mode` | `'sine'` | `'sine'` for a regular wave, `'noise'` for smooth noise. |
-
 #### Stroke gradient: `strokeGradientPlugin` (`strokeGradient`)
 
 Each stroke colored along its length: a rainbow, or a run through your colors. Each glyph starts the run in its own place.
@@ -626,7 +616,7 @@ One linear gradient across the whole text, as CSS `background-clip: text` would 
 | `colors` | `['#ff0000', '#0000ff']` | The color stops, in order. |
 | `angle` | `0` | Direction in degrees: `0` runs left to right, `90` top to bottom. |
 
-Both gradients choose the stroke's paint, so if you list both, the one listed later wins. The glow takes the text's color (or its own), not a gradient's. All five reach `toSVG` too: taper and wobble through the ink's shape, the glow as an SVG filter, and the gradients as the strokes' paint. On the canvas, characters drawn from the fallback font are drawn plain, with no gradient or wobble, and no glow unless clip-to-text is on.
+Both gradients choose the stroke's paint, so if you list both, the one listed later wins. The glow takes the text's color (or its own), not a gradient's. All four reach `toSVG` too: taper through the ink's shape, the glow as an SVG filter, and the gradients as the strokes' paint. On the canvas, characters drawn from the fallback font are drawn plain, with no gradient, and no glow unless clip-to-text is on.
 
 ### Variation: `variationPlugin`
 
@@ -703,50 +693,9 @@ const highlight = [annotatePlugin({ mark: 'highlight', target: 'lines', color: '
 
 The timeline runs on to make time for the marks, so `duration`, `onComplete` and CSS time include them. Each mark's shape comes from the renderer's [`seed`](#seed), and `toSVG` draws the marks too (drawn on in an animated file).
 
-### Text on a path: `textPathPlugin`
+### Demo plugins
 
-Lays the text on a curve: an arc (a rainbow, a smile, or right round a circle, the way a badge's lettering runs) or a wave. A wave can flow along the text like a flag in the wind. Each glyph is moved whole and turned to lie along the curve, kept upright, or bent with it.
-
-```tsx
-import { textPathPlugin } from 'tegaki/core';
-
-const rainbow = [textPathPlugin({ angle: 120 })];
-const badge = [textPathPlugin({ angle: 330 })]; // nearly a full circle
-const flag = [textPathPlugin({ shape: 'wave', amplitude: 0.2, glyphs: 'bend', flow: 0.6 })];
-```
-
-| Option | Default | What it changes |
-|--------|---------|-----------------|
-| `shape` | `'arc'` | `'arc'` or `'wave'`. |
-| `angle` | `60` | Degrees the arc turns across the text: positive bows it up, negative down, `±360` wraps it round a circle. |
-| `amplitude` | `0.25` | A wave's height either way, in ems. |
-| `wavelength` | `4` | A wave's length, crest to crest, in ems. |
-| `phase` | `0` | Where the wave starts, in degrees. |
-| `glyphs` | `'rotate'` | `'rotate'` turns each glyph to lie along the curve, `'upright'` only moves it, `'bend'` bends it with the curve. |
-| `flow` | `0` | Waves a second the wave travels along the text; `0` holds it still. A flowing wave redraws with [`steps`](#drawings-over-time-steps) and keeps going once the text is written. |
-
-The text's middle stays where it was and the text keeps its length along the curve. Glyph outlines move with the strokes, so clip-to-text follows. Presets: `Rainbow`, `Smile`, `Badge` and `Flag`. The DOM text under the canvas (for selection and screen readers) stays where the layout put it.
-
-### Captions: `captionPlugin`
-
-Writes each word of the text while it's said, for captions, lyrics and narrated videos. Give it when each word starts (and ends), as a transcriber's word timings in JSON or as `start end word` lines. Without cues it writes at a steady pace, word by word, pausing at commas and full stops.
-
-```tsx
-import { captionPlugin } from 'tegaki/core';
-
-const words = [{ word: 'Hello', start: 0.1, end: 0.5 }, { word: 'world', start: 0.62, end: 1.3 }]; // from your transcript
-const plugins = [captionPlugin({ cues: JSON.stringify(words) })];
-// or typed: captionPlugin({ cues: '0.1 0.5 Hello; 0.62 1.3 world' })
-```
-
-| Option | Default | What it changes |
-|--------|---------|-----------------|
-| `cues` | `''` | One cue per word of the text, in order. JSON: an array of `{ start, end? }` (`startTime` / `endTime` and `[start, end]` pairs work too). Text: cues separated by new lines or `;`, each `start [end] [word]`, with times in seconds or `m:ss.s`. A cue with no end lasts until the next one starts. The words aren't matched against the text; the text's words take the cues in order. |
-| `fit` | `'stretch'` | `'stretch'` fits each word's writing to its cue. `'pace'` keeps the hand's own pace and only squeezes a word that would run into the next. |
-| `lead` | `0` | Seconds the writing runs behind the voice (negative: ahead of it). |
-| `wpm` | `70` | Words a minute for words with no cue, and for all of them when there are none. |
-
-A word is the glyphs between spaces on one line, so text without spaces (Chinese, Japanese) takes one cue per line. `parseCues(text)` reads a cue list the way the plugin does. In Remotion, drive the renderer with the time in seconds, as in the [Remotion guide](/frameworks/remotion/), so the writing stays in step with the audio.
+The Plugins tab of [Tegaki Studio](/studio/) has many more plugins, written against this API as a user of `tegaki` would write them: text on an arc or a wave, captions written in step with a voice, a hand that wobbles, a brush, a typewriter, chalk and more. They aren't part of `tegaki`. Each one links to its source on GitHub, which you can copy into your project and change: [text on a path](https://github.com/gkurt/tegaki/blob/main/packages/website/src/components/plugins/text-path.ts), [captions](https://github.com/gkurt/tegaki/blob/main/packages/website/src/components/plugins/caption.ts) and [wobble](https://github.com/gkurt/tegaki/blob/main/packages/website/src/components/plugins/wobble.ts), for example.
 
 ## Migrating from `effects`
 
@@ -757,7 +706,7 @@ The `effects` option is gone from the engine and every framework component. Each
 | `effects={{ glow: { radius: 8, color: '#0cf' } }}` | `plugins={[glowPlugin({ radius: '8px', color: '#0cf' })]}`, or in em, `radius: 0.1`, to grow with the text |
 | `glow: { radius: '0.1em' }` | `glowPlugin({ radius: 0.1 })` |
 | `glow: { offsetX: 50 }` (font units) | `glowPlugin({ offsetX: 0.05 })` at 1000 units per em, or in px, `offsetX: '4px'` |
-| `wobble: { amplitude: 2, frequency: 6 }` | `wobblePlugin({ amplitude: 2, frequency: 6 })` |
+| `wobble: { amplitude: 2, frequency: 6 }` | no longer built in: [`variationPlugin()`](#variation-variationplugin) (its `warp` bends each glyph; [`boilPlugin`](#line-boil-boilplugin) for a line that moves), or copy the Studio's [wobble demo](https://github.com/gkurt/tegaki/blob/main/packages/website/src/components/plugins/wobble.ts) into your project |
 | `taper: true` | `taperPlugin()` |
 | `strokeGradient: { colors: 'rainbow' }` | `strokeGradientPlugin()` (`colors: []`, the default, is the rainbow) |
 | `globalGradient: { colors: ['#f06', '#40f'], angle: 90 }` | `globalGradientPlugin({ colors: ['#f06', '#40f'], angle: 90 })` |
@@ -767,7 +716,7 @@ The `effects` option is gone from the engine and every framework component. Each
 | `effects` on `<tegaki-renderer>` | the `plugins` property, or the `plugins` attribute with registered names |
 | `--effects '{"glow":{"radius":10}}'` (CLI) | `--plugins '[["glow", {"radius": "10px"}]]'` |
 
-An effect set to `false` or `{ enabled: false }` is a plugin left out of the list. The effects used to run ahead of your plugins, sorted by their `order`. Style plugins run where you list them, so put a `taperPlugin` or `wobblePlugin` ahead of any plugin of yours that should see the tapered or wobbled path. `resolveEffects`, `findEffect`, `findEffects`, `effectPlugins` and the `TegakiEffects` / `TegakiEffectConfigs` / `CSSLength` types are no longer exported.
+An effect set to `false` or `{ enabled: false }` is a plugin left out of the list. The effects used to run ahead of your plugins, sorted by their `order`. Style plugins run where you list them, so put a `taperPlugin` ahead of any plugin of yours that should see the tapered path. `resolveEffects`, `findEffect`, `findEffects`, `effectPlugins` and the `TegakiEffects` / `TegakiEffectConfigs` / `CSSLength` types are no longer exported.
 
 ## Helper functions
 
@@ -807,16 +756,6 @@ const { totalDuration } = computeTimeline('Hello', bundle);
 
 Pass the same `timing` the renderer gets and, when a shaper is registered, the shaper (`await createHarfbuzzShaper(bundle)` from `tegaki/shaper-harfbuzz`), so the duration matches what is drawn.
 
-### `strokeInstances(timeline, font)`
-
-The `engine.strokes` list for any timeline, with no engine or DOM needed. Use it to schedule things by stroke, for example a sound at each stroke's `start` in a Remotion composition. `sampleStroke(stroke, time, timing?)` gives a stroke's state and progress at a given time.
-
-```ts
-import { computeTimeline, strokeInstances } from 'tegaki/core';
-
-const starts = strokeInstances(computeTimeline('Hello', bundle), bundle).map((s) => s.start);
-```
-
 ### `StrokePath`
 
 A polyline of points, each with `x`, `y`, `width` (the ink width there) and `t` (the draw progress at that point, 0–1). The paths in a frame are in CSS px. `new StrokePath(points)` makes one.
@@ -855,8 +794,14 @@ How far `point` is from the nearest ink edge of any of `paths`, in px. It is neg
 
 ### `groupStrokes(strokes, by, fontSize)`
 
-Gathers a list of strokes into the whole text (`'text'`), lines (`'lines'`) or words (`'words'`), in text order. Each group has its strokes' indices (`members`), its glyphs, its first line and baseline, the box its ink covers, and whether it's written right to left. Annotate, Captions and the studio's cursive joins group strokes with it.
+Gathers a list of strokes into the whole text (`'text'`), lines (`'lines'`) or words (`'words'`), in text order. Each group has its strokes' indices (`members`), its glyphs, its first line and baseline, the box its ink covers, and whether it's written right to left. Annotate and the studio's cursive joins and captions group strokes with it.
 
 ### `seededRandom(seed, key)`
 
 A random number generator for `[0, 1)` that gives the same numbers for the same `seed` and `key`. Plugins get one already seeded, as `random(key)`.
+
+### `tegaki/internal`
+
+The package also ships `tegaki/internal`: helpers the Tegaki website and generator share with the renderer, such as stroke sampling, text layout and bundle loading. It isn't covered by semver, so any release may change or remove what's in it. Don't depend on it. If you need one of its functions, [open an issue](https://github.com/gkurt/tegaki/issues) to have it made public.
+
+Some of it used to be exported from `tegaki/core`, such as `strokeInstances`, `sampleStroke` and `computeTextLayout`. A plugin doesn't need them: its hooks already get the placed strokes and every frame. Outside a plugin, [`engine.strokes`](#enginestrokes) lists each stroke with its start and duration, and [`engine.frameAt(time)`](#engineframeattime) gives every stroke's state at a time.

@@ -18,7 +18,7 @@
 // one cut, which naturally handles X (4 corners / 4 cuts) and asterisk-style
 // junctions (2k corners / 2k cuts) without special cases.
 
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { add, dist, distToSegment, dot, normalize, pointInRegion, scale, segmentIntersection, sub } from './primitives.ts';
 import { castRay } from './raycast.ts';
 import type { Contour, Corner, Cut, CutEndpoint, ResolvedGeometryOptions } from './types.ts';

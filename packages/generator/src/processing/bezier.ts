@@ -2,7 +2,7 @@
 // Flatten opentype.js path commands (M / L / Q / C / Z) into polyline sub-paths
 // in font-unit coordinates, using adaptive de Casteljau subdivision.
 
-import type { BBox, PathCommand, Point } from 'tegaki';
+import type { BBox, PathCommand, Point } from 'tegaki/internal';
 import { BEZIER_TOLERANCE } from '../constants.ts';
 
 /** Bounding box of all points across the flattened sub-paths. */

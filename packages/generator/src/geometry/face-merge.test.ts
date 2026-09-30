@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { mergeSegmentFaces } from './face-merge.ts';
 import { signedArea } from './primitives.ts';
 import type { Face } from './types.ts';

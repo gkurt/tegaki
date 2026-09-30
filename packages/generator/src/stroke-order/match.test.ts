@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Point } from 'tegaki';
+import type { Point } from 'tegaki/internal';
 import { hungarian, isClosedPolyline, matchStrokes, resamplePolyline, rotateLoop } from './match.ts';
 
 const line = (x1: number, y1: number, x2: number, y2: number): Point[] => [
