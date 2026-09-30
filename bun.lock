@@ -108,6 +108,7 @@
       "dependencies": {
         "@remotion/cli": "4.0.529",
         "@remotion/fonts": "4.0.529",
+        "@remotion/google-fonts": "4.0.529",
         "harfbuzzjs": "^1.6.2",
         "react": "^19",
         "react-dom": "^19",
@@ -912,6 +913,8 @@
     "@remotion/compositor-win32-x64-msvc": ["@remotion/compositor-win32-x64-msvc@4.0.529", "", { "os": "win32", "cpu": "x64" }, "sha512-kyg7sG3bRdsKlcwDQ1yNMwDkAKpwlTtTrwbVWKcmii8LvHdMEDGPuteuQn6ULxwIAFqyzNkNAxhKrIjj9r8hZg=="],
 
     "@remotion/fonts": ["@remotion/fonts@4.0.529", "", { "dependencies": { "remotion": "4.0.529" } }, "sha512-Kd93oNWS3C2evRMq6fdCviQD/7l+8Z0Ezvj1Pe24lIv+8qhl8NEs0U45FKPiMDnz8e8hFWfbD1X7FgkZu+AKNQ=="],
+
+    "@remotion/google-fonts": ["@remotion/google-fonts@4.0.529", "", { "dependencies": { "remotion": "4.0.529" } }, "sha512-wU4mKK6gYVPk1ms0/x7y/yUfUxXynxTXjcTNZp67z73oL5J5r0MYzTVi3pl9zB0NG4P4trXKt81N9VYpMSJ6+A=="],
 
     "@remotion/licensing": ["@remotion/licensing@4.0.529", "", {}, "sha512-+hVV68ouCdjeNGKQOdDueH1OZej5biXGXLr9ADdiJr7MEl5l9mWPHa2Z9z45TwBHihMe5wKOQ5fmXHc+TBOjBg=="],
 

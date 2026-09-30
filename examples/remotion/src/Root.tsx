@@ -1,6 +1,7 @@
 import { Composition, useCurrentFrame, useVideoConfig } from 'remotion';
 import { TegakiRenderer } from 'tegaki';
 import caveat from 'tegaki/fonts/caveat';
+import { LAUNCH_DURATION, LAUNCH_FPS, LAUNCH_HEIGHT, LAUNCH_WIDTH, Launch } from './launch/Launch.tsx';
 import { PROMO_DURATION, PROMO_FPS, PROMO_HEIGHT, PROMO_WIDTH, Promo } from './Promo';
 import { SCRIPTS_PROMO_DURATION, SCRIPTS_PROMO_FPS, SCRIPTS_PROMO_HEIGHT, SCRIPTS_PROMO_WIDTH, ScriptsPromo } from './ScriptsPromo';
 
@@ -31,6 +32,14 @@ export const RemotionRoot: React.FC = () => {
         fps={PROMO_FPS}
         width={PROMO_WIDTH}
         height={PROMO_HEIGHT}
+      />
+      <Composition
+        id="Launch"
+        component={Launch}
+        durationInFrames={LAUNCH_DURATION}
+        fps={LAUNCH_FPS}
+        width={LAUNCH_WIDTH}
+        height={LAUNCH_HEIGHT}
       />
       <Composition
         id="ScriptsPromo"

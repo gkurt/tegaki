@@ -30,10 +30,10 @@ Config.overrideWebpackConfig((config) => {
           if (typeof rule !== 'object' || !rule || !rule.test) return true;
           const test = rule.test;
           if (!(test instanceof RegExp)) return true;
-          return !test.test('a.ttf') && !test.test('a.wasm');
+          return !test.test('a.ttf') && !test.test('a.otf') && !test.test('a.wasm');
         }),
         {
-          test: /\.ttf$/,
+          test: /\.(ttf|otf)$/,
           type: 'asset/inline',
         },
         {
