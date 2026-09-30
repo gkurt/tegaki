@@ -1,7 +1,6 @@
 ---
-import { TegakiEngine, type TegakiEngineOptions, type TegakiPluginSpec } from '../core/index.ts';
-import { isDeclarative } from '../core/plugin-registry.ts';
-import type { TegakiBundle } from '../types.ts';
+import { type TegakiBundle, TegakiEngine, type TegakiEngineOptions, type TegakiPluginSpec } from 'tegaki/core';
+import { isDeclarative } from 'tegaki/internal';
 
 interface Props extends Omit<TegakiEngineOptions, 'onComplete' | 'onChangeTimeline' | 'plugins'> {
   /**

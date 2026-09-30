@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { TegakiEngine } from '../core/engine.ts';
-import type { ReducedMotionProp, TegakiEngineOptions, TegakiPluginSpec, TegakiQuality, TimeControlProp } from '../core/types.ts';
-import type { TegakiBundle } from '../types.ts';
-import type { Timeline, TimelineConfig } from '../lib/timeline.ts';
+import { TegakiEngine } from 'tegaki/core';
+import type {
+  ReducedMotionProp,
+  TegakiBundle,
+  TegakiEngineOptions,
+  TegakiPluginSpec,
+  TegakiQuality,
+  TimeControlProp,
+  Timeline,
+  TimelineConfig,
+} from 'tegaki/core';
 
 const props = defineProps<{
   text?: string;

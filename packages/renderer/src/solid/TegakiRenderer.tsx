@@ -1,7 +1,6 @@
 /** @jsxImportSource solid-js */
 import { createEffect, createMemo, type JSX, on, onCleanup, onMount, splitProps } from 'solid-js';
-import { TegakiEngine } from '../core/engine.ts';
-import type { TegakiEngineOptions } from '../core/types.ts';
+import { TegakiEngine, type TegakiEngineOptions } from 'tegaki/core';
 
 export interface TegakiRendererProps extends TegakiEngineOptions {
   class?: string;
