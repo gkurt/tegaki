@@ -1,12 +1,6 @@
 {
   "version": 1,
   "skills": {
-    "hyperframes": {
-      "source": "heygen-com/hyperframes",
-      "sourceType": "github",
-      "skillPath": "skills/hyperframes/SKILL.md",
-      "computedHash": "f726a7478c7a3133e763c9af5f8ade12bc65dbdf32f09a854696ebabc68433a5"
-    },
     "padrone": {
       "source": "KurtGokhan/padrone",
       "sourceType": "github",

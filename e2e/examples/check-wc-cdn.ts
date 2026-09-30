@@ -2,8 +2,8 @@
 
 /**
  * Web-component smoke test over the *CDN* path: loads `tegaki/wc` and a font
- * bundle from esm.sh at the published version (the same way the hyperframes
- * example consumes Tegaki), renders a `<tegaki-renderer>`, and asserts it
+ * bundle from esm.sh at the published version (the way a page with no build
+ * step consumes Tegaki), renders a `<tegaki-renderer>`, and asserts it
  * actually drew handwriting.
  *
  * This is distinct from the npm-install examples: it exercises esm.sh's built

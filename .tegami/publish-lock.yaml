@@ -7,8 +7,6 @@ core:packages:
     updated: true
   - id: npm:@tegaki/example-e2e
     updated: true
-  - id: npm:hyperframes
-    updated: true
   - id: npm:@tegaki/example-nuxt
     updated: true
   - id: npm:tegaki-generator
@@ -30,7 +28,6 @@ core:packages:
 npm:packages:
   - id: npm:@tegaki/root
   - id: npm:@tegaki/example-e2e
-  - id: npm:hyperframes
   - id: npm:@tegaki/example-nuxt
   - id: npm:tegaki-generator
   - id: npm:tegaki
