@@ -4,6 +4,7 @@ import { Rise } from '../components.tsx';
 import { FONTS } from '../fonts.ts';
 import { comet } from '../plugins/comet.ts';
 import { C, EASE, SERIF, tween } from '../theme.ts';
+import { SCENE, TITLE } from '../timing.ts';
 import { Write } from '../Write.tsx';
 
 const HERO = [
@@ -17,7 +18,7 @@ const VERSION = [
 ];
 const HQ = { pixelRatio: 1.5 };
 
-export const TITLE_FRAMES = 150;
+const TITLE_FRAMES = SCENE.title.frames;
 
 /** The name writes itself in fire, the version gets circled. */
 export const Title: React.FC = () => {
@@ -27,14 +28,14 @@ export const Title: React.FC = () => {
     <AbsoluteFill style={{ background: `radial-gradient(ellipse at 50% 48%, #1d1814 0%, ${C.night} 55%, ${C.nightDeep} 100%)` }}>
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', transform: `scale(${zoom})` }}>
         <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, marginTop: -40 }}>
-          <Write font={FONTS.kleeOne} text="手書き" from={2} frames={34} size={64} color={C.creamSoft} plugins={KANJI} />
+          <Write font={FONTS.kleeOne} text="手書き" {...TITLE.kanji} size={64} color={C.creamSoft} plugins={KANJI} />
           <div style={{ position: 'relative', marginTop: -10 }}>
-            <Write font={FONTS.caveat} text="tegaki" from={26} frames={70} size={420} color={C.cream} plugins={HERO} quality={HQ} />
+            <Write font={FONTS.caveat} text="tegaki" {...TITLE.name} size={420} color={C.cream} plugins={HERO} quality={HQ} />
             <div style={{ position: 'absolute', right: -250, top: 40 }}>
-              <Write font={FONTS.caveat} text="1.0" from={94} speed={1.6} size={150} color={C.gold} plugins={VERSION} />
+              <Write font={FONTS.caveat} text="1.0" {...TITLE.version} size={150} color={C.gold} plugins={VERSION} />
             </div>
           </div>
-          <Rise at={104} style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 50, color: C.creamSoft, marginTop: -6 }}>
+          <Rise at={TITLE.tagline} style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 50, color: C.creamSoft, marginTop: -6 }}>
             Handwriting that writes itself.
           </Rise>
         </div>

@@ -5,9 +5,8 @@ import { Cursor, cursorAt } from '../components.tsx';
 import { FONTS, family } from '../fonts.ts';
 import { GlyphStages } from '../GlyphStages.tsx';
 import { C, EASE, keys, MONO, ramp, SANS } from '../theme.ts';
+import { STUDIO } from '../timing.ts';
 import { Write } from '../Write.tsx';
-
-export const STUDIO_FRAMES = 270;
 
 // The window, in its own px.
 const W = 1640;
@@ -18,18 +17,7 @@ const SIDEBAR = 220;
 const CANVAS_W = W - INSPECTOR;
 
 // When things happen (scene frames).
-const T = {
-  skeleton: 42,
-  strokes: 66,
-  final: 94,
-  text: 136,
-  picker: 162,
-  parisienne: 184,
-  pluginsTab: 204,
-  rainbow: 216,
-  glow: 232,
-  boil: 248,
-};
+const T = STUDIO;
 
 const RAINBOW = strokeGradientPlugin({ saturation: 85, lightness: 58 });
 const GLOW = glowPlugin({ radius: 0.1 });
@@ -154,7 +142,7 @@ export const Studio: React.FC = () => {
   const cur = cursorAt(frame, CURSOR);
   // Camera: in on the glyph while it's taken apart, back out for text mode.
   // ...and out through the canvas into the next scene.
-  const whip = ramp(frame, 248, 264, EASE.in);
+  const whip = ramp(frame, T.whip[0], T.whip[1], EASE.in);
   const zoom = keys(frame, [10, 60, 118, 140, 248], [1, 1.16, 1.16, 1, 1.03], EASE.inOut) * (1 + whip * whip * 2.4);
   const zoomY = keys(frame, [10, 60, 118, 140], [0, 60, 60, 0], EASE.inOut);
 
@@ -165,7 +153,7 @@ export const Studio: React.FC = () => {
   const plugOn = [frame >= T.glow ? 1 : 0, frame >= T.rainbow ? 1 : 0, frame >= T.boil ? 1 : 0];
   const plugins = PLUGIN_SETS[plugOn.reduce((a, b) => a + b, 0) as 0 | 1 | 2 | 3];
   const writeFrom = frame >= T.parisienne ? T.parisienne + 2 : T.text + 4;
-  const writeFrames = 46;
+  const writeFrames = T.writeFrames;
   const playback = Math.min(1, (frame - writeFrom) / writeFrames);
 
   return (

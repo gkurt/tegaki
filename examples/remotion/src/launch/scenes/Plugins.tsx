@@ -12,9 +12,10 @@ import { neon } from '../plugins/neon.ts';
 import { stardust } from '../plugins/stardust.ts';
 import { watercolor } from '../plugins/watercolor.ts';
 import { EASE, HEIGHT, MONO, ramp, WIDTH } from '../theme.ts';
+import { PLUGINS as PLUGINS_T, SCENE } from '../timing.ts';
 import { Write } from '../Write.tsx';
 
-export const PLUGINS_FRAMES = 270;
+const PLUGINS_FRAMES = SCENE.plugins.frames;
 
 const WORD = 'magic';
 const BASE_W = 600;
@@ -130,11 +131,11 @@ const STAGES: (Rect | null)[][] = [
 const spawn = (r: Rect, dir: 'right' | 'down'): Rect => (dir === 'right' ? [r[0] + r[2], r[1], 0, r[3]] : [r[0], r[1] + r[3], r[2], 0]);
 const SPAWN_DIR: ('right' | 'down')[] = ['right', 'right', 'down', 'down', 'right', 'right', 'right', 'right'];
 // Frames each split starts at, and how long it takes.
-const SPLITS = [52, 102, 150];
-const SPLIT_DUR = 16;
+const SPLITS = PLUGINS_T.splits;
+const SPLIT_DUR = PLUGINS_T.splitFrames;
 // When each panel's pen starts: as it appears, and all together for the finale.
-const APPEAR = [2, SPLITS[0]!, SPLITS[1]!, SPLITS[1]!, SPLITS[2]!, SPLITS[2]!, SPLITS[2]!, SPLITS[2]!];
-const UNISON = 206;
+const APPEAR = PLUGINS_T.appear;
+const UNISON = PLUGINS_T.unison;
 
 const lerpRect = (a: Rect, b: Rect, t: number): Rect => [0, 1, 2, 3].map((i) => a[i]! + (b[i]! - a[i]!) * t) as Rect;
 
@@ -196,7 +197,7 @@ export const Plugins: React.FC = () => {
                 font={FONTS.caveat}
                 text={WORD}
                 from={unison ? UNISON : APPEAR[i]}
-                frames={unison ? 44 : 46}
+                frames={unison ? PLUGINS_T.unisonFrames : PLUGINS_T.writeFrames}
                 size={SIZE}
                 color={p.color}
                 plugins={p.plugins}

@@ -2,6 +2,7 @@ import { AbsoluteFill, useCurrentFrame } from 'remotion';
 import { Rise } from '../components.tsx';
 import { type Bundle, FONTS } from '../fonts.ts';
 import { C, EASE, keys, MONO, ramp, SERIF } from '../theme.ts';
+import { SCENE, SCRIPTS as SCRIPTS_T } from '../timing.ts';
 import { Write } from '../Write.tsx';
 
 interface Cell {
@@ -43,7 +44,7 @@ const GRID_H = 3 * CARD_H + 2 * GAP;
 const FOCUS = { row: 1, col: 1 };
 const HQ = { pixelRatio: 2 };
 
-export const SCRIPTS_FRAMES = 138;
+const SCRIPTS_FRAMES = SCENE.scripts.frames;
 
 /** Hello in twelve hands: the camera pulls back from one card as the rest write in a ripple. */
 export const Scripts: React.FC = () => {
@@ -71,7 +72,7 @@ export const Scripts: React.FC = () => {
           {CELLS.flatMap((row, r) =>
             row.map((cell, c) => {
               const d = Math.hypot(r - FOCUS.row, c - FOCUS.col);
-              const at = 6 + d * 11;
+              const at = SCRIPTS_T.rippleAt + d * SCRIPTS_T.rippleStep;
               const pop = ramp(frame, at - 6, at + 14, EASE.out);
               return (
                 <div
@@ -117,7 +118,7 @@ export const Scripts: React.FC = () => {
                       font={cell.font}
                       text={cell.text}
                       from={at}
-                      frames={46}
+                      frames={SCRIPTS_T.writeFrames}
                       size={cell.size}
                       color={C.ink}
                       quality={HQ}
@@ -131,7 +132,7 @@ export const Scripts: React.FC = () => {
         </div>
       </AbsoluteFill>
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 70 }}>
-        <Rise at={78} style={{ fontFamily: SERIF, fontSize: 64, color: C.ink, letterSpacing: -0.5 }}>
+        <Rise at={SCRIPTS_T.tagline} style={{ fontFamily: SERIF, fontSize: 64, color: C.ink, letterSpacing: -0.5 }}>
           Any font. <span style={{ fontStyle: 'italic', color: C.seal }}>Every script.</span>
         </Rise>
       </AbsoluteFill>

@@ -4,9 +4,10 @@ import { Rise, Typed } from '../components.tsx';
 import { FONTS } from '../fonts.ts';
 import { comet } from '../plugins/comet.ts';
 import { C, EASE, MONO, ramp, tween } from '../theme.ts';
+import { OUTRO, SCENE } from '../timing.ts';
 import { Write } from '../Write.tsx';
 
-export const OUTRO_FRAMES = 122;
+const OUTRO_FRAMES = SCENE.outro.frames;
 
 const HERO = [
   taperPlugin({ startLength: 0.04, endLength: 0.08 }),
@@ -30,12 +31,12 @@ export const Outro: React.FC = () => {
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', transform: `scale(${zoom})` }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: -60 }}>
           <div style={{ position: 'relative' }}>
-            <Write font={FONTS.caveat} text="tegaki" from={4} frames={42} size={330} color={C.cream} plugins={HERO} quality={HQ} />
+            <Write font={FONTS.caveat} text="tegaki" {...OUTRO.name} size={330} color={C.cream} plugins={HERO} quality={HQ} />
             <div style={{ position: 'absolute', right: -200, top: 26 }}>
-              <Write font={FONTS.caveat} text="1.0" from={44} speed={2} size={120} color={C.gold} plugins={VERSION} />
+              <Write font={FONTS.caveat} text="1.0" {...OUTRO.version} size={120} color={C.gold} plugins={VERSION} />
             </div>
           </div>
-          <Rise at={56} style={{ marginTop: 10 }}>
+          <Rise at={OUTRO.install} style={{ marginTop: 10 }}>
             <div
               style={{
                 fontFamily: MONO,
@@ -48,10 +49,10 @@ export const Outro: React.FC = () => {
               }}
             >
               <span style={{ color: C.sealBright }}>$ </span>
-              <Typed text="npm i tegaki" at={60} cps={24} />
+              <Typed {...OUTRO.typing} />
             </div>
           </Rise>
-          <Rise at={74} style={{ marginTop: 26, fontFamily: MONO, fontSize: 24, letterSpacing: 6, color: C.nightMuted }}>
+          <Rise at={OUTRO.url} style={{ marginTop: 26, fontFamily: MONO, fontSize: 24, letterSpacing: 6, color: C.nightMuted }}>
             tegaki.ink
           </Rise>
         </div>
@@ -70,8 +71,7 @@ export const Outro: React.FC = () => {
         <Write
           font={FONTS.caveat}
           text="every handwritten letter here was drawn by tegaki"
-          from={72}
-          frames={30}
+          {...OUTRO.sign}
           size={46}
           color={C.creamSoft}
           plugins={SIGN}

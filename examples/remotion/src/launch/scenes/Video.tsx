@@ -3,15 +3,16 @@ import { AbsoluteFill, random, useCurrentFrame } from 'remotion';
 import { glowPlugin } from 'tegaki/core';
 import { Cursor, cursorAt } from '../components.tsx';
 import { FONTS } from '../fonts.ts';
-import { C, EASE, keys, MONO, ramp, SANS, SERIF } from '../theme.ts';
+import { C, EASE, MONO, ramp, SANS, SERIF } from '../theme.ts';
+import { playhead, SCENE, VIDEO } from '../timing.ts';
 import { Write } from '../Write.tsx';
 
-export const VIDEO_FRAMES = 186;
+const VIDEO_FRAMES = SCENE.video.frames;
 
 // The edit being made: six seconds of dusk with a title and a subtitle.
-const EDIT = 6;
-const TITLE_AT = 0.35;
-const SUB_AT = 2.7;
+const EDIT = VIDEO.edit;
+const TITLE_AT = VIDEO.titleAt;
+const SUB_AT = VIDEO.subAt;
 
 // Layout.
 const MON = { x: 48, y: 44, w: 1152, h: 648 };
@@ -20,17 +21,9 @@ const TL = { y: 736, h: 300, x0: 196, x1: 1872 };
 const tx = (t: number) => TL.x0 + (t / EDIT) * (TL.x1 - TL.x0);
 const RENDER = { x: SIDE.x, y: 574, w: SIDE.w, h: 64 };
 
-// The playhead (edit seconds) by scene frame: plays, is dragged back, forward, plays on.
-const GRAB = 84;
-const DROP = 128;
-function playhead(f: number): number {
-  if (f < 18) return 0;
-  if (f < GRAB) return ((f - 18) / 30) * 1.1;
-  const atGrab = ((GRAB - 18) / 30) * 1.1;
-  if (f < DROP) return keys(f, [GRAB, 102, DROP], [atGrab, 0.75, 4.1], EASE.inOut);
-  return Math.min(EDIT, 4.1 + ((f - DROP) / 30) * 1.1);
-}
-const RENDER_AT = 150;
+const GRAB = VIDEO.grab;
+const DROP = VIDEO.drop;
+const RENDER_AT = VIDEO.render;
 
 const TITLE_PLUGINS = [glowPlugin({ radius: 0.06, color: 'rgba(40, 10, 30, 0.55)' })];
 const HQ = { pixelRatio: 1.25 };
@@ -170,7 +163,7 @@ export const Video: React.FC = () => {
     [30, 1500, 1000],
     [GRAB - 4, tx(playhead(GRAB)), TL.y + 18],
     [GRAB, tx(playhead(GRAB)), TL.y + 18, true],
-    [102, tx(0.75), TL.y + 18],
+    [VIDEO.back, tx(0.75), TL.y + 18],
     [DROP, tx(4.1), TL.y + 18],
     [RENDER_AT - 4, RENDER.x + 150, RENDER.y + RENDER.h / 2],
     [RENDER_AT, RENDER.x + 150, RENDER.y + RENDER.h / 2, true],
@@ -178,8 +171,8 @@ export const Video: React.FC = () => {
   ]);
   // Held down while dragging.
   const down = dragging ? 0.7 : cur.down;
-  const render = ramp(frame, RENDER_AT + 2, VIDEO_FRAMES - 10, EASE.inOut);
-  const done = frame >= VIDEO_FRAMES - 10;
+  const render = ramp(frame, RENDER_AT + 2, VIDEO.rendered, EASE.inOut);
+  const done = frame >= VIDEO.rendered;
   const titleT = T - TITLE_AT;
   const subT = T - SUB_AT;
 
@@ -207,7 +200,7 @@ export const Video: React.FC = () => {
             <Write
               font={FONTS.parisienne}
               text="Kyoto, day one"
-              time={Math.max(0, Math.min(1, titleT / 2.3))}
+              time={Math.max(0, Math.min(1, titleT / VIDEO.titleSeconds))}
               unit="progress"
               size={132}
               color="#fff8ee"
@@ -218,7 +211,7 @@ export const Video: React.FC = () => {
               <Write
                 font={FONTS.caveat}
                 text="the city hums at dusk"
-                time={Math.max(0, Math.min(1, subT / 1.5))}
+                time={Math.max(0, Math.min(1, subT / VIDEO.subSeconds))}
                 unit="progress"
                 size={52}
                 color="rgba(255, 244, 230, 0.9)"

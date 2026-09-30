@@ -9,7 +9,8 @@
     "still": "remotion still src/index.ts Handwriting out/still.png --frame=120",
     "build:promo": "remotion render src/index.ts Promo out/promo.mp4",
     "build:scripts-promo": "remotion render src/index.ts ScriptsPromo out/scripts-promo.mp4",
-    "build:launch": "remotion render src/index.ts Launch out/launch.mp4 --crf=16",
+    "soundtrack": "bun scripts/soundtrack.ts",
+    "build:launch": "bun scripts/soundtrack.ts && remotion render src/index.ts Launch out/launch.mp4 --crf=16 --audio-bitrate=320k",
     "typecheck": "tsc --noEmit",
     "upgrade": "remotion upgrade"
   },
@@ -25,6 +26,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@types/bun": "^1.4.2",
     "@types/react": "^19",
     "typescript": "^6"
   }

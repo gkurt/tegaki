@@ -1,0 +1,142 @@
+// When things happen, in frames — shared by the scenes and the soundtrack
+// script (scripts/soundtrack.ts), so the music and the sound effects land on
+// what they go with. Pure: no DOM, no Remotion.
+
+export const FPS = 30;
+
+/** One bar of the music: 67 frames, four beats at 107.46 BPM. The cuts into the Studio, the plugins, the video and the outro fall on bars. */
+export const BAR = 67;
+export const BEAT = BAR / 4;
+
+/** Where each scene starts and how long it runs. Neighbours overlap for the transitions. */
+export const SCENE = {
+  title: { at: 0, frames: 150 },
+  scripts: { at: 146, frames: 138 },
+  studio: { at: 4 * BAR, frames: 270 },
+  plugins: { at: 8 * BAR, frames: 270 },
+  video: { at: 12 * BAR, frames: 186 },
+  everywhere: { at: 970, frames: 106 },
+  outro: { at: 16 * BAR, frames: 122 },
+} as const;
+
+export type SceneId = keyof typeof SCENE;
+
+export const DURATION = SCENE.outro.at + SCENE.outro.frames;
+
+/** The wipes: brush strokes over the frame, from `at` (scene frames) for `dur`. */
+export const WIPES = {
+  titleOut: { at: SCENE.title.frames - 20, dur: 16 },
+  everywhereOut: { at: SCENE.everywhere.frames - 15, dur: 13 },
+};
+
+// --- Title --------------------------------------------------------------
+
+export const TITLE = {
+  kanji: { from: 2, frames: 34 },
+  name: { from: 26, frames: 70 },
+  version: { from: 94, speed: 1.6 },
+  tagline: 104,
+};
+
+// --- Scripts ------------------------------------------------------------
+
+/** A card's pen starts `6 + distance * 11` frames in, rippling out from the card the camera starts on. */
+export const SCRIPTS = { rippleAt: 6, rippleStep: 11, writeFrames: 46, tagline: 78 };
+
+// --- Studio -------------------------------------------------------------
+
+export const STUDIO = {
+  skeleton: 42,
+  strokes: 66,
+  final: 94,
+  text: 136,
+  picker: 162,
+  parisienne: 184,
+  pluginsTab: 204,
+  rainbow: 216,
+  glow: 232,
+  boil: 248,
+  whip: [248, 264] as const,
+  writeFrames: 46,
+};
+
+// --- Plugins ------------------------------------------------------------
+
+export const PLUGINS = {
+  /** Frames each split starts at. */
+  splits: [52, 102, 150],
+  splitFrames: 16,
+  /** When each panel's pen starts: as it appears. */
+  appear: [2, 52, 102, 102, 150, 150, 150, 150],
+  /** And all together, for the finale. */
+  unison: 206,
+  writeFrames: 46,
+  unisonFrames: 44,
+};
+
+// --- Video --------------------------------------------------------------
+
+export const VIDEO = {
+  /** Seconds of the edit being made. */
+  edit: 6,
+  titleAt: 0.35,
+  titleSeconds: 2.3,
+  subAt: 2.7,
+  subSeconds: 1.5,
+  play: 18,
+  grab: 76,
+  back: 94,
+  drop: 118,
+  render: 134,
+  rendered: 160,
+};
+
+const bezier = (x1: number, y1: number, x2: number, y2: number) => (x: number) => {
+  // Solve for the curve's t at x by bisection; plenty for a playhead.
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i++) {
+    const t = (lo + hi) / 2;
+    const bx = 3 * (1 - t) * (1 - t) * t * x1 + 3 * (1 - t) * t * t * x2 + t * t * t;
+    if (bx < x) lo = t;
+    else hi = t;
+  }
+  const t = (lo + hi) / 2;
+  return 3 * (1 - t) * (1 - t) * t * y1 + 3 * (1 - t) * t * t * y2 + t * t * t;
+};
+const inOut = bezier(0.65, 0, 0.35, 1);
+
+/** The playhead, in edit seconds, at a frame of the video scene: it plays, is dragged back, then forward, and plays on. */
+export function playhead(f: number): number {
+  const v = VIDEO;
+  const rate = 1.1 / FPS;
+  if (f < v.play) return 0;
+  const atGrab = (v.grab - v.play) * rate;
+  if (f < v.grab) return (f - v.play) * rate;
+  if (f < v.back) return atGrab + (0.75 - atGrab) * inOut((f - v.grab) / (v.back - v.grab));
+  if (f < v.drop) return 0.75 + (4.1 - 0.75) * inOut((f - v.back) / (v.drop - v.back));
+  return Math.min(v.edit, 4.1 + (f - v.drop) * rate);
+}
+
+// --- Everywhere ---------------------------------------------------------
+
+export const EVERYWHERE = {
+  tiles: [4, 9, 14, 19],
+  web: { from: 14, frames: 48 },
+  chat: { from: 20, frames: 58 },
+  learn: { from: 20, frames: 80 },
+  card: { from: 26, frames: 60 },
+  chips: 34,
+  chipStep: 3,
+};
+
+// --- Outro --------------------------------------------------------------
+
+export const OUTRO = {
+  name: { from: 4, frames: 42 },
+  version: { from: 44, speed: 2 },
+  install: 56,
+  typing: { at: 60, cps: 24, text: 'npm i tegaki' },
+  url: 74,
+  sign: { from: 72, frames: 30 },
+};

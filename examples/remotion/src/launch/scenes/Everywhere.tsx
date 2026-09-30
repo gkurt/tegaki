@@ -5,9 +5,8 @@ import { FONTS } from '../fonts.ts';
 import { foil } from '../plugins/foil.ts';
 import { strokeNumbers } from '../plugins/strokeNumbers.ts';
 import { C, EASE, MONO, ramp, SANS, SERIF } from '../theme.ts';
+import { EVERYWHERE } from '../timing.ts';
 import { Write } from '../Write.tsx';
-
-export const EVERYWHERE_FRAMES = 106;
 
 const FRAMEWORKS = ['React', 'Vue', 'Svelte', 'Solid', 'Astro', 'Next.js', 'Nuxt', 'Web Components', 'Remotion', 'Vanilla JS'];
 const LEARN = [strokeNumbers()];
@@ -73,7 +72,7 @@ export const Everywhere: React.FC = () => {
       <AbsoluteFill
         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 32, top: 40, transform: 'scale(1.07)' }}
       >
-        <Tile at={4} label="Websites" style={{ width: 560, height: 380, borderRadius: 14, background: '#fff' }}>
+        <Tile at={EVERYWHERE.tiles[0]!} label="Websites" style={{ width: 560, height: 380, borderRadius: 14, background: '#fff' }}>
           <div style={{ height: 38, background: '#f1ece2', display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px' }}>
             {['#ff5f57', '#febc2e', '#28c840'].map((c) => (
               <div key={c} style={{ width: 10, height: 10, borderRadius: 99, background: c }} />
@@ -103,7 +102,7 @@ export const Everywhere: React.FC = () => {
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 34 }}>
-            <Write font={FONTS.parisienne} text="Welcome home" from={14} frames={48} size={86} color={C.ink} quality={HQ} />
+            <Write font={FONTS.parisienne} text="Welcome home" {...EVERYWHERE.web} size={86} color={C.ink} quality={HQ} />
             <div style={{ width: 280, height: 10, borderRadius: 4, background: 'rgba(28,29,43,0.1)', marginTop: 22 }} />
             <div style={{ width: 200, height: 10, borderRadius: 4, background: 'rgba(28,29,43,0.1)', marginTop: 10 }} />
             <div
@@ -121,7 +120,11 @@ export const Everywhere: React.FC = () => {
             </div>
           </div>
         </Tile>
-        <Tile at={9} label="AI chat" style={{ width: 300, height: 560, borderRadius: 44, background: '#111', padding: 10 }}>
+        <Tile
+          at={EVERYWHERE.tiles[1]!}
+          label="AI chat"
+          style={{ width: 300, height: 560, borderRadius: 44, background: '#111', padding: 10 }}
+        >
           <div
             style={{
               width: '100%',
@@ -159,8 +162,7 @@ export const Everywhere: React.FC = () => {
               <Write
                 font={FONTS.caveat}
                 text={'ink finds the paper\neach stroke a heartbeat\nwords learn to breathe'}
-                from={20}
-                frames={58}
+                {...EVERYWHERE.chat}
                 size={24}
                 color={C.ink}
                 plugins={CHAT}
@@ -170,7 +172,7 @@ export const Everywhere: React.FC = () => {
             </div>
           </div>
         </Tile>
-        <Tile at={14} label="Learning" style={{ width: 360, height: 360, borderRadius: 18, background: '#fffdf8' }}>
+        <Tile at={EVERYWHERE.tiles[2]!} label="Learning" style={{ width: 360, height: 360, borderRadius: 18, background: '#fffdf8' }}>
           <svg width={360} height={360} style={{ position: 'absolute', inset: 0 }}>
             <rect x={30} y={30} width={300} height={300} fill="none" stroke="rgba(211,58,38,0.6)" strokeWidth={2} />
             <g stroke="rgba(211,58,38,0.35)" strokeDasharray="6 6" strokeWidth={1.4}>
@@ -184,8 +186,7 @@ export const Everywhere: React.FC = () => {
             <Write
               font={FONTS.kleeOne}
               text="書"
-              from={20}
-              frames={80}
+              {...EVERYWHERE.learn}
               size={250}
               color={C.ink}
               plugins={LEARN}
@@ -195,7 +196,7 @@ export const Everywhere: React.FC = () => {
           </div>
         </Tile>
         <Tile
-          at={19}
+          at={EVERYWHERE.tiles[3]!}
           label="Cards & invites"
           style={{
             width: 420,
@@ -219,8 +220,7 @@ export const Everywhere: React.FC = () => {
             <Write
               font={FONTS.parisienne}
               text={'Happy birthday,\nMia'}
-              from={26}
-              frames={60}
+              {...EVERYWHERE.card}
               size={60}
               color={C.gold}
               plugins={CARD}
@@ -232,7 +232,7 @@ export const Everywhere: React.FC = () => {
       </AbsoluteFill>
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 64, display: 'flex', justifyContent: 'center', gap: 12 }}>
         {FRAMEWORKS.map((f, i) => {
-          const p = ramp(frame, 34 + i * 3, 48 + i * 3, EASE.out);
+          const p = ramp(frame, EVERYWHERE.chips + i * EVERYWHERE.chipStep, EVERYWHERE.chips + 14 + i * EVERYWHERE.chipStep, EASE.out);
           return (
             <div
               key={f}

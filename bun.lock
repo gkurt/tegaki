@@ -117,6 +117,7 @@
         "zod": "4.6.5",
       },
       "devDependencies": {
+        "@types/bun": "^1.4.2",
         "@types/react": "^19",
         "typescript": "^6",
       },

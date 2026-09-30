@@ -1,46 +1,41 @@
-import { AbsoluteFill, Sequence } from 'remotion';
+import { AbsoluteFill, Html5Audio, Sequence, staticFile } from 'remotion';
 import { Grain, InkWipe } from './components.tsx';
 import './fonts.ts';
-import { EVERYWHERE_FRAMES, Everywhere } from './scenes/Everywhere.tsx';
-import { OUTRO_FRAMES, Outro } from './scenes/Outro.tsx';
-import { PLUGINS_FRAMES, Plugins } from './scenes/Plugins.tsx';
-import { SCRIPTS_FRAMES, Scripts } from './scenes/Scripts.tsx';
-import { STUDIO_FRAMES, Studio } from './scenes/Studio.tsx';
-import { TITLE_FRAMES, Title } from './scenes/Title.tsx';
-import { VIDEO_FRAMES, Video } from './scenes/Video.tsx';
+import { Everywhere } from './scenes/Everywhere.tsx';
+import { Outro } from './scenes/Outro.tsx';
+import { Plugins } from './scenes/Plugins.tsx';
+import { Scripts } from './scenes/Scripts.tsx';
+import { Studio } from './scenes/Studio.tsx';
+import { Title } from './scenes/Title.tsx';
+import { Video } from './scenes/Video.tsx';
 import { C } from './theme.ts';
+import { DURATION, SCENE, WIPES } from './timing.ts';
 
 export { FPS as LAUNCH_FPS, HEIGHT as LAUNCH_HEIGHT, WIDTH as LAUNCH_WIDTH } from './theme.ts';
 
-// Scenes in order, each with the frames it overlaps the one before by (for the transition into it).
 const SCENES = [
-  { id: 'title', frames: TITLE_FRAMES, overlap: 0, Scene: Title },
-  { id: 'scripts', frames: SCRIPTS_FRAMES, overlap: 4, Scene: Scripts },
-  { id: 'studio', frames: STUDIO_FRAMES, overlap: 12, Scene: Studio },
-  { id: 'plugins', frames: PLUGINS_FRAMES, overlap: 6, Scene: Plugins },
-  { id: 'video', frames: VIDEO_FRAMES, overlap: 10, Scene: Video },
-  { id: 'everywhere', frames: EVERYWHERE_FRAMES, overlap: 8, Scene: Everywhere },
-  { id: 'outro', frames: OUTRO_FRAMES, overlap: 4, Scene: Outro },
+  { id: 'title', Scene: Title },
+  { id: 'scripts', Scene: Scripts },
+  { id: 'studio', Scene: Studio },
+  { id: 'plugins', Scene: Plugins },
+  { id: 'video', Scene: Video },
+  { id: 'everywhere', Scene: Everywhere },
+  { id: 'outro', Scene: Outro },
 ] as const;
 
-const starts: number[] = [];
-for (let i = 0, at = 0; i < SCENES.length; i++) {
-  at += i === 0 ? 0 : SCENES[i - 1]!.frames - SCENES[i]!.overlap;
-  starts.push(at);
-}
-
-export const LAUNCH_DURATION = starts[starts.length - 1]! + SCENES[SCENES.length - 1]!.frames;
-export const SCENE_STARTS = Object.fromEntries(SCENES.map((s, i) => [s.id, starts[i]!]));
+export const LAUNCH_DURATION = DURATION;
 
 export const Launch: React.FC = () => (
   <AbsoluteFill style={{ backgroundColor: C.night }}>
-    {SCENES.map(({ id, frames, Scene }, i) => (
-      <Sequence key={id} name={id} from={starts[i]} durationInFrames={frames}>
+    {SCENES.map(({ id, Scene }) => (
+      <Sequence key={id} name={id} from={SCENE[id].at} durationInFrames={SCENE[id].frames}>
         <Scene />
-        {id === 'title' && <InkWipe id="t2s" at={frames - 20} dur={16} color={C.paper} />}
-        {id === 'everywhere' && <InkWipe id="e2o" at={frames - 15} dur={13} color={C.night} />}
+        {id === 'title' && <InkWipe id="t2s" {...WIPES.titleOut} color={C.paper} />}
+        {id === 'everywhere' && <InkWipe id="e2o" {...WIPES.everywhereOut} color={C.night} />}
       </Sequence>
     ))}
     <Grain />
+    {/* Written by scripts/soundtrack.ts, from the same timing (bun run soundtrack). */}
+    <Html5Audio src={staticFile('launch-soundtrack.wav')} />
   </AbsoluteFill>
 );
