@@ -1,9 +1,6 @@
 core:changelogs:
-  - content: "---\npackages:\n  tegaki:\n    type: patch\n---\n\n## Docs moved to tegaki.ink\n\nThe docs moved to [tegaki.ink](https://tegaki.ink/). The package's `homepage` and the bundler-setup warning now link there.\n"
-    filename: site-domain.md
-    v: 0.0.0
-  - content: "---\npackages:\n  tegaki:\n    type: patch\n---\n\n## Vue, Svelte, Solid and Astro components share `tegaki/core`\n\nThe Vue, Nuxt, Svelte, Solid and Astro components now run on the same core as `tegaki/core`. These adapters ship as source, and they had been compiling a second copy of the engine from it. So plugins made with `tegaki/core`'s factories failed to typecheck in the `plugins` prop (`Type 'TegakiPlugin[]' is not assignable to type 'readonly TegakiPluginSpec[]'`), and a plugin or bundle registered through `tegaki/core` wasn't found by name in these components.\n"
-    filename: adapters-share-core.md
+  - content: "---\npackages:\n  tegaki:\n    type: patch\n---\n\n## Idle plugin loops pause off screen\n\nA plugin whose `steps` set `idle` (a boil, a flicker) kept redrawing at its `fps` after the renderer had scrolled out of view, for as long as the page was open. The idle loop now stops while the canvas is off screen and picks up where its clock would be when it comes back.\n"
+    filename: idle-off-screen.md
     v: 0.0.0
 core:packages:
   - id: npm:@tegaki/root
@@ -12,46 +9,45 @@ core:packages:
     updated: true
   - id: npm:@tegaki/example-vite
     updated: true
-  - id: npm:@tegaki/example-vue
+  - id: npm:@tegaki/example-vanilla
     updated: true
   - id: npm:@tegaki/example-editframe
     updated: true
-  - id: npm:@tegaki/example-solid
+  - id: npm:@tegaki/example-vue
+    updated: true
+  - id: npm:@tegaki/example-next
+    updated: true
+  - id: npm:@tegaki/example-remotion
+    updated: true
+  - id: npm:@tegaki/example-e2e
+    updated: true
+  - id: npm:@tegaki/example-svelte
     updated: true
   - id: npm:@tegaki/website
     updated: true
-  - id: npm:@tegaki/example-e2e
+  - id: npm:@tegaki/example-solid
     updated: true
   - id: npm:@tegaki/example-astro
     updated: true
   - id: npm:tegaki-generator
     updated: true
-  - id: npm:@tegaki/example-next
-    updated: true
-  - id: npm:@tegaki/example-vanilla
-    updated: true
-  - id: npm:@tegaki/example-remotion
-    updated: true
   - changelogIds:
-      - site-domain.md
-      - adapters-share-core.md
+      - idle-off-screen.md
     id: npm:tegaki
-    updated: true
-  - id: npm:@tegaki/example-svelte
     updated: true
 npm:packages:
   - id: npm:@tegaki/root
   - id: npm:@tegaki/example-nuxt
   - id: npm:@tegaki/example-vite
-  - id: npm:@tegaki/example-vue
+  - id: npm:@tegaki/example-vanilla
   - id: npm:@tegaki/example-editframe
-  - id: npm:@tegaki/example-solid
-  - id: npm:@tegaki/website
+  - id: npm:@tegaki/example-vue
+  - id: npm:@tegaki/example-next
+  - id: npm:@tegaki/example-remotion
   - id: npm:@tegaki/example-e2e
+  - id: npm:@tegaki/example-svelte
+  - id: npm:@tegaki/website
+  - id: npm:@tegaki/example-solid
   - id: npm:@tegaki/example-astro
   - id: npm:tegaki-generator
-  - id: npm:@tegaki/example-next
-  - id: npm:@tegaki/example-vanilla
-  - id: npm:@tegaki/example-remotion
   - id: npm:tegaki
-  - id: npm:@tegaki/example-svelte
