@@ -410,13 +410,19 @@ for (let i = 0; i < 10; i++)
 whoosh(sfx, at('everywhere', WIPES.everywhereOut.at), s(WIPES.everywhereOut.dur) + 0.15, { gain: 0.2, from: 2500, to: 300, seed: 220 });
 
 // Outro: the name once more, the version circled, the install typed, the signature.
-const outroName = penAt('outro', caveat, 'tegaki', OUTRO.name, { gain: 0.1 });
+penAt('outro', kleeOne, '手書き', OUTRO.kanji, { gain: 0.08, tone: TONES.brush });
+const outroName = penAt('outro', parisienne, 'tegaki', OUTRO.name, { gain: 0.1, tone: TONES.nib });
 sparkle(sfx, s(outroName.from), s(outroName.end - outroName.from), { gain: 0.012, density: 30, seed: 230 });
-penAt('outro', caveat, '1.0', OUTRO.version, { gain: 0.07, mark: [0.05, 0.45], pan: 0.35 });
+penAt('outro', parisienne, '1.0', OUTRO.version, {
+  gain: 0.07,
+  tone: TONES.nib,
+  mark: [OUTRO.circle.delay, OUTRO.circle.duration],
+  pan: 0.35,
+});
 [...OUTRO.typing.text].forEach((ch, i) => {
   if (ch !== ' ') key(sfx, at('outro', OUTRO.typing.at + (i * FPS) / OUTRO.typing.cps + 0.5), { gain: 0.07, seed: 300 + i });
 });
-penAt('outro', caveat, 'every handwritten letter here was drawn by tegaki', OUTRO.sign, {
+penAt('outro', parisienne, 'every handwritten letter here was drawn by tegaki', OUTRO.sign, {
   gain: 0.06,
   mark: [0.1, 0.4],
   tone: TONES.pencil,

@@ -1,5 +1,5 @@
 import { AbsoluteFill, useCurrentFrame } from 'remotion';
-import { annotatePlugin, glowPlugin, taperPlugin } from 'tegaki/core';
+import { annotatePlugin, taperPlugin } from 'tegaki/core';
 import { Rise } from '../components.tsx';
 import { FONTS } from '../fonts.ts';
 import { brush } from '../plugins/brush.ts';
@@ -8,11 +8,7 @@ import { C, EASE, SERIF, tween } from '../theme.ts';
 import { SCENE, TITLE } from '../timing.ts';
 import { Write } from '../Write.tsx';
 
-const HERO = [
-  taperPlugin({ startLength: 0.04, endLength: 0.08 }),
-  comet(),
-  glowPlugin({ radius: 0.14, color: 'rgba(255, 205, 150, 0.2)' }),
-];
+const HERO = [taperPlugin({ startLength: 0.04, endLength: 0.08 }), comet()];
 const KANJI = [brush({ size: 0.068 })];
 const VERSION = [annotatePlugin({ mark: 'circle', color: C.gold, width: 0.03, padding: 0.2, ...TITLE.circle, roughness: 0.6 })];
 const HQ = { pixelRatio: 1.5 };

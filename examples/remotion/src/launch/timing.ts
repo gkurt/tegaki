@@ -160,8 +160,10 @@ export const EVERYWHERE = {
 // --- Outro --------------------------------------------------------------
 
 export const OUTRO = {
-  name: { from: 4, frames: 42 },
-  version: { from: 44, speed: 2 },
+  kanji: { from: 0, frames: 26 },
+  name: { from: 8, frames: 40 },
+  version: { from: 46, frames: 12 },
+  circle: { delay: 0.05, duration: 0.4 },
   install: 56,
   typing: { at: 60, cps: 24, text: 'npm i tegaki' },
   url: 74,
