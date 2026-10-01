@@ -8,18 +8,21 @@ import harfbuzzShaper from 'tegaki/shaper-harfbuzz';
 // alternates — without it those bundles draw only the nominal glyphs.
 TegakiEngine.registerShaper(harfbuzzShaper);
 
+// The Latin bundles ship whole — the Type-it card writes whatever is typed.
+// The others are cut down to the characters the page writes in them
+// (HOME_FONT_TEXT in home-fonts.ts): the CJK bundles are megabytes whole.
 const FONT_IMPORTS = {
   Caveat: () => import('tegaki/fonts/caveat'),
   Italianno: () => import('tegaki/fonts/italianno'),
   Tangerine: () => import('tegaki/fonts/tangerine'),
   Parisienne: () => import('tegaki/fonts/parisienne'),
-  'Suez One': () => import('tegaki/fonts/suez-one'),
-  Amiri: () => import('tegaki/fonts/amiri'),
-  Tillana: () => import('tegaki/fonts/tillana'),
-  Atma: () => import('tegaki/fonts/atma'),
-  'Klee One': () => import('tegaki/fonts/klee-one'),
-  'Nanum Pen Script': () => import('tegaki/fonts/nanum-pen-script'),
-  'LXGW WenKai': () => import('tegaki/fonts/lxgw-wenkai'),
+  'Suez One': () => import('tegaki-home-font:suez-one'),
+  Amiri: () => import('tegaki-home-font:amiri'),
+  Tillana: () => import('tegaki-home-font:tillana'),
+  Atma: () => import('tegaki-home-font:atma'),
+  'Klee One': () => import('tegaki-home-font:klee-one'),
+  'Nanum Pen Script': () => import('tegaki-home-font:nanum-pen-script'),
+  'LXGW WenKai': () => import('tegaki-home-font:lxgw-wenkai'),
 } as const;
 
 export type FontName = keyof typeof FONT_IMPORTS;

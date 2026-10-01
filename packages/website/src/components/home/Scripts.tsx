@@ -16,7 +16,7 @@ interface Script {
   clip?: number;
 }
 
-const SCRIPTS: Script[] = [
+export const SCRIPTS: Script[] = [
   {
     name: 'Latin',
     lang: 'en',
@@ -109,7 +109,7 @@ export function Scripts() {
   const font = useFont(near ? script.font : null);
 
   // Warm every bundle, one at a time in carousel order, so each script's font
-  // is in before its turn — the CJK ones are megabytes, more than one turn fetches.
+  // is in before its turn.
   useEffect(() => {
     if (!near) return;
     SCRIPTS.reduce<Promise<unknown>>((chain, s) => chain.then(() => loadFont(s.font)), Promise.resolve());

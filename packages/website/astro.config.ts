@@ -14,6 +14,7 @@ import type { AstroIntegration } from 'astro';
 import { defineConfig, fontProviders } from 'astro/config';
 import starlightThemeNova from 'starlight-theme-nova';
 import tegaki from 'tegaki/astro/integration';
+import { homeFonts } from './src/home-fonts.ts';
 import { GA_SNIPPET, GA_SRC, SHARED_HEAD_LINKS } from './src/seo.ts';
 import { CARD_IMAGE, DOCS_DESCRIPTION, REPO_URL, SIDEBAR, SITE, TWITTER_URL } from './src/site.ts';
 
@@ -173,7 +174,7 @@ export default defineConfig({
   // is taken. Unset PORT keeps the normal 4321 default.
   server: process.env.PORT ? { port: Number(process.env.PORT) } : {},
   vite: {
-    plugins: [tailwindcss() as any],
+    plugins: [tailwindcss() as any, homeFonts()],
     resolve: {
       conditions: ['tegaki@dev', 'browser'],
     },

@@ -19,7 +19,7 @@ interface Greeting {
   clip?: number;
 }
 
-const GREETINGS: Greeting[] = [
+export const GREETINGS: Greeting[] = [
   { word: 'Hello!', language: 'English', lang: 'en', font: 'Caveat', scale: 1.1 },
   { word: 'こんにちは', language: 'Japanese', lang: 'ja', font: 'Klee One', scale: 0.6, width: 5.1 },
   { word: 'مرحبا', language: 'Arabic', lang: 'ar', font: 'Amiri', dir: 'rtl' },
@@ -120,8 +120,7 @@ export function Greetings() {
 
 /**
  * The headline writes itself over a faint tracing of it, then a giant 書 ("to
- * write") is brushed behind it. The 書 waits for the headline, which also gives
- * Klee One (8 MB) time to arrive.
+ * write") is brushed behind it once the headline is written.
  */
 export function Hero() {
   const font = useFont('Parisienne');
@@ -130,6 +129,12 @@ export function Hero() {
   const kanjiFont = useFont(written ? 'Klee One' : null);
   const palette = INK[useTheme()];
   const brush = useMemo(() => [brushPlugin(brushPlugin.presets.Scroll)], []);
+  // A faint backdrop needs no retina pixels: at most 1.5 canvas pixels per CSS
+  // pixel, or a phone redraws a ~1500px rotated, see-through canvas each frame.
+  const kanjiQuality = useMemo(
+    () => ({ smoothing: true, pixelRatio: typeof window === 'undefined' ? 1 : Math.min(1, 1.5 / (window.devicePixelRatio || 1)) }),
+    [],
+  );
 
   const headlinePlugins = useMemo(
     () => [globalGradientPlugin({ colors: [palette.ink, palette.ink, palette.ink, palette.seal], angle: 12 })],
@@ -144,7 +149,7 @@ export function Hero() {
             key={`k${run}`}
             font={kanjiFont}
             time={{ mode: 'uncontrolled', duration: 4.5 }}
-            quality={{ smoothing: true }}
+            quality={kanjiQuality}
             plugins={brush}
           >
             書

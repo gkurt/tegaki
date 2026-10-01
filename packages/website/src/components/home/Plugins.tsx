@@ -58,7 +58,7 @@ interface Showpiece {
 
 // Each card is a fixed material — its own surface and ink in both themes — so
 // colors are literal, not the page's.
-const SHOWPIECES: Showpiece[] = [
+export const SHOWPIECES: Showpiece[] = [
   {
     id: 'neon',
     title: 'Neon',

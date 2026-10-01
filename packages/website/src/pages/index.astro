@@ -170,7 +170,7 @@ const codeSpans = (text: string) => text.split('`').map((part, i) => ({ part, co
             Studio's demo plugins, written against the same public API.
           </p>
         </header>
-        <Plugins client:load />
+        <Plugins client:visible={{ rootMargin: '800px' }} />
         <div class="own">
           <div class="own-code">
             <span class="own-label">rainbow.ts</span>
@@ -178,7 +178,7 @@ const codeSpans = (text: string) => text.split('`').map((part, i) => ({ part, co
           </div>
           <div class="own-side">
             <div class="own-sheet">
-              <RainbowDemo client:load />
+              <RainbowDemo client:visible={{ rootMargin: '800px' }} />
             </div>
             <Code
               class="code own-usage"

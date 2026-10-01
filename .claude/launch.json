@@ -7,6 +7,12 @@
       "runtimeArgs": ["--filter", "@tegaki/website", "dev"],
       "port": 4321,
       "autoPort": true
+    },
+    {
+      "name": "website-preview",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["--filter", "@tegaki/website", "preview", "--port", "4322"],
+      "port": 4322
     }
   ]
 }
