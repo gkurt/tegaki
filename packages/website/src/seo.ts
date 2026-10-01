@@ -233,3 +233,20 @@ export const SHARED_HEAD_LINKS: Record<string, string>[] = [
   { rel: 'icon', type: 'image/png', sizes: '180x180', href: `${SITE_URL}apple-touch-icon.png` },
   { rel: 'apple-touch-icon', href: `${SITE_URL}apple-touch-icon.png` },
 ];
+
+/** Google Analytics (GA4), on the home, studio and docs pages of production builds only — not /preview, which renders for screenshots and embeds. */
+export const GA_ID = 'G-75GVQ0YMCR';
+export const GA_SRC = `https://www.googletagmanager.com/gtag/js?id=${GA_ID}`;
+/**
+ * The gtag setup, with the page reported without its query: the studio's URL
+ * holds the text being written and every setting, which stay in the browser.
+ * Campaign tags (`utm_*`) are kept, so a link's source still shows.
+ */
+export const GA_SNIPPET = `window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push(arguments); }
+gtag('js', new Date());
+(() => {
+  const utm = new URLSearchParams([...new URLSearchParams(location.search)].filter(([key]) => key.startsWith('utm_')));
+  const query = utm.toString();
+  gtag('config', '${GA_ID}', { page_location: location.origin + location.pathname + (query ? '?' + query : '') });
+})();`;

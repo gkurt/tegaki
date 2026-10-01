@@ -11,6 +11,7 @@ import { Scripts } from '../components/home/Scripts';
 import { TypeIt } from '../components/home/TypeIt';
 import { Write } from '../components/home/Write';
 import { FRAMEWORKS } from '../components/home/snippets';
+import Analytics from '../components/Analytics.astro';
 import { homeJsonLd, jsonLdString, SHARED_HEAD_LINKS } from '../seo';
 import { FAQ, SITE_URL } from '../site';
 import logoDark from '../assets/tegaki-dark.svg';
@@ -36,6 +37,7 @@ const codeSpans = (text: string) => text.split('`').map((part, i) => ({ part, co
     <link rel="canonical" href={SITE_URL} />
     <link rel="alternate" type="text/markdown" href={`${SITE_URL}index.md`} title="This page as Markdown" />
     {SHARED_HEAD_LINKS.map((attrs) => <link {...attrs} />)}
+    <Analytics />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />

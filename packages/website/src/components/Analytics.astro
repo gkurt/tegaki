@@ -1,0 +1,13 @@
+---
+// Google Analytics on a standalone page (the docs get it from Starlight's `head` in astro.config.ts). Production builds only.
+import { GA_SNIPPET, GA_SRC } from '../seo';
+---
+
+{
+  import.meta.env.PROD && (
+    <>
+      <script is:inline async src={GA_SRC} />
+      <script is:inline set:html={GA_SNIPPET} />
+    </>
+  )
+}

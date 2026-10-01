@@ -14,12 +14,15 @@ import type { AstroIntegration } from 'astro';
 import { defineConfig, fontProviders } from 'astro/config';
 import starlightThemeNova from 'starlight-theme-nova';
 import tegaki from 'tegaki/astro/integration';
-import { SHARED_HEAD_LINKS } from './src/seo.ts';
+import { GA_SNIPPET, GA_SRC, SHARED_HEAD_LINKS } from './src/seo.ts';
 import { CARD_IMAGE, DOCS_DESCRIPTION, REPO_URL, SIDEBAR, SITE, TWITTER_URL } from './src/site.ts';
 
 EventEmitter.defaultMaxListeners = 12;
 
 const site = SITE;
+
+// Analytics only in `astro build`, so dev servers and the e2e runs aren't counted.
+const isBuild = process.argv.includes('build');
 
 // Pages kept out of search results: /preview renders only what its URL state
 // asks for (blank without it), and /generator is a redirect to /studio.
@@ -92,6 +95,13 @@ export default defineConfig({
         // llms.txt / llms-full.txt, PNG icons, and the sitemap — replacing Starlight's
         // default link to sitemap-index.xml (see singleSitemap).
         ...SHARED_HEAD_LINKS.map((attrs) => ({ tag: 'link' as const, attrs })),
+        // Google Analytics (see GA_SNIPPET).
+        ...(isBuild
+          ? [
+              { tag: 'script' as const, attrs: { async: true, src: GA_SRC } },
+              { tag: 'script' as const, content: GA_SNIPPET },
+            ]
+          : []),
       ],
       // A Markdown alternate and JSON-LD for each docs page.
       routeMiddleware: './src/route-middleware.ts',
