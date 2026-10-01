@@ -381,7 +381,7 @@ const shimmer: TegakiPlugin = {
 - The canvas is sized to hold every drawing, so it holds still while they cycle.
 - `frameAt()`, `underlay`, `overlay` and `onFrame` all see the drawing on screen.
 - In controlled time the drawing comes from the time given, so a video renders the same every time. Otherwise it comes from the clock.
-- The ink cycles whenever it's drawn: while the text writes, and on every redraw. With `idle: true` the engine also keeps redrawing once the text is written or paused, in uncontrolled and CSS time.
+- The ink cycles whenever it's drawn: while the text writes, and on every redraw. With `idle: true` the engine also keeps redrawing once the text is written or paused, in uncontrolled and CSS time, while the canvas is on screen.
 - When motion is reduced (see [`reducedMotion`](#reducedmotion)), the first drawing is shown and nothing cycles.
 
 The painting hooks (`paint`, `ink`, `underlay`, `overlay`) are told the plugin's drawing too, as `step`. So a plugin with no `geometry` or `outline` can use `steps` purely as a clock, say for a neon sign's flicker. Its steps don't reshape anything, so they cost nothing but a redraw per step: the strokes aren't placed again for each one, and the canvas doesn't grow for them. A plugin that has a `geometry` or `outline` hook but steps only its painting (a camera swaying over ink it shaped once) says so with `paintOnly: true`: its hooks are then called once per layout, for drawing `0`.

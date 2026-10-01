@@ -349,6 +349,8 @@ export class TegakiEngine {
   private _clockOrigin = typeof performance !== 'undefined' ? performance.now() : 0;
   /** The loop that redraws while a plugin's steps cycle on their own (`steps.idle`). */
   private _idleRafId = 0;
+  /** Whether the canvas is on screen — the idle loop stops while it isn't. */
+  private _onScreen = true;
   /** The `plugins` option as given. */
   private _pluginSpecs: readonly TegakiPluginSpec[] = [];
   /** Makes `_plugins` from `_pluginSpecs`, keeping the plugin a named entry made while it's named the same way. */
@@ -413,6 +415,7 @@ export class TegakiEngine {
 
   // --- Observers & listeners ---
   private _resizeObserver: ResizeObserver;
+  private _intersectionObserver: IntersectionObserver | null = null;
   private _mql: MediaQueryList | null = null;
 
   /**
@@ -470,6 +473,12 @@ export class TegakiEngine {
     // --- ResizeObserver ---
     this._resizeObserver = new ResizeObserver(this._onResize);
     this._resizeObserver.observe(this._rootEl);
+
+    // --- IntersectionObserver: an idle loop nobody can see is a page's worth of redraws for nothing ---
+    if (typeof IntersectionObserver !== 'undefined') {
+      this._intersectionObserver = new IntersectionObserver(this._onIntersect);
+      this._intersectionObserver.observe(this._canvasEl);
+    }
 
     // --- Sentinel transitions ---
     this._sentinelEl.addEventListener('transitionend', this._onSentinelTransition);
@@ -1004,6 +1013,7 @@ export class TegakiEngine {
     this._stopLoop();
     this._updateIdleLoop();
     this._resizeObserver.disconnect();
+    this._intersectionObserver?.disconnect();
     this._sentinelEl.removeEventListener('transitionend', this._onSentinelTransition);
     if (this._mql) {
       if (this._mql.removeEventListener) this._mql.removeEventListener('change', this._onReducedMotionChange);
@@ -1962,12 +1972,15 @@ export class TegakiEngine {
 
   /**
    * Run the idle loop while a plugin's steps should cycle on their own: some
-   * plugin asks for it (`steps.idle`), time isn't controlled, and motion
-   * isn't reduced. It redraws only when the drawing changes.
+   * plugin asks for it (`steps.idle`), time isn't controlled, motion isn't
+   * reduced, and the canvas is on screen — the steps' clock runs on
+   * regardless, so it picks up where it would be. It redraws only when the
+   * drawing changes.
    */
   private _updateIdleLoop(): void {
     const want =
       !this._destroyed &&
+      this._onScreen &&
       this._timeControl.mode !== 'controlled' &&
       !this._motionReduced &&
       steppedPlugins(this._allPlugins()).some((s) => s.steps.idle);
@@ -1977,6 +1990,13 @@ export class TegakiEngine {
       this._idleRafId = 0;
     }
   }
+
+  private _onIntersect = (entries: IntersectionObserverEntry[]): void => {
+    const entry = entries[entries.length - 1];
+    if (!entry || entry.isIntersecting === this._onScreen) return;
+    this._onScreen = entry.isIntersecting;
+    this._updateIdleLoop();
+  };
 
   private _idleTick = (): void => {
     this._idleRafId = 0;

@@ -227,7 +227,7 @@ export interface TegakiPluginSteps {
   /**
    * Keep cycling once the text is written, or while it's paused, in
    * uncontrolled and CSS time — the engine redraws at `fps` for as long as
-   * the renderer lives. Controlled time always takes the drawing from the
+   * the renderer lives, while its canvas is on screen. Controlled time always takes the drawing from the
    * time it's given, so it holds still when the time does. Default `false`.
    */
   idle?: boolean;
