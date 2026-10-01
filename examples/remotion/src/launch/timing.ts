@@ -36,7 +36,7 @@ export type SceneId = keyof typeof SCENE;
 export const DURATION = SCENE.outro.at + SCENE.outro.frames;
 
 /** The poster: the outro's finished card, `fromEnd` frames before it ends, shown over the first `frames` frames (the title starts blank). */
-export const POSTER = { frames: 1, fromEnd: 3 };
+export const POSTER = { frames: 2, fromEnd: 3 };
 
 /** The wipes: brush strokes over the frame, from `at` (scene frames) for `dur`. */
 export const WIPES = {
