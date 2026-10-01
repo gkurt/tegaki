@@ -8,15 +8,27 @@ export const FPS = 30;
 export const BAR = 67;
 export const BEAT = BAR / 4;
 
+/** How long the title runs: short, so the video gets going before a glance moves on. */
+const TITLE_FRAMES = 104;
+
+/**
+ * The frame the music's bar 0 starts at. The title is shorter than the intro's
+ * four bars, so the music comes in partway through its first bar and the drop
+ * still lands on the cut into the plugins.
+ */
+export const ORIGIN = TITLE_FRAMES - 4 + 122 - 4 * BAR;
+/** The frame bar `n` (and `beat`) of the music starts at. */
+export const bar = (n: number, beat = 0) => ORIGIN + n * BAR + beat * BEAT;
+
 /** Where each scene starts and how long it runs, in the order they play. Neighbours overlap for the transitions. */
 export const SCENE = {
-  title: { at: 0, frames: 150 },
-  scripts: { at: 146, frames: 4 * BAR - 146 },
-  plugins: { at: 4 * BAR, frames: 270 },
-  video: { at: 8 * BAR, frames: 186 },
-  studio: { at: 8 * BAR + 182, frames: 250 },
-  everywhere: { at: 970, frames: 106 },
-  outro: { at: 16 * BAR, frames: 122 },
+  title: { at: 0, frames: TITLE_FRAMES },
+  scripts: { at: TITLE_FRAMES - 4, frames: bar(4) - (TITLE_FRAMES - 4) },
+  plugins: { at: bar(4), frames: 270 },
+  video: { at: bar(8), frames: 186 },
+  studio: { at: bar(8) + 182, frames: 250 },
+  everywhere: { at: bar(16) - 102, frames: 106 },
+  outro: { at: bar(16), frames: 122 },
 } as const;
 
 export type SceneId = keyof typeof SCENE;
@@ -25,7 +37,7 @@ export const DURATION = SCENE.outro.at + SCENE.outro.frames;
 
 /** The wipes: brush strokes over the frame, from `at` (scene frames) for `dur`. */
 export const WIPES = {
-  titleOut: { at: SCENE.title.frames - 20, dur: 16 },
+  titleOut: { at: SCENE.title.frames - 18, dur: 14 },
   videoOut: { at: SCENE.studio.at - SCENE.video.at - 16, dur: 16 },
   everywhereOut: { at: SCENE.everywhere.frames - 15, dur: 13 },
 };
@@ -33,10 +45,13 @@ export const WIPES = {
 // --- Title --------------------------------------------------------------
 
 export const TITLE = {
-  kanji: { from: 2, frames: 34 },
-  name: { from: 26, frames: 70 },
-  version: { from: 94, speed: 1.6 },
-  tagline: 104,
+  /** 手書き, brushed. */
+  kanji: { from: 0, frames: 30 },
+  name: { from: 12, frames: 50 },
+  version: { from: 54, frames: 14 },
+  /** The circle round the version, after it's written: seconds. */
+  circle: { delay: 0.05, duration: 0.4 },
+  tagline: 64,
 };
 
 // --- Scripts ------------------------------------------------------------

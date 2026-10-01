@@ -26,6 +26,7 @@ import tillana from 'tegaki/fonts/tillana';
 import {
   BAR,
   BEAT,
+  bar as barFrame,
   DURATION,
   EVERYWHERE,
   FPS,
@@ -68,7 +69,7 @@ const s = (frame: number) => frame / FPS;
 /** Seconds at a frame of a scene. */
 const at = (scene: SceneId, frame: number) => s(SCENE[scene].at + frame);
 /** Seconds at a bar and beat of the music. */
-const bt = (bar: number, beat = 0) => s(bar * BAR + beat * BEAT);
+const bt = (n: number, beat = 0) => s(barFrame(n, beat));
 
 const music = new Bus(LENGTH); // ducked by the kick
 const drums = new Bus(LENGTH);
@@ -103,11 +104,10 @@ PROGRESSION.forEach((c, bar) => {
   });
 });
 // The last chord, held to the end.
-pad(music, bt(16), s(DURATION - 16 * BAR) - 0.6, [50, 57, 61, 64, 66, 69], { gain: 0.05, bright: 3200, attack: 0.05, release: 1.6 });
+pad(music, bt(16), s(DURATION - barFrame(16)) - 0.6, [50, 57, 61, 64, 66, 69], { gain: 0.05, bright: 3200, attack: 0.05, release: 1.6 });
 
-// Bells over the title as the name writes, and again at the end.
+// Bells over the title as the name writes (the music comes in partway through bar 0), and again at the end.
 for (const [bar, beat, m] of [
-  [0, 1.5, 78],
   [0, 3, 76],
   [1, 0, 81],
   [1, 1.5, 78],
@@ -217,10 +217,15 @@ const penAt = (
 };
 
 // Title: the kanji brushed, the name in a hot pen with sparks, the version circled.
-penAt('title', kleeOne, '手書き', TITLE.kanji, { gain: 0.05, tone: TONES.brush });
-const name = penAt('title', caveat, 'tegaki', TITLE.name, { gain: 0.11, tone: TONES.marker });
+penAt('title', kleeOne, '手書き', TITLE.kanji, { gain: 0.09, tone: TONES.brush });
+const name = penAt('title', parisienne, 'tegaki', TITLE.name, { gain: 0.1, tone: TONES.nib });
 sparkle(sfx, s(name.from), s(name.end - name.from), { gain: 0.012, density: 30, seed: 21 });
-penAt('title', caveat, '1.0', TITLE.version, { gain: 0.08, tone: TONES.marker, mark: [0.1, 0.55], pan: 0.35 });
+penAt('title', parisienne, '1.0', TITLE.version, {
+  gain: 0.08,
+  tone: TONES.nib,
+  mark: [TITLE.circle.delay, TITLE.circle.duration],
+  pan: 0.35,
+});
 bell(verbSend, at('title', TITLE.tagline), 86, { gain: 0.04, decay: 2, ratio: 2, index: 0.6 });
 whoosh(sfx, at('title', WIPES.titleOut.at), s(WIPES.titleOut.dur) + 0.15, { gain: 0.2, from: 300, to: 2500 });
 
