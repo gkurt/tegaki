@@ -1,53 +1,53 @@
 core:changelogs:
-  - content: "---\npackages:\n  tegaki:\n    type: patch\n---\n\n## Idle plugin loops pause off screen\n\nA plugin whose `steps` set `idle` (a boil, a flicker) kept redrawing at its `fps` after the renderer had scrolled out of view, for as long as the page was open. The idle loop now stops while the canvas is off screen and picks up where its clock would be when it comes back.\n"
-    filename: idle-off-screen.md
+  - content: "---\npackages:\n  tegaki:\n    type: patch\n---\n\n## Nib stamps keep their size below full pressure\n\nWith `pressure` below 1, including the default of loop-mode SVG export and the `tegaki` CLI, a nib stamp on a point where the stroke thins to nothing could swell into a large blot. Parisienne's comma drew as a black ellipse larger than the letters beside it. Such a stamp is now sized against the nearest point of the stroke at least as wide as it, so it stays where it was and scales with the ink as other stamps do. At full pressure every stamp draws as before.\n"
+    filename: nib-stamps-pressure.md
     v: 0.0.0
 core:packages:
   - id: npm:@tegaki/root
     updated: true
   - id: npm:@tegaki/example-nuxt
     updated: true
-  - id: npm:@tegaki/example-vite
-    updated: true
-  - id: npm:@tegaki/example-vanilla
-    updated: true
   - id: npm:@tegaki/example-editframe
-    updated: true
-  - id: npm:@tegaki/example-vue
-    updated: true
-  - id: npm:@tegaki/example-next
-    updated: true
-  - id: npm:@tegaki/example-remotion
-    updated: true
-  - id: npm:@tegaki/example-e2e
-    updated: true
-  - id: npm:@tegaki/example-svelte
-    updated: true
-  - id: npm:@tegaki/website
     updated: true
   - id: npm:@tegaki/example-solid
     updated: true
+  - id: npm:@tegaki/example-vite
+    updated: true
+  - id: npm:@tegaki/example-e2e
+    updated: true
+  - id: npm:@tegaki/example-remotion
+    updated: true
   - id: npm:@tegaki/example-astro
+    updated: true
+  - id: npm:@tegaki/example-next
+    updated: true
+  - id: npm:@tegaki/example-svelte
+    updated: true
+  - id: npm:@tegaki/example-vanilla
+    updated: true
+  - id: npm:@tegaki/website
+    updated: true
+  - id: npm:@tegaki/example-vue
     updated: true
   - id: npm:tegaki-generator
     updated: true
   - changelogIds:
-      - idle-off-screen.md
+      - nib-stamps-pressure.md
     id: npm:tegaki
     updated: true
 npm:packages:
   - id: npm:@tegaki/root
   - id: npm:@tegaki/example-nuxt
-  - id: npm:@tegaki/example-vite
-  - id: npm:@tegaki/example-vanilla
   - id: npm:@tegaki/example-editframe
-  - id: npm:@tegaki/example-vue
-  - id: npm:@tegaki/example-next
-  - id: npm:@tegaki/example-remotion
-  - id: npm:@tegaki/example-e2e
-  - id: npm:@tegaki/example-svelte
-  - id: npm:@tegaki/website
   - id: npm:@tegaki/example-solid
+  - id: npm:@tegaki/example-vite
+  - id: npm:@tegaki/example-e2e
+  - id: npm:@tegaki/example-remotion
   - id: npm:@tegaki/example-astro
+  - id: npm:@tegaki/example-next
+  - id: npm:@tegaki/example-svelte
+  - id: npm:@tegaki/example-vanilla
+  - id: npm:@tegaki/website
+  - id: npm:@tegaki/example-vue
   - id: npm:tegaki-generator
   - id: npm:tegaki
