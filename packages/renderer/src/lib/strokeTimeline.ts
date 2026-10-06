@@ -304,7 +304,7 @@ function isDot(stroke: Stroke): boolean {
  * so it moves with the ink and swells and thins with it.
  */
 export interface StrokeNib {
-  /** Draw progress of the point it sits on; it appears once the pen gets there. */
+  /** Draw progress of the point it sits on (see {@link nibAnchor}); it appears once the pen gets there. */
   t: number;
   /** Offset of its centre from the path's point at `t`, in px. */
   dx: number;
@@ -325,18 +325,48 @@ function strokeNibs(stroke: Stroke, sub: SubdividedStroke, scale: number): Strok
     const k = nib[0]!;
     const at = stroke.p[k];
     if (!at) continue;
-    // A radius against the width of the point it sits on, so it scales as that width does.
-    const width = Math.max(at[2]!, 0.5);
+    // A radius against the width of the point it sits on, so it scales as that width does — held
+    // by another point when that one is narrower than the nib (see nibAnchor), the offset kept.
+    const j = dot ? k : nibAnchor(stroke.p, sub.pointCumLen, k, Math.max(nib[3]!, nib[4]!) / 2);
+    const anchor = stroke.p[j]!;
+    const width = Math.max(anchor[2]!, 0.5);
     out.push({
-      t: dot ? 0 : (sub.pointCumLen[k] ?? 0) / sub.totalLen,
-      dx: nib[1]! * scale,
-      dy: nib[2]! * scale,
+      t: dot ? 0 : (sub.pointCumLen[j] ?? 0) / sub.totalLen,
+      dx: (nib[1]! + at[0]! - anchor[0]!) * scale,
+      dy: (nib[2]! + at[1]! - anchor[1]!) * scale,
       rx: nib[3]! / 2 / width,
       ry: nib[4]! / 2 / width,
       angle: nib[5]!,
     });
   }
   return out;
+}
+
+/**
+ * The point a nib of radius `r` on point `k` is sized against: `k` itself, unless the stroke is
+ * narrower there than the nib — a terminal where the stroke thins to nothing, its ink all nib.
+ * Against a width near zero, any widening of the ink (pressure below 1 evens it toward the
+ * stroke's mean) would swell the nib many times over, so the nearest point along the stroke at
+ * least `r` wide holds it instead (the later one on a tie, so it doesn't show before the pen
+ * nears it), or the widest point when none is.
+ */
+export function nibAnchor(points: Stroke['p'], cumLen: readonly number[], k: number, r: number): number {
+  if (points[k]![2]! >= r) return k;
+  const at = cumLen[k] ?? 0;
+  let best = -1;
+  let bestDist = Infinity;
+  let widest = k;
+  for (let i = 0; i < points.length; i++) {
+    const w = points[i]![2]!;
+    if (w > points[widest]![2]!) widest = i;
+    if (w < r) continue;
+    const dist = Math.abs((cumLen[i] ?? 0) - at);
+    if (dist < bestDist || (dist === bestDist && i > k)) {
+      best = i;
+      bestDist = dist;
+    }
+  }
+  return best >= 0 ? best : widest;
 }
 
 const NO_NIBS: StrokeNib[] = [];

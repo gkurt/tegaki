@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { subdivideStroke } from '../lib/strokeCache.ts';
-import { placeStrokes } from '../lib/strokeTimeline.ts';
+import type { StrokePath } from '../lib/strokePath.ts';
+import { nibAnchor, placeStrokes } from '../lib/strokeTimeline.ts';
 import { placementsToSvg, type SvgExportConfig } from '../lib/svgExport.ts';
 import type { TegakiGlyphData } from '../types.ts';
 import { drawGlyph } from './drawGlyph.ts';
@@ -68,6 +69,62 @@ describe('drawGlyph nib stamps', () => {
     const [, , rx, ry] = ellipses[0]!;
     expect(rx).toBeCloseTo(12 * 2 * 1.5);
     expect(ry).toBeCloseTo(4 * 2 * 1.5);
+  });
+});
+
+describe('nib stamps on a point the stroke thins to nothing', () => {
+  // The middle point is all nib: the stroke narrows to nothing there and a 24-unit stamp covers it.
+  const thin: TegakiGlyphData['s'][number] = {
+    p: [
+      [0, 0, 10],
+      [30, 0, 30],
+      [50, 0, 0.2],
+      [60, 0, 10],
+      [100, 0, 10],
+    ],
+    d: 0,
+    a: 1,
+    n: [[2, 0, -6, 24, 8, 0]],
+  };
+  const thinGlyph: TegakiGlyphData = { w: 100, t: 1, s: [thin] };
+  const entry = { char: 'a', graphemeIndex: 0, offset: 0, duration: 1, hasGlyph: true };
+  const place = (reshape?: (path: StrokePath) => StrokePath) =>
+    placeStrokes([{ id: '0:0', entryIndex: 0, entry, glyph: thinGlyph, strokeIndex: 0, stroke: thin, start: 0, duration: 1 }], {
+      placeEntry: () => ({ x: 0, y: 0, scale: 1, ascender: 0, seed: 0 }),
+      reshape,
+    })[0]!;
+  const painted = (s: ReturnType<typeof place>) => {
+    const nib = s.nibs[0]!;
+    const at = s.path.pointAt(nib.t);
+    return { cx: at.x + nib.dx, cy: at.y + nib.dy, rx: nib.rx * at.width, ry: nib.ry * at.width };
+  };
+
+  const CUM = [0, 30, 50, 60, 100];
+
+  test('nibAnchor keeps a nib on its point when the ink there is as wide as the nib', () => {
+    expect(nibAnchor(thin.p, CUM, 1, 12)).toBe(1);
+  });
+
+  test('nibAnchor moves a nib wider than its point to the nearest point that wide, else the widest', () => {
+    expect(nibAnchor(thin.p, CUM, 2, 8)).toBe(3);
+    expect(nibAnchor(thin.p, CUM, 2, 12)).toBe(1);
+    expect(nibAnchor(thin.p, CUM, 2, 40)).toBe(1);
+  });
+
+  test('with the bundle widths, the stamp is drawn where and as large as the bundle says', () => {
+    const { cx, cy, rx, ry } = painted(place());
+    expect([cx, cy]).toEqual([50, -6]);
+    expect(rx).toBeCloseTo(12);
+    expect(ry).toBeCloseTo(4);
+  });
+
+  test('evening the widths out (pressure 0) keeps the stamp near its size instead of swelling it', () => {
+    const s = place();
+    const mean = thin.p.reduce((a, p) => a + p[2]!, 0) / thin.p.length;
+    const { cx, cy, rx } = painted(place((path) => path.map((p) => ({ ...p, width: mean }))));
+    expect([cx, cy]).toEqual([50, -6]);
+    expect(rx).toBeLessThanOrEqual(12);
+    expect(s.nibs[0]!.t).toBeLessThan(0.5);
   });
 });
 
