@@ -1,16 +1,21 @@
 /**
- * Generate the README hero (media/hello-world.svg): "Tegaki is awesome" in the
- * shipped Caveat bundle, as the looping SVG the `tegaki` CLI writes (CSS
+ * Generate the README hero (media/hello-world.svg): "Written by hand." in the
+ * shipped Parisienne bundle, as the looping SVG the `tegaki` CLI writes (CSS
  * keyframes, not SMIL, so GitHub animates it).
  * Usage: bun scripts/generate-readme-svg.ts
  */
-import caveat from '../packages/renderer/fonts/caveat/bundle.ts';
+import parisienne from '../packages/renderer/fonts/parisienne/bundle.ts';
 import { textToSvg } from '../packages/renderer/src/lib/textToSvg.ts';
 import type { TegakiBundle } from '../packages/renderer/src/types.ts';
 
-const svg = textToSvg('Tegaki is awesome', caveat as unknown as TegakiBundle, {
+const svg = textToSvg('Written by hand.', parisienne as unknown as TegakiBundle, {
   mode: 'loop',
+  // Parisienne's thick and thin strokes are the point of it (loop mode would draw one width).
+  pressure: 1,
   fontSize: 140,
+  speed: 2,
+  // Coarser than the default 2px: the file is shown at ~0.6× and stays small.
+  segmentSize: 4,
   timing: { stagger: { advance: '80%', duration: 'auto' } },
 });
 
