@@ -13,10 +13,9 @@ const svg = textToSvg('Written by hand.', parisienne as unknown as TegakiBundle,
   // Parisienne's thick and thin strokes are the point of it (loop mode would draw one width).
   pressure: 1,
   fontSize: 140,
-  speed: 2,
+  speed: 2.8,
   // Coarser than the default 2px: the file is shown at ~0.6× and stays small.
   segmentSize: 4,
-  timing: { stagger: { advance: '80%', duration: 'auto' } },
 });
 
 await Bun.write('media/hello-world.svg', svg);
