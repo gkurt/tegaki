@@ -279,8 +279,6 @@ export function assembleStrokes(segments: SegmentInfo[], junctions: JunctionInfo
 
   // Find chain start segments: a segment end with no link, or (for pure cycles)
   // any unconsumed segment. Walk from the free end through links.
-  const consumedEnd = new Set<number>();
-
   const walkFrom = (startSeg: number, startEnd: number): GeoStroke | null => {
     // startEnd is the FREE end (points[0] side). We emit that segment first,
     // then continue out its other end through links.
@@ -303,9 +301,6 @@ export function assembleStrokes(segments: SegmentInfo[], junctions: JunctionInfo
       const seg = segments[curSeg]!;
       // Orient this segment's axis so it starts at entryEnd.
       const axis = entryEnd === 0 ? seg.axis.map((p) => ({ ...p })) : seg.axis.map((p) => ({ ...p })).reverse();
-      // Mark both ends consumed.
-      consumedEnd.add(endKey(curSeg, 0));
-      consumedEnd.add(endKey(curSeg, 1));
       // Append (dedup the seam).
       for (const p of axis) {
         const last = points[points.length - 1];
