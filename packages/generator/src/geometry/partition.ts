@@ -141,11 +141,6 @@ export function partitionFaces(contours: Contour[], cuts: Cut[], weldEps: number
   // next(h): arriving at v via h, leave along the edge whose direction is the
   // next one clockwise from the reversed arrival direction. This walks each
   // minimal face with its interior on the algebraic left.
-  const twinOf = new Map<number, number>();
-  for (let h = 0; h < halfEdges.length; h += 2) {
-    twinOf.set(h, h + 1);
-    twinOf.set(h + 1, h);
-  }
   const nextEdge = (h: number): number | null => {
     const e = halfEdges[h]!;
     const list = outgoing.get(e.to);
