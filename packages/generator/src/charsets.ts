@@ -135,6 +135,25 @@ const HANZI_TOP_1000 =
 const ZH_PUNCT = '，。、；：？！“”‘’（）《》【】…—·';
 export const SIMPLIFIED_CHINESE_CHARS = HANZI_TOP_1000 + ZH_PUNCT + DEFAULT_CHARS;
 
+// ── Latin Extended ────────────────────────────────────────────────────────
+// The ASCII baseline plus the letters of Latin-1 Supplement and Latin
+// Extended-A: the accented and modified letters of the European languages
+// written in Latin script — Turkish (ç ğ ı İ ö ş ü), German (ä ö ü ß), French,
+// Spanish, Portuguese, Italian, Dutch, Polish, Czech, Slovak, Hungarian,
+// Romanian, Croatian, the Nordic and the Baltic languages — plus the rest of
+// Latin-1 Supplement (inverted marks, guillemets, currency, degree, section,
+// copyright, fractions, superscripts, multiplication and division signs) and
+// the General Punctuation block's common marks (hyphens and dashes, curly
+// quotes, daggers, bullet, ellipsis, per mille, primes, fraction slash), the
+// euro and the trademark sign. Glyphs the font lacks are skipped, so the
+// preset is safe with any Latin font.
+const LATIN_1_LETTERS = 'ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ';
+const LATIN_EXT_A_LETTERS =
+  'ĀāĂăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĦħĨĩĪīĬĭĮįİıĲĳĴĵĶķĸĹĺĻļĽľĿŀŁłŃńŅņŇňŉŊŋŌōŎŏŐőŒœŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŦŧŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽžſ';
+const LATIN_1_PUNCT = '¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿×÷';
+const GENERAL_PUNCT = '‐‒–—―‘’‚‛“”„‟†‡•…‰′″‹›⁄€™';
+export const LATIN_EXTENDED_CHARS = DEFAULT_CHARS + LATIN_1_LETTERS + LATIN_EXT_A_LETTERS + LATIN_1_PUNCT + GENERAL_PUNCT;
+
 /**
  * Named presets for the generator UI. Each preset is the default `--chars`
  * for its writing system; clicking one in the UI replaces the user's char
@@ -142,6 +161,7 @@ export const SIMPLIFIED_CHINESE_CHARS = HANZI_TOP_1000 + ZH_PUNCT + DEFAULT_CHAR
  */
 export const CHARSET_PRESETS: { name: string; chars: string }[] = [
   { name: 'Latin', chars: DEFAULT_CHARS },
+  { name: 'Latin Extended', chars: LATIN_EXTENDED_CHARS },
   { name: 'Hebrew', chars: HEBREW_CHARS },
   { name: 'Arabic', chars: ARABIC_CHARS },
   { name: 'Devanagari', chars: DEVANAGARI_CHARS },
